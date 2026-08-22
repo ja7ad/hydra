@@ -1,0 +1,7 @@
+{
+  "name": "com.hydra.host",
+  "description": "Hydra Download Manager native host",
+  "path": "/usr/bin/hydra-host",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://jpnonmbbkjdpeebdhkjoliklfhkdcomj/"]
+}

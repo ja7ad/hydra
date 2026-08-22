@@ -1,0 +1,41 @@
+#!/usr/bin/make -f
+export DH_VERBOSE = 1
+
+%:
+	dh $@
+
+override_dh_auto_clean:
+	rm -rf target/ dist/ debian/hydra/ debian/.debhelper/ debian/files
+
+override_dh_auto_build:
+	mkdir -p .cargo
+	printf '[source.crates-io]\nreplace-with = "vendored-sources"\n\n[source.vendored-sources]\ndirectory = "vendor"\n' > .cargo/config.toml
+	cargo build --release -p hya-cli -p hya-gui -p hya-host
+
+override_dh_auto_install:
+	install -Dm755 target/release/hydra debian/hydra/usr/bin/hydra
+	install -Dm755 target/release/hydra-gui debian/hydra/usr/bin/hydra-gui
+	install -Dm755 target/release/hydra-host debian/hydra/usr/bin/hydra-host
+
+	install -Dm644 debian/hydra.desktop debian/hydra/usr/share/applications/hydra.desktop || install -Dm644 packaging/debian/hydra.desktop debian/hydra/usr/share/applications/hydra.desktop
+	install -Dm644 debian/hydra-autostart.desktop debian/hydra/etc/xdg/autostart/hydra.desktop || install -Dm644 packaging/debian/hydra-autostart.desktop debian/hydra/etc/xdg/autostart/hydra.desktop
+
+	install -Dm644 docs/logo.png debian/hydra/usr/share/icons/hicolor/512x512/apps/hydra.png
+
+	install -d debian/hydra/usr/share/hydra/extensions
+	scripts/build-extensions.sh --out debian/hydra/usr/share/hydra/extensions --quiet --prefix /usr/share/hydra/extensions
+
+	install -d debian/hydra/usr/share/man/man1
+	for page in docs/man/*.1; do \
+		gzip -9n -c "$$page" > debian/hydra/usr/share/man/man1/$$(basename "$$page").gz; \
+	done
+
+	for d in etc/opt/chrome etc/chromium etc/opt/edge; do \
+		install -d debian/hydra/$$d/native-messaging-hosts; \
+		install -m644 debian/com.hydra.host.chrome.json debian/hydra/$$d/native-messaging-hosts/com.hydra.host.json || install -m644 packaging/debian/com.hydra.host.chrome.json debian/hydra/$$d/native-messaging-hosts/com.hydra.host.json; \
+	done
+	install -d debian/hydra/usr/lib/mozilla/native-messaging-hosts
+	install -m644 debian/com.hydra.host.mozilla.json debian/hydra/usr/lib/mozilla/native-messaging-hosts/com.hydra.host.json || install -m644 packaging/debian/com.hydra.host.mozilla.json debian/hydra/usr/lib/mozilla/native-messaging-hosts/com.hydra.host.json
+
+override_dh_auto_test:
+	# Skip test suite during Debian packaging build

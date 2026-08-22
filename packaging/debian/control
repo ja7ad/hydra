@@ -1,0 +1,28 @@
+Source: hydra
+Section: net
+Priority: optional
+Maintainer: Javad Rajabzadeh <ja7ad@live.com>
+Build-Depends: debhelper-compat (= 13),
+               cargo,
+               rustc (>= 1.75),
+               pkg-config,
+               libasound2-dev,
+               libx11-dev,
+               libxrandr-dev,
+               libxcb1-dev,
+               libxkbcommon-dev,
+               python3,
+               imagemagick
+Standards-Version: 4.6.2
+Homepage: https://github.com/ja7ad/hydra
+
+Package: hydra
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libgtk-3-0
+Conflicts: thc-hydra, hydra-gtk
+Recommends: gnome-shell-extension-appindicator
+Description: Multi-connection download manager (GUI, CLI, browser integration)
+ Hydra downloads files over many parallel connections with integrity
+ verification. This package installs the hydra CLI, the hydra-gui desktop
+ app (with menu entry and login autostart), the hydra-host native-messaging
+ bridge, and browser extension assets.

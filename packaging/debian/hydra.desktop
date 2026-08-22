@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Hydra Download Manager
+GenericName=Download Manager
+Comment=Multi-connection download accelerator
+Exec=hydra-gui
+Icon=hydra
+Terminal=false
+Categories=Network;FileTransfer;
+StartupWMClass=hydra

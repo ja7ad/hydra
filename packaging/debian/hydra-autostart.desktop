@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Hydra Download Manager
+Comment=Multi-connection download accelerator
+Exec=hydra-gui --minimized
+Icon=hydra
+Terminal=false
+Categories=Network;FileTransfer;
+X-GNOME-Autostart-enabled=true

@@ -607,3 +607,82 @@ jobs:
           else
             echo "note: HOMEBREW_TAP_TOKEN not set; skipping automated tap update"
           fi
+
+      - name: Trigger Fedora Copr Build
+        if: needs.verify-version.outputs.prerelease != 'true'
+        env:
+          COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
+          COPR_PROJECT: ${{ secrets.COPR_PROJECT }}
+          VERSION: ${{ needs.verify-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${COPR_CONFIG:-}" ]; then
+            sudo apt-get update && sudo apt-get install -y rpm
+            pipx install copr-cli
+
+            mkdir -p ~/.config
+            echo "$COPR_CONFIG" > ~/.config/copr
+
+            PROJECT="${COPR_PROJECT:-hydra}"
+
+            # Create source tarball and directory layout for rpmbuild
+            RPM_TOP="/tmp/rpmbuild"
+            mkdir -p "$RPM_TOP/SOURCES" "$RPM_TOP/SRPMS" "$RPM_TOP/SPECS" "$RPM_TOP/BUILD"
+            git archive --format=tar.gz --prefix="hydra-${VERSION}/" HEAD > "$RPM_TOP/SOURCES/hydra-${VERSION}.tar.gz"
+
+            # Build the Source RPM (SRPM)
+            rpmbuild -bs \
+              --define "_topdir $RPM_TOP" \
+              --define "_version ${VERSION}" \
+              packaging/rpm/hydra.spec
+
+            SRPM=$(ls "$RPM_TOP"/SRPMS/hydra-*.src.rpm)
+            echo "Built SRPM: $SRPM"
+
+            # Submit SRPM to Copr build system
+            copr-cli build "$PROJECT" "$SRPM" --nowait
+            echo "Triggered Copr build for $PROJECT (v${VERSION})"
+          else
+            echo "note: COPR_CONFIG not set; skipping automated Copr build"
+          fi
+
+      - name: Build and Publish to Launchpad PPA
+        if: needs.verify-version.outputs.prerelease != 'true'
+        env:
+          LAUNCHPAD_GPG_KEY: ${{ secrets.LAUNCHPAD_GPG_KEY }}
+          LAUNCHPAD_PPA: ${{ secrets.LAUNCHPAD_PPA }}
+          VERSION: ${{ needs.verify-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LAUNCHPAD_GPG_KEY:-}" ] && [ -n "${LAUNCHPAD_PPA:-}" ]; then
+            sudo apt-get update
+            sudo apt-get install -y devscripts debhelper dput
+
+            # Import GPG private signing key
+            echo "$LAUNCHPAD_GPG_KEY" | gpg --import --batch --yes
+            GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format LONG --with-colons | awk -F: '/^sec:/ { print $5; exit }')
+            GPG_USER=$(gpg --list-secret-keys --with-colons | awk -F: '/^uid:/ { print $10; exit }')
+            [ -n "$GPG_USER" ] || GPG_USER="Hydra Maintainers <dev@hydra.app>"
+
+            # Enable passive FTP for dput globally without overriding default PPA handler
+            printf '[DEFAULT]\npassive_ftp = 1\n' > ~/.dput.cf
+
+            # Vendor dependencies for offline building in Launchpad builders
+            cargo vendor vendor/
+
+            # Copy packaging directory into place
+            cp -r packaging/debian debian
+
+            # Build source packages for Ubuntu 24.04 (noble) and 22.04 (jammy)
+            for DISTRO in noble jammy; do
+              printf "hydra (%s-1ppa1~%s1) %s; urgency=medium\n\n  * Automated Launchpad PPA release for %s.\n\n -- %s  %s\n" \
+                "$VERSION" "$DISTRO" "$DISTRO" "$DISTRO" "$GPG_USER" "$(date -R)" > debian/changelog
+
+              debuild --no-lintian -S -sa -d -k"$GPG_KEY_ID"
+              dput -u "$LAUNCHPAD_PPA" "../hydra_${VERSION}-1ppa1~${DISTRO}1_source.changes"
+            done
+            echo "Uploaded PPA packages to $LAUNCHPAD_PPA"
+          else
+            echo "note: LAUNCHPAD_GPG_KEY or LAUNCHPAD_PPA not set; skipping Launchpad release"
+          fi
+

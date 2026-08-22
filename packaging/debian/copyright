@@ -1,0 +1,12 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: hydra
+Upstream-Contact: Javad Rajabzadeh <ja7ad@live.com>
+Source: https://github.com/ja7ad/hydra
+
+Files: *
+Copyright: 2026 Javad Rajabzadeh
+License: GPL-3.0-or-later
+
+License: GPL-3.0-or-later
+ On Debian systems, the full text of the GNU General Public License version 3
+ can be found in the file `/usr/share/common-licenses/GPL-3'.
