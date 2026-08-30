@@ -405,5 +405,7 @@
   "Recording, segments:": "Aufnahme, Segmente:",
   "Finishing the recording...": "Fertigstellen der Aufnahme...",
   "Combining video and audio...": "Video und Audio zusammenfassen...",
-  "Recorded": "Aufgezeichnet"
+  "Recorded": "Aufgezeichnet",
+  "Close to system tray": "In Systemtray schließen",
+  "Closing the main window leaves Hydra running in the tray, where queues and transfers carry on; open it again from the tray icon. Off: closing the window exits Hydra.": "Wenn Sie das Hauptfenster schließen, bleibt Hydra im Systemtray aktiv, wodurch Warteschlangen und Übertragungen weiterlaufen; Über das Systemtraysymbol kann Hydra geöffnet werden. Aus: Das Schließen des Fensters beendet Hydra."
 }
