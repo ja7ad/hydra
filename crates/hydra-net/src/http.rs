@@ -15,6 +15,41 @@ use std::time::Instant;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 
+/// A 3xx answer, with the destination intact.
+///
+/// Following the hop belongs to the caller: it owns the URL the request was
+/// built from and the budget for how many hops are too many. So the
+/// destination has to survive the trip back through `io::Result`.
+///
+/// It travels as a downcastable payload rather than inside the message TEXT.
+/// Four call sites resolve these, and parsing them back out of a formatted
+/// string couples every one to the exact wording here — reword it and they
+/// all silently stop following redirects, turning the common case (a CDN
+/// pointing at a regional edge) into a hard failure with no compiler
+/// complaint. Downcasting, the compiler sees the coupling.
+#[derive(Clone, Debug)]
+pub struct Redirect {
+    pub status: u16,
+    /// `Location`, verbatim — possibly relative to the URL that was asked
+    /// for, so callers must resolve it against that, not use it bare.
+    pub location: String,
+}
+
+impl std::fmt::Display for Redirect {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "redirect {} to {}", self.status, self.location)
+    }
+}
+
+impl std::error::Error for Redirect {}
+
+impl Redirect {
+    /// The redirect carried by this error, if it carries one.
+    pub fn of(e: &io::Error) -> Option<&Redirect> {
+        e.get_ref()?.downcast_ref::<Redirect>()
+    }
+}
+
 /// Probe a target: `Content-Length`, `Accept-Ranges`, validator.
 /// What a HEAD request reveals about an object.
 #[derive(Clone, Debug, Default)]
@@ -388,6 +423,266 @@ pub async fn fetch_streaming_observed<C: Connector>(
 /// For checksum sidecars and manifests: tens to thousands of bytes, wanted as a string,
 /// not worth a scheduler or a file. The cap is a refusal rather than a truncation — a
 /// truncated manifest would parse as a manifest and select the wrong line.
+/// Fetch a whole object to `path`, reusing a pooled connection when one is
+/// available and giving it back afterwards.
+///
+/// # Why this exists next to [`fetch_streaming_observed`]
+///
+/// That one is for a body whose extent the client cannot predict, so it says
+/// `Connection: close` and reads to EOF. Correct — and exactly wrong for the
+/// workload this is for: an adaptive stream is a few hundred SMALL objects on
+/// one origin, fetched back to back. Closing after each means a TCP and TLS
+/// handshake per segment, which for a hundred-segment playlist is a hundred
+/// handshakes to a host the client never stopped talking to. On a distant TLS
+/// origin that is most of the wall clock.
+///
+/// So this one asks to keep the socket, frames the body exactly, and returns
+/// the connection to the pool — the same reasoning, and the same safety
+/// conditions, as the ranged path in [`crate::pool`]: a socket goes back only
+/// when the client knows precisely where the body ended, because anything left
+/// unread becomes the next response's first bytes.
+///
+/// A pooled socket may have been closed by the origin since it was put back.
+/// That is not an error worth surfacing: the request is simply retried once on
+/// a fresh connection.
+pub async fn fetch_object<C: Connector>(
+    c: &C,
+    t: &Target,
+    path: &str,
+    written: &AtomicU64,
+    cancel: Option<&AtomicBool>,
+    pace: &Pace,
+    pool: Option<&crate::pool::SharedPool<C::Stream>>,
+) -> io::Result<u64> {
+    let stopped = || cancel.is_some_and(|c| c.load(Ordering::Relaxed));
+    let interrupted = || io::Error::new(io::ErrorKind::Interrupted, "cancelled");
+    let req = build_request_head_disp("GET", t, None, Disposition::Reuse);
+
+    let mut buf = vec![0u8; 32 * 1024];
+    let mut redialed = false;
+    // At most two attempts, and only ever because a POOLED socket turned out
+    // to be dead. A fresh connection that fails is a real failure.
+    let (mut s, head, body_start) = loop {
+        if stopped() {
+            return Err(interrupted());
+        }
+        let reused = if redialed {
+            None
+        } else {
+            pool.and_then(|p| p.take(t))
+        };
+        let from_pool = reused.is_some();
+        let mut s = match reused {
+            Some(s) => s,
+            None => {
+                if let Some(p) = pool {
+                    p.record_miss();
+                }
+                c.connect(t).await?
+            }
+        };
+        let mut head = Vec::new();
+        let outcome = match s.write_all(req.as_bytes()).await {
+            Ok(()) => read_head(&mut s, &mut buf, &mut head).await,
+            Err(e) => Err(e),
+        };
+        match outcome {
+            Ok(Some(p)) => break (s, head, p),
+            // A silent close on a reused socket is the ordinary way an origin
+            // retires a keep-alive connection; try once more on a new one.
+            Ok(None) | Err(_) if from_pool && !redialed => {
+                redialed = true;
+                continue;
+            }
+            Ok(None) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "connection closed before any response headers",
+                ))
+            }
+            Err(e) => return Err(e),
+        }
+    };
+
+    let h = String::from_utf8_lossy(&head[..body_start]).to_string();
+    let status: u16 = h
+        .split_whitespace()
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    if (300..400).contains(&status) {
+        // A CDN commonly answers a segment with a redirect to a regional
+        // edge. The hop is the caller's to follow — it owns the URL and the
+        // budget — so the destination travels in the error rather than being
+        // flattened into "server returned 302".
+        return Err(io::Error::other(Redirect {
+            status,
+            location: header_value(&h, "location").unwrap_or_default(),
+        }));
+    }
+    if !(200..300).contains(&status) {
+        return Err(io::Error::other(format!(
+            "server returned {status} for {}",
+            t.request_target().0
+        )));
+    }
+    let chunked = header_value(&h, "transfer-encoding")
+        .map(|v| v.to_ascii_lowercase().contains("chunked"))
+        .unwrap_or(false);
+    let stated: Option<u64> = header_value(&h, "content-length")
+        .and_then(|v| v.trim().parse().ok())
+        .filter(|_| !chunked);
+    let server_will_close = header_value(&h, "connection")
+        .map(|v| v.to_ascii_lowercase().contains("close"))
+        .unwrap_or(false)
+        || h.starts_with("HTTP/1.0");
+
+    use tokio::io::AsyncWriteExt as _;
+    let f = tokio::fs::File::create(path).await?;
+    let mut w = tokio::io::BufWriter::new(f);
+    let mut total = 0u64;
+    let first = &head[body_start..];
+
+    // `framed` records whether the body ended where the client stopped
+    // reading. Only then is the socket safe to hand on.
+    let framed;
+    if chunked {
+        let mut pending = first.to_vec();
+        let mut need_size = true;
+        let mut remaining = 0u64;
+        let mut saw_end = false;
+        loop {
+            if stopped() {
+                w.flush().await?;
+                return Err(interrupted());
+            }
+            if need_size {
+                if let Some(i) = find_crlf(&pending) {
+                    let line = String::from_utf8_lossy(&pending[..i]).to_string();
+                    let hex = line.split(';').next().unwrap_or("").trim();
+                    let sz = u64::from_str_radix(hex, 16).map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("bad chunk size {hex:?}"),
+                        )
+                    })?;
+                    pending.drain(..i + 2);
+                    if sz == 0 {
+                        saw_end = true;
+                        break;
+                    }
+                    remaining = sz;
+                    need_size = false;
+                    continue;
+                }
+            } else if !pending.is_empty() {
+                let take = (remaining as usize).min(pending.len());
+                w.write_all(&pending[..take]).await?;
+                total += take as u64;
+                written.store(total, Ordering::Relaxed);
+                pending.drain(..take);
+                remaining -= take as u64;
+                if remaining == 0 {
+                    while pending.len() < 2 {
+                        let n = s.read(&mut buf).await.unwrap_or(0);
+                        if n == 0 {
+                            break;
+                        }
+                        pending.extend_from_slice(&buf[..n]);
+                    }
+                    if pending.len() >= 2 {
+                        pending.drain(..2);
+                    }
+                    need_size = true;
+                }
+                continue;
+            }
+            let want = pace.read_size(buf.len());
+            let n = match s.read(&mut buf[..want]).await {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e),
+            };
+            pace.wait(n as u64).await;
+            pending.extend_from_slice(&buf[..n]);
+        }
+        // A trailer section may follow the zero chunk; leaving it unread
+        // would poison the socket, so it is not offered back.
+        framed = saw_end && pending.is_empty();
+    } else if let Some(len) = stated {
+        // The common case, and the only one that makes reuse worthwhile:
+        // read exactly as many bytes as were promised and stop there.
+        let take = (first.len() as u64).min(len) as usize;
+        w.write_all(&first[..take]).await?;
+        total = take as u64;
+        written.store(total, Ordering::Relaxed);
+        while total < len {
+            if stopped() {
+                w.flush().await?;
+                return Err(interrupted());
+            }
+            let room = ((len - total) as usize).min(buf.len());
+            let want = pace.read_size(room);
+            match s.read(&mut buf[..want]).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    pace.wait(n as u64).await;
+                    w.write_all(&buf[..n]).await?;
+                    total += n as u64;
+                    written.store(total, Ordering::Relaxed);
+                }
+                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e),
+            }
+        }
+        if total < len {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                format!("body ended at {total} of {len} bytes"),
+            ));
+        }
+        // Exactly framed only if the header read did not ALSO pull in bytes
+        // past the declared length. When it did, those bytes are still in
+        // `head` and the socket's next response would begin with them —
+        // precisely the silent corruption `crate::pool` refuses to risk.
+        framed = first.len() as u64 <= len;
+    } else {
+        // No length and no chunking: the body ends when the socket does, so
+        // there is nothing to hand on.
+        w.write_all(first).await?;
+        total += first.len() as u64;
+        written.store(total, Ordering::Relaxed);
+        loop {
+            if stopped() {
+                w.flush().await?;
+                return Err(interrupted());
+            }
+            let want = pace.read_size(buf.len());
+            match s.read(&mut buf[..want]).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    pace.wait(n as u64).await;
+                    w.write_all(&buf[..n]).await?;
+                    total += n as u64;
+                    written.store(total, Ordering::Relaxed);
+                }
+                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e),
+            }
+        }
+        framed = false;
+    }
+    w.flush().await?;
+
+    if let Some(p) = pool {
+        if framed && !server_will_close {
+            p.put(t, s);
+        }
+    }
+    Ok(total)
+}
+
 pub async fn fetch_small<C: Connector>(c: &C, t: &Target, cap: usize) -> io::Result<Vec<u8>> {
     let mut s = c.connect(t).await?;
     let req = build_request_head("GET", t, None);
@@ -418,6 +713,16 @@ pub async fn fetch_small<C: Connector>(c: &C, t: &Target, cap: usize) -> io::Res
         .nth(1)
         .and_then(|c| c.parse().ok())
         .unwrap_or(0);
+    if (300..400).contains(&status) {
+        // Redirects are the caller's to resolve — it owns the URL and the
+        // hop budget — but it cannot resolve what it cannot see, so the
+        // destination travels in the error rather than being swallowed into
+        // "server returned 302".
+        return Err(io::Error::other(Redirect {
+            status,
+            location: header_value(&head, "location").unwrap_or_default(),
+        }));
+    }
     if !(200..300).contains(&status) {
         return Err(io::Error::other(format!("server returned {status}")));
     }
@@ -1681,6 +1986,175 @@ pub(crate) fn find_crlf2(b: &[u8]) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A 3xx has to come back as something a caller can ACT on.
+    ///
+    /// Four call sites follow these hops; they used to recover the
+    /// destination by parsing it out of the message text, so rewording the
+    /// message would have silently turned every redirecting CDN into a hard
+    /// failure. This pins the recovery to the type instead.
+    #[test]
+    fn a_redirect_error_carries_its_destination() {
+        let e = io::Error::other(Redirect {
+            status: 302,
+            location: "https://edge.example/seg1.ts".into(),
+        });
+
+        let r = Redirect::of(&e).expect("a redirect must be recoverable from the error");
+        assert_eq!(r.status, 302);
+        assert_eq!(r.location, "https://edge.example/seg1.ts");
+
+        // And an error that is NOT a redirect must not masquerade as one,
+        // however much its text looks the part.
+        let other = io::Error::other("redirect 302 to https://spoof.example/");
+        assert!(Redirect::of(&other).is_none());
+    }
+
+    /// One origin, three objects: the second and third must ride the socket
+    /// the first opened. That is the whole point of `fetch_object` — a
+    /// hundred-segment playlist should cost one handshake, not a hundred.
+    #[tokio::test]
+    async fn fetch_object_reuses_one_connection_for_many_objects() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        let opened = Arc::new(AtomicU64::new(0));
+        let served = Arc::new(AtomicU64::new(0));
+        {
+            let (opened, served) = (opened.clone(), served.clone());
+            std::thread::spawn(move || {
+                for conn in listener.incoming() {
+                    let Ok(mut sock) = conn else { continue };
+                    opened.fetch_add(1, Ordering::SeqCst);
+                    let Ok(peek) = sock.try_clone() else { continue };
+                    let mut r = BufReader::new(peek);
+                    // Keep answering on the SAME socket until the peer goes.
+                    loop {
+                        let mut line = String::new();
+                        if r.read_line(&mut line).unwrap_or(0) == 0 || line.is_empty() {
+                            break;
+                        }
+                        loop {
+                            let mut h = String::new();
+                            if r.read_line(&mut h).unwrap_or(0) == 0 || h == "\r\n" {
+                                break;
+                            }
+                        }
+                        let body = b"0123456789";
+                        let resp =
+                            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len());
+                        if sock.write_all(resp.as_bytes()).is_err() || sock.write_all(body).is_err()
+                        {
+                            break;
+                        }
+                        let _ = sock.flush();
+                        served.fetch_add(1, Ordering::SeqCst);
+                    }
+                }
+            });
+        }
+
+        let connector = crate::TcpConnector;
+        let pool: crate::pool::SharedPool<tokio::net::TcpStream> =
+            Arc::new(crate::pool::ConnPool::new());
+        let dir = std::env::temp_dir().join(format!("hya-net-pool-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        for i in 0..3 {
+            let t = Target::direct("127.0.0.1", port, &format!("/seg{i}"));
+            let out = dir.join(format!("s{i}"));
+            let n = fetch_object(
+                &connector,
+                &t,
+                out.to_str().unwrap(),
+                &AtomicU64::new(0),
+                None,
+                &Pace::unlimited(),
+                Some(&pool),
+            )
+            .await
+            .expect("fetch");
+            assert_eq!(n, 10);
+            assert_eq!(std::fs::read(&out).unwrap(), b"0123456789");
+        }
+
+        assert_eq!(
+            served.load(Ordering::SeqCst),
+            3,
+            "three objects were served"
+        );
+        assert_eq!(
+            opened.load(Ordering::SeqCst),
+            1,
+            "each object opened its own connection; the pool was not used"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A pooled socket the origin has since closed must not surface as a
+    /// failure: the request is retried once on a fresh connection.
+    #[tokio::test]
+    async fn a_dead_pooled_connection_is_retried_not_reported() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        let opened = Arc::new(AtomicU64::new(0));
+        {
+            let opened = opened.clone();
+            std::thread::spawn(move || {
+                for conn in listener.incoming() {
+                    let Ok(mut sock) = conn else { continue };
+                    let nth = opened.fetch_add(1, Ordering::SeqCst);
+                    let Ok(peek) = sock.try_clone() else { continue };
+                    let mut r = BufReader::new(peek);
+                    let mut line = String::new();
+                    let _ = r.read_line(&mut line);
+                    loop {
+                        let mut h = String::new();
+                        if r.read_line(&mut h).unwrap_or(0) == 0 || h == "\r\n" {
+                            break;
+                        }
+                    }
+                    // Answer the first request, then hang up so the pooled
+                    // socket is stale for the second.
+                    // One response per connection, then hang up — so the
+                    // socket the first request put back is already dead by
+                    // the time the second one takes it.
+                    let _ = nth;
+                    let _ = sock.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi");
+                    let _ = sock.flush();
+                }
+            });
+        }
+
+        let connector = crate::TcpConnector;
+        let pool: crate::pool::SharedPool<tokio::net::TcpStream> =
+            Arc::new(crate::pool::ConnPool::new());
+        let dir = std::env::temp_dir().join(format!("hya-net-stale-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let t = Target::direct("127.0.0.1", port, "/a");
+        let out = dir.join("a");
+
+        for _ in 0..2 {
+            let n = fetch_object(
+                &connector,
+                &t,
+                out.to_str().unwrap(),
+                &AtomicU64::new(0),
+                None,
+                &Pace::unlimited(),
+                Some(&pool),
+            )
+            .await
+            .expect("a stale pooled socket must be retried, not surfaced");
+            assert_eq!(n, 2);
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     /// A server sending BOTH an ETag and a Last-Modified must keep its date.
     ///

@@ -49,7 +49,7 @@ else
   cp "$REPO/extensions/$TARGET/manifest.json" "$DST/manifest.json"
 fi
 
-for f in background.js content.js popup.html popup.css popup.js welcome.html; do
+for f in background.js content.js popup.html popup.css popup.js welcome.html welcome.js; do
   cp "$SRC/$f" "$DST/$f"
 done
 rm -rf "$DST/icons"

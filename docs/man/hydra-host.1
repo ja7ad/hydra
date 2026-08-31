@@ -1,0 +1,247 @@
+.\" hydra-host(1)
+.TH HYDRA\-HOST 1 "2026-08-30" "hydra" "User Commands"
+.
+.SH NAME
+hydra-host \- native-messaging bridge between the browser extension and the Hydra app
+.
+.SH SYNOPSIS
+.B hydra\-host
+.PP
+Not run by hand.
+The browser spawns it, speaks native messaging on its standard input and
+output, and reads nothing else.
+.
+.SH DESCRIPTION
+The Hydra browser extension captures downloads, offers
+.RB \(lq "Download with Hydra" \(rq
+menu entries, and
+.I sniffs media
+on each tab: direct audio and video responses, and HLS
+.RB ( .m3u8 )
+and DASH
+.RB ( .mpd )
+manifests, which it lists with their renditions so one can be picked and
+handed to the app.
+.B hydra\-host
+is one of the two ways that reaches the running application.
+.PP
+.RS 4
+.nf
+                +-- WebSocket 127.0.0.1:6799 -----------+   primary
+extension ------+                                       +--> hydra\-gui
+                +-- native messaging --> hydra\-host ----+   fallback
+                    (stdio frames)      starts the app
+.fi
+.RE
+.PP
+The WebSocket is the primary transport: no process spawn per request, fixed
+ports
+.RB ( 6799 ,
+falling back to
+.BR 16799 ),
+authenticated by the extension origin, and the live socket is itself the
+\(lqHydra is running\(rq indicator the toolbar icon shows.
+.PP
+.B hydra\-host
+is the fallback, and the only path that can
+.I start
+the app.
+It reads one native-messaging frame at a time \(em a 4-byte little-endian
+length followed by a JSON object \(em forwards it to the running
+.BR hydra\-gui
+over the loopback line protocol, and frames the reply back the same way.
+The port and a random token come from
+.IR ipc.json ,
+which the app publishes in its config directory; the token is added by this
+process, so the browser never sees it and a page cannot forge a request to
+the app.
+.PP
+When no app is running, every request except
+.B ping
+launches
+.B hydra\-gui
+minimized and waits up to 20 seconds for the socket to appear \(em clicking a
+download in the browser starts Hydra and then completes, rather than failing
+because the app was closed.
+.B ping
+deliberately never launches anything: it exists to
+.I probe
+whether the app is up.
+A request that finds no app at all is answered
+.BR "{\(dqok\(dq:false,\(dqerror\(dq:\(dqhydra is not running\(dq}" ,
+and malformed JSON with
+.BR \(dqbad\ json\(dq .
+One connection is kept across frames, and a stale one (the app was
+restarted) is dropped and retried once.
+.
+.SH REGISTRATION
+A browser only speaks to this binary if it finds a manifest naming it, under
+the host name
+.BR com.hydra.host .
+.PP
+.B The application writes those manifests itself, at every start,
+for every browser already present on the machine \(em all the locations are
+per-user, nothing needs administrator rights, and an unchanged manifest is
+left alone.
+Normally there is nothing to do.
+From a source checkout, where the app may never have been launched, the same
+job is done by
+.PP
+.RS 4
+.nf
+scripts/install\-native\-host.sh                       (macOS, Linux)
+powershell \-ExecutionPolicy Bypass \e
+    \-File scripts\(rsinstall\-native\-host.ps1          (Windows)
+.fi
+.RE
+.PP
+Chromium-family browsers allow-list an extension
+.IR origin ,
+Firefox an add-on
+.IR id ;
+both installers derive them from the extension manifests
+.RI ( key ,
+pinned so the id is stable, and
+.BR browser_specific_settings.gecko.id ),
+so the two sides cannot drift apart.
+Restart the browser once after a manifest is written.
+.PP
+A browser that has never been launched has no profile directory, and so gets
+nothing written into it; start it once and register again.
+Safari has no native-messaging registry at all \(em its extension talks to
+the containing app through
+.BR SFSafariWebExtensionHandler ,
+and Apple exposes no download events to extensions there, so automatic
+capture is a Chromium and Firefox feature.
+.
+.SH PROTOCOL
+Requests are JSON objects with a
+.B type
+and an optional
+.BR id ,
+echoed back so replies can be matched:
+.TP
+.B ping
+Is the app up?
+Answered without launching it.
+.TP
+.B config
+Return the current capture settings and nothing else.
+.TP
+.B open
+Bring the app's window to the front.
+.TP
+.B download
+.RI { url ", " filename ", " cookies ", " referer ", " user_agent ", " size ,
+.IR mime ", " tab_url }
+\(em a captured file.
+.TP
+.B links
+.RI { urls }
+\(em several URLs at once, from
+.RB \(lq "Download all links" \(rq
+or a selection.
+.TP
+.B stream
+.RI { url ", " protocol ", " variant_url ", " variant ", " container ,
+.IR filename ", " cookies ", " referer ", " user_agent ", " tab_url ", " live ,
+.IR duration }
+\(em a sniffed HLS or DASH manifest with the rendition and container the user
+chose.
+A manifest is not a file, so this is a distinct request type: handing it to
+the download path would save a few kilobytes of playlist text.
+.PP
+Every reply carries
+.BR ok ,
+the current
+.BR capture ,
+.BR auto_types " and " dont_start_sites
+settings, the app
+.BR version ,
+the request
+.BR id ,
+and
+.B error
+when something failed.
+The settings ride along on every reply so the file-type list, the excluded
+sites, and this browser's own capture checkbox propagate from the app's
+Options window to the extension without a separate channel.
+.PP
+Requests naming a rendition are refused before they are sent when the
+manifest declares Widevine, PlayReady, FairPlay or MPEG common encryption:
+such a stream is listed as protected and is never handed to the app.
+See
+.BR STREAMS " in " hydra (1)
+for what the engine then does with the ones that are sent.
+.
+.SH ENVIRONMENT
+.TP
+.B HYDRA_GUI_BIN
+Path to the
+.B hydra\-gui
+binary to launch, tried before anything else.
+Without it, launching tries the installed
+.I "Hydra Download Manager"
+application bundle (macOS), then a
+.B hydra\-gui
+beside this binary, then
+.B hydra\-gui
+on
+.BR PATH .
+On macOS the bundle is deliberately first: it carries the identity the user
+granted folder access to, where a bare sibling binary is refused
+.IR ~/Downloads .
+.TP
+.BR HOME ", " APPDATA
+Locate the config directory holding
+.IR ipc.json :
+.I $HOME/.config/hydra
+everywhere but Windows, where it is
+.IR %APPDATA%\(rshydra .
+.
+.SH FILES
+.TP
+.I ~/.config/hydra/ipc.json
+Published by the running app: the loopback port and the shared token this
+host authenticates with.
+Never read by the browser.
+On Windows,
+.IR %APPDATA%\(rshydra\(rsipc.json .
+.TP
+.IR ".../NativeMessagingHosts/com.hydra.host.json"
+The manifest naming this binary, one per browser profile root.
+Chromium keeps it inside the profile directory, Firefox in Mozilla's own
+.I native\-messaging\-hosts
+directory, and Windows browsers replace the file with an
+.B HKCU
+key pointing at one under
+.IR %LOCALAPPDATA%\(rsHydra .
+.
+.SH NOTES
+Frames larger than 64 MB, or of zero length, are treated as framing
+corruption: the process exits and lets the browser respawn it.
+.PP
+Only one job actually needs this binary \(em starting Hydra when it is not
+already running.
+Everything else goes over the WebSocket, which behaves identically on macOS,
+Linux and Windows and needs no registration.
+Since the app installs a login item by default, a normally-configured
+machine reaches the host only on a cold start.
+.
+.SH SEE ALSO
+.BR hydra (1),
+.BR hydra\-interactive (1)
+.PP
+Project documentation:
+.IR extensions/chrome/README.md ,
+.IR extensions/safari/README.md .
+.
+.SH COPYRIGHT
+Copyright \(co 2026 Javad Rajabzadeh.
+.PP
+.B hydra\-host
+is free software licensed
+.BR GPL\-3.0\-or\-later :
+GNU General Public License version 3 or later
+.RB < https://gnu.org/licenses/gpl.html >.
+There is NO WARRANTY, to the extent permitted by law.

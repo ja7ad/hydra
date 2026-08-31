@@ -18,6 +18,11 @@
 //! | fish | `$XDG_CONFIG_HOME/fish/completions/hydra.fish` | yes |
 //! | elvish | `$XDG_CONFIG_HOME/elvish/lib/hydra-completion.elv` | no, needs `use` in `rc.elv` |
 //! | powershell | `$XDG_CONFIG_HOME/powershell/hydra-completion.ps1` | no, needs dot-sourcing from `$PROFILE` |
+//!
+//! Every path and every script is named for the command it completes, which
+//! is why [`DEFAULT_BIN`] is a parameter rather than a constant in the
+//! generators: the installers also put the CLI on `$PATH` as `hya`, and a
+//! script generated for `hydra` never fires for that name.
 
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
@@ -25,12 +30,17 @@ use std::path::PathBuf;
 
 use crate::cli::Cli;
 
-/// Render `shell`'s completion script from the live `Cli` definition.
-pub fn render(shell: Shell) -> String {
+/// The command name completions are generated for unless another is asked
+/// for. The other one in practice is `hya`, the short name every installer
+/// links next to `hydra`.
+pub const DEFAULT_BIN: &str = "hydra";
+
+/// Render `shell`'s completion script for the command `bin`, from the live
+/// `Cli` definition.
+pub fn render(shell: Shell, bin: &str) -> String {
     let mut cmd = Cli::command();
-    let name = cmd.get_name().to_string();
     let mut buf = Vec::new();
-    generate(shell, &mut cmd, name, &mut buf);
+    generate(shell, &mut cmd, bin, &mut buf);
     String::from_utf8(buf).expect("clap_complete generators always emit UTF-8")
 }
 
@@ -67,12 +77,13 @@ pub struct Destination {
     pub remaining_step: Option<String>,
 }
 
-/// Pick the destination for `shell`. `system` selects the machine-wide
-/// location (typically requires root) over the current user's.
-pub fn destination(shell: Shell, system: bool) -> Destination {
+/// Pick the destination for `shell`'s script for the command `bin`. `system`
+/// selects the machine-wide location (typically requires root) over the
+/// current user's.
+pub fn destination(shell: Shell, system: bool, bin: &str) -> Destination {
     match shell {
         Shell::Bash if system => Destination {
-            path: PathBuf::from("/usr/share/bash-completion/completions/hydra"),
+            path: PathBuf::from(format!("/usr/share/bash-completion/completions/{bin}")),
             remaining_step: Some(
                 "requires the bash-completion package (v2); with it installed, this \
                  directory is scanned automatically on the next shell start"
@@ -81,7 +92,7 @@ pub fn destination(shell: Shell, system: bool) -> Destination {
         },
         Shell::Bash => Destination {
             path: xdg_dir("XDG_DATA_HOME", ".local/share")
-                .join("bash-completion/completions/hydra"),
+                .join(format!("bash-completion/completions/{bin}")),
             remaining_step: Some(
                 "requires the bash-completion package (v2) to be installed and sourced; \
                  with it, this file is picked up on the next shell start"
@@ -89,7 +100,7 @@ pub fn destination(shell: Shell, system: bool) -> Destination {
             ),
         },
         Shell::Zsh if system => Destination {
-            path: PathBuf::from("/usr/share/zsh/site-functions/_hydra"),
+            path: PathBuf::from(format!("/usr/share/zsh/site-functions/_{bin}")),
             remaining_step: Some(
                 "on the default zsh fpath on most systems; start a new shell (or run \
                  `compinit`) to pick it up"
@@ -99,7 +110,7 @@ pub fn destination(shell: Shell, system: bool) -> Destination {
         Shell::Zsh => {
             let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
             Destination {
-                path: PathBuf::from(home).join(".zfunc/_hydra"),
+                path: PathBuf::from(home).join(format!(".zfunc/_{bin}")),
                 remaining_step: Some(
                     "add `fpath+=(~/.zfunc)` to ~/.zshrc BEFORE the `autoload -Uz compinit \
                      && compinit` line, then start a new shell"
@@ -114,7 +125,7 @@ pub fn destination(shell: Shell, system: bool) -> Destination {
                 xdg_dir("XDG_CONFIG_HOME", ".config").join("fish/completions")
             };
             Destination {
-                path: dir.join("hydra.fish"),
+                path: dir.join(format!("{bin}.fish")),
                 // fish scans this directory itself; nothing else to do.
                 remaining_step: None,
             }
@@ -126,12 +137,11 @@ pub fn destination(shell: Shell, system: bool) -> Destination {
                 xdg_dir("XDG_CONFIG_HOME", ".config").join("elvish/lib")
             };
             Destination {
-                path: dir.join("hydra-completion.elv"),
-                remaining_step: Some(
-                    "add `use hydra-completion` to rc.elv (run `edit:rc-path` in elvish to \
+                path: dir.join(format!("{bin}-completion.elv")),
+                remaining_step: Some(format!(
+                    "add `use {bin}-completion` to rc.elv (run `edit:rc-path` in elvish to \
                      find it)"
-                        .to_string(),
-                ),
+                )),
             }
         }
         Shell::PowerShell => {
@@ -141,7 +151,7 @@ pub fn destination(shell: Shell, system: bool) -> Destination {
                 xdg_dir("XDG_CONFIG_HOME", ".config").join("powershell")
             };
             Destination {
-                path: dir.join("hydra-completion.ps1"),
+                path: dir.join(format!("{bin}-completion.ps1")),
                 remaining_step: Some(
                     "add `. <path>` to $PROFILE (run `echo $PROFILE` in pwsh to find it)"
                         .to_string(),
@@ -151,7 +161,7 @@ pub fn destination(shell: Shell, system: bool) -> Destination {
         // `Shell` is `#[non_exhaustive]`: future shell variants land here
         // rather than failing to compile against a newer clap_complete.
         _ => Destination {
-            path: PathBuf::from(format!("hydra-completion.{shell}")),
+            path: PathBuf::from(format!("{bin}-completion.{shell}")),
             remaining_step: Some(
                 "unrecognised shell variant; consult its own completion documentation".to_string(),
             ),
@@ -159,17 +169,22 @@ pub fn destination(shell: Shell, system: bool) -> Destination {
     }
 }
 
-/// Write `shell`'s completion script to its destination, creating parent
-/// directories as needed. Under `dry_run`, computes and returns the
-/// `Destination` without touching the filesystem.
-pub fn install(shell: Shell, system: bool, dry_run: bool) -> Result<Destination, String> {
-    let dest = destination(shell, system);
+/// Write `shell`'s completion script for the command `bin` to its
+/// destination, creating parent directories as needed. Under `dry_run`,
+/// computes and returns the `Destination` without touching the filesystem.
+pub fn install(
+    shell: Shell,
+    system: bool,
+    dry_run: bool,
+    bin: &str,
+) -> Result<Destination, String> {
+    let dest = destination(shell, system, bin);
     if !dry_run {
         if let Some(parent) = dest.path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("could not create {}: {e}", parent.display()))?;
         }
-        std::fs::write(&dest.path, render(shell))
+        std::fs::write(&dest.path, render(shell, bin))
             .map_err(|e| format!("could not write {}: {e}", dest.path.display()))?;
     }
     Ok(dest)
@@ -188,7 +203,7 @@ mod tests {
             Shell::Elvish,
             Shell::PowerShell,
         ] {
-            let script = render(shell);
+            let script = render(shell, DEFAULT_BIN);
             assert!(
                 !script.trim().is_empty(),
                 "{shell} produced an empty completion script"
@@ -201,12 +216,39 @@ mod tests {
     }
 
     #[test]
+    fn an_alias_gets_its_own_script_and_its_own_destination() {
+        // A completion script names the command it completes, so `hya` needs
+        // its own — the `hydra` one would never fire for it, and would
+        // overwrite it if they shared a path.
+        for shell in [Shell::Bash, Shell::Zsh, Shell::Fish] {
+            let script = render(shell, "hya");
+            assert!(
+                script.contains("hya"),
+                "{shell} script for hya does not mention it"
+            );
+            assert_ne!(
+                destination(shell, false, "hya").path,
+                destination(shell, false, DEFAULT_BIN).path,
+                "{shell}: hya must not share hydra's completion path"
+            );
+        }
+    }
+
+    #[test]
     fn fish_needs_no_remaining_step_but_others_do() {
-        assert!(destination(Shell::Fish, false).remaining_step.is_none());
-        assert!(destination(Shell::Bash, false).remaining_step.is_some());
-        assert!(destination(Shell::Zsh, false).remaining_step.is_some());
-        assert!(destination(Shell::Elvish, false).remaining_step.is_some());
-        assert!(destination(Shell::PowerShell, false)
+        assert!(destination(Shell::Fish, false, DEFAULT_BIN)
+            .remaining_step
+            .is_none());
+        assert!(destination(Shell::Bash, false, DEFAULT_BIN)
+            .remaining_step
+            .is_some());
+        assert!(destination(Shell::Zsh, false, DEFAULT_BIN)
+            .remaining_step
+            .is_some());
+        assert!(destination(Shell::Elvish, false, DEFAULT_BIN)
+            .remaining_step
+            .is_some());
+        assert!(destination(Shell::PowerShell, false, DEFAULT_BIN)
             .remaining_step
             .is_some());
     }
@@ -214,8 +256,8 @@ mod tests {
     #[test]
     fn system_and_user_destinations_differ() {
         for shell in [Shell::Bash, Shell::Zsh, Shell::Fish] {
-            let user = destination(shell, false);
-            let system = destination(shell, true);
+            let user = destination(shell, false, DEFAULT_BIN);
+            let system = destination(shell, true, DEFAULT_BIN);
             assert_ne!(
                 user.path, system.path,
                 "{shell}: --system must pick a different path than the user default"
@@ -233,7 +275,7 @@ mod tests {
         // Isolate from the real home directory so this test cannot touch it.
         std::env::set_var("HOME", &tmp);
         std::env::remove_var("XDG_DATA_HOME");
-        let dest = install(Shell::Bash, false, true).expect("dry run must not error");
+        let dest = install(Shell::Bash, false, true, DEFAULT_BIN).expect("dry run must not error");
         assert!(
             !dest.path.exists(),
             "dry_run must not create {}",
@@ -249,7 +291,7 @@ mod tests {
             "write"
         ));
         std::env::set_var("XDG_CONFIG_HOME", &tmp);
-        let dest = install(Shell::Fish, false, false).expect("install must succeed");
+        let dest = install(Shell::Fish, false, false, DEFAULT_BIN).expect("install must succeed");
         let contents = std::fs::read_to_string(&dest.path).expect("script must be readable back");
         assert!(contents.contains("hydra"));
         let _ = std::fs::remove_dir_all(&tmp);

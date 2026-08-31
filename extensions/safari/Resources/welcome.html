@@ -1,123 +1,603 @@
 <!doctype html>
 <!-- Copyright (C) 2026 Javad Rajabzadeh
-     SPDX-License-Identifier: GPL-3.0-or-later -->
-<html>
+     SPDX-License-Identifier: GPL-3.0-or-later
+
+     Styled after hydra.javad.dev: the same tokens, gradient, card shapes and
+     icon tiles, so the page the browser opens on install reads as part of the
+     product rather than a stray extension page. Everything is inline and
+     local — an extension page cannot depend on a font CDN. -->
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Welcome to Hydra</title>
     <style>
       :root {
-        color-scheme: light dark;
-        --fg: #1c1c1c;
-        --muted: #5c5c5c;
-        --line: #ddd;
-        --accent: #2c6e31;
-        --card: #fff;
-        --bg: #f4f6f4;
+        /* hydra.javad.dev design tokens */
+        color-scheme: dark;
+        --bg: #0a0e13;
+        --bg-raised: #0f151d;
+        --line: rgba(148, 197, 222, 0.12);
+        --line-strong: rgba(148, 197, 222, 0.22);
+        --text: #e7edf3;
+        --text-dim: #93a4b4;
+        --text-faint: #64778a;
+        --accent: #2dd4d4;
+        --accent-ink: #06282e;
+        --grad: linear-gradient(100deg, #2dd4d4, #2596e8);
+        --radius: 14px;
+        /* Content inset. Backgrounds, glows and rules ignore it and run the
+           full width of the window; only the text and cards sit inside. */
+        --gutter: clamp(20px, 4vw, 72px);
+        /* Geist is the site's face; it is not bundled, so the system stack
+           carries the page everywhere it is not already installed. */
+        --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --fg: #ececec;
-          --muted: #a5a5a5;
-          --line: #3a3a3a;
-          --accent: #7dc383;
-          --card: #2a2a2a;
-          --bg: #1f221f;
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .wrap {
+        /* Full bleed. The gutter lives on the bands below, so each one paints
+           edge to edge while its content stays inset. */
+        position: relative;
+        width: 100%;
+        padding: 0;
+      }
+
+      /* One glow for the whole top of the page, brand bar included — anchored
+         at y=0 so there is no flat band above it. */
+      .wrap::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 760px;
+        z-index: -1;
+        pointer-events: none;
+        background:
+          radial-gradient(780px 480px at 26% 0%, rgba(37, 150, 232, 0.16), transparent 65%),
+          radial-gradient(700px 440px at 80% 18%, rgba(45, 212, 212, 0.11), transparent 60%);
+      }
+
+      /* ------------------------------------------------------------ hero */
+
+      .hero {
+        position: relative;
+        padding: 76px var(--gutter) 56px;
+      }
+
+      .topbar {
+        position: relative;
+        z-index: 1;
+        height: 68px;
+        padding: 0 var(--gutter);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 17px;
+        letter-spacing: 0.01em;
+      }
+
+      .brand img {
+        width: 30px;
+        height: 30px;
+        display: block;
+      }
+
+      .topbar a {
+        font-size: 14.5px;
+        color: var(--text-dim);
+        transition: color 0.15s ease;
+      }
+
+      .topbar a:hover {
+        color: var(--text);
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--accent);
+        border: 1px solid rgba(45, 212, 212, 0.22);
+        background: rgba(45, 212, 212, 0.08);
+        border-radius: 999px;
+        padding: 5px 13px;
+        margin-bottom: 20px;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: none;
+      }
+
+      /* The chip reports the live link to the app: connected, app closed,
+         or no native host at all. Until the probe answers it stays neutral. */
+      .eyebrow.ok {
+        color: var(--accent);
+        border-color: rgba(45, 212, 212, 0.22);
+        background: rgba(45, 212, 212, 0.08);
+      }
+      .eyebrow.warn {
+        color: #e0a437;
+        border-color: rgba(224, 164, 55, 0.28);
+        background: rgba(224, 164, 55, 0.09);
+      }
+      .eyebrow.bad {
+        color: #e8705a;
+        border-color: rgba(232, 112, 90, 0.3);
+        background: rgba(232, 112, 90, 0.09);
+      }
+      .eyebrow.pending {
+        color: var(--text-faint);
+        border-color: var(--line);
+        background: transparent;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .eyebrow.pending .dot {
+          animation: blink 1s ease-in-out infinite;
         }
       }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font: 15px/1.6 system-ui, sans-serif;
-        color: var(--fg);
-        background: var(--bg);
+
+      @keyframes blink {
+        50% {
+          opacity: 0.25;
+        }
       }
-      main { max-width: 680px; margin: 0 auto; padding: 48px 24px 64px; }
-      header { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
-      header img { width: 56px; height: 56px; }
-      h1 { margin: 0; font-size: 26px; }
-      .tagline { color: var(--muted); margin: 0 0 32px 72px; }
+
+      h1 {
+        font-size: clamp(32px, 4.6vw, 60px);
+        line-height: 1.06;
+        letter-spacing: -0.03em;
+        font-weight: 700;
+      }
+
+      h1 .grad {
+        background: var(--grad);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .lede {
+        margin-top: 20px;
+        font-size: clamp(16.5px, 1.3vw, 19px);
+        color: var(--text-dim);
+        max-width: 62ch;
+      }
+
+      .ctas {
+        margin-top: 32px;
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        font-weight: 600;
+        font-size: 15px;
+        white-space: nowrap;
+        border-radius: 999px;
+        padding: 11px 22px;
+        transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease,
+          border-color 0.2s ease;
+      }
+
+      .btn:active {
+        transform: translateY(1px) scale(0.99);
+      }
+
+      .btn svg {
+        width: 17px;
+        height: 17px;
+        flex: none;
+      }
+
+      .btn-primary {
+        background: var(--grad);
+        color: var(--accent-ink);
+      }
+
+      .btn-primary:hover {
+        box-shadow: 0 6px 28px rgba(45, 200, 220, 0.28);
+      }
+
+      .btn-ghost {
+        border: 1px solid var(--line-strong);
+        color: var(--text);
+        background: rgba(148, 197, 222, 0.04);
+      }
+
+      .btn-ghost:hover {
+        border-color: rgba(148, 197, 222, 0.4);
+        background: rgba(148, 197, 222, 0.08);
+      }
+
+      /* -------------------------------------------------------- features */
+
+      section {
+        padding: 0 var(--gutter) 40px;
+      }
+
+      h2.sec {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin-bottom: 18px;
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+        gap: 18px;
+        align-items: stretch;
+      }
+
       .card {
-        background: var(--card);
         border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--bg-raised);
+        padding: 24px 26px;
+        transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .card:hover {
+        border-color: var(--line-strong);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      }
+
+      .ico {
+        width: 38px;
+        height: 38px;
         border-radius: 10px;
-        padding: 20px 24px;
-        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(45, 212, 212, 0.1);
+        border: 1px solid rgba(45, 212, 212, 0.18);
+        margin-bottom: 14px;
       }
-      .card h2 { margin: 0 0 8px; font-size: 16px; }
-      .card p { margin: 6px 0; }
+
+      .ico svg {
+        width: 20px;
+        height: 20px;
+        stroke: var(--accent);
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .card h3 {
+        font-size: 16.5px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .card p {
+        margin-top: 7px;
+        font-size: 14px;
+        color: var(--text-dim);
+      }
+
+      .card strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .card em {
+        color: var(--text);
+        font-style: normal;
+        font-weight: 500;
+      }
+
       kbd {
-        font: 12px/1 system-ui, sans-serif;
-        border: 1px solid var(--line);
+        font-family: var(--font-sans);
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--text);
+        border: 1px solid var(--line-strong);
         border-bottom-width: 2px;
-        border-radius: 4px;
-        padding: 2px 6px;
+        border-radius: 5px;
+        padding: 1px 6px;
+        background: rgba(148, 197, 222, 0.06);
       }
+
       code {
-        font: 13px ui-monospace, monospace;
-        background: color-mix(in srgb, var(--fg) 8%, transparent);
-        border-radius: 4px;
-        padding: 1px 5px;
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        color: var(--accent);
+        background: rgba(45, 212, 212, 0.08);
+        padding: 2px 6px;
+        border-radius: 5px;
+        /* Keep the command in one piece; the line wraps before it instead. */
+        white-space: nowrap;
       }
-      a { color: var(--accent); }
-      .warn {
-        border-left: 3px solid #c98a2b;
-        padding-left: 12px;
-        color: var(--muted);
+
+      /* --------------------------------------------------- troubleshoot */
+
+      #trouble {
+        padding-bottom: 44px;
       }
-      footer { margin-top: 32px; color: var(--muted); font-size: 13px; }
+
+      .fix {
+        border: 1px solid rgba(232, 112, 90, 0.28);
+        border-radius: var(--radius);
+        background: var(--bg-raised);
+        padding: 24px 26px;
+      }
+
+      .fix h3 {
+        font-size: 16.5px;
+        font-weight: 600;
+      }
+
+      .fix ol {
+        margin: 12px 0 0 18px;
+        font-size: 14px;
+        color: var(--text-dim);
+      }
+
+      .fix li {
+        margin-bottom: 8px;
+      }
+
+      .fix .cmd {
+        display: inline-block;
+        margin-top: 6px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+        vertical-align: top;
+      }
+
+      .fix button {
+        margin-top: 16px;
+        font: inherit;
+        font-weight: 600;
+        font-size: 15px;
+        cursor: pointer;
+      }
+
+      /* ---------------------------------------------------------- footer */
+
+      footer {
+        border-top: 1px solid var(--line);
+        margin-top: 16px;
+        padding: 26px var(--gutter) 48px;
+        font-size: 13.5px;
+        color: var(--text-faint);
+        display: flex;
+        gap: 8px 20px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      footer a {
+        color: var(--text-dim);
+        transition: color 0.15s ease;
+      }
+
+      footer a:hover {
+        color: var(--accent);
+      }
+
+      .spacer {
+        flex: 1;
+      }
+
+      @media (max-width: 720px) {
+        .hero {
+          padding-top: 64px;
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .hero > *,
+        .cards > * {
+          animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .cards > :nth-child(2) {
+          animation-delay: 0.06s;
+        }
+        .cards > :nth-child(3) {
+          animation-delay: 0.12s;
+        }
+        .cards > :nth-child(4) {
+          animation-delay: 0.18s;
+        }
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
     </style>
   </head>
   <body>
-    <main>
-      <header>
-        <img src="icons/icon128.png" alt="Hydra logo" />
-        <h1>Hydra is connected to your browser</h1>
+    <div class="wrap">
+      <nav class="topbar">
+        <span class="brand"><img src="icons/icon32.png" alt="" />Hydra</span>
+        <a href="https://hydra.javad.dev" target="_blank" rel="noopener">hydra.javad.dev</a>
+      </nav>
+
+      <header class="hero">
+        <span class="eyebrow pending" id="conn" title="">
+          <span class="dot"></span><span id="conn-text">Checking Hydra…</span>
+        </span>
+        <h1>Your browser now downloads<br /><span class="grad">through Hydra</span>.</h1>
+        <p class="lede">
+          Every download the browser starts is handed to Hydra's engine — split across
+          connections, resumable, and carrying your session with it. Nothing else to set up.
+        </p>
+        <div class="ctas">
+          <a class="btn btn-primary" href="https://hydra.javad.dev" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 20h16" />
+            </svg>
+            Hydra homepage
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/ja7ad/hydra" target="_blank"
+             rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 .5a12 12 0 00-3.79 23.4c.6.1.82-.26.82-.58v-2.2c-3.34.72-4.04-1.42-4.04-1.42-.55-1.38-1.34-1.75-1.34-1.75-1.09-.74.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.11-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 016 0c2.29-1.55 3.3-1.23 3.3-1.23.65 1.66.24 2.88.12 3.18.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.69.83.58A12 12 0 0012 .5z" />
+            </svg>
+            View on GitHub
+          </a>
+        </div>
       </header>
-      <p class="tagline">The download manager with many heads.</p>
 
-      <div class="card">
-        <h2>⚡ Automatic capture</h2>
-        <p>
-          Click any download and Hydra takes it over — multi-connection, resumable,
-          with your cookies carried along. Which file types are captured is set in
-          <strong>Hydra&nbsp;→&nbsp;Options&nbsp;→&nbsp;File&nbsp;Types</strong>.
-        </p>
-        <p>Hold <kbd>Alt</kbd> while clicking to let the browser keep one download.</p>
-      </div>
+      <section id="trouble" hidden>
+        <div class="fix">
+          <h3 id="fix-title">Hydra is not reachable</h3>
+          <ol>
+            <li id="fix-install">
+              Install the native messaging host, which is what lets the browser
+              talk to the app:
+              <code class="cmd" id="fix-cmd">scripts/install-native-host.sh</code>
+            </li>
+            <li>Make sure the Hydra desktop app is installed and has been opened once.</li>
+            <li id="fix-sandboxed" hidden>
+              <strong>On Ubuntu and other Linux distributions</strong>, Firefox and
+              Chromium are often installed as a <em>snap</em> or <em>Flatpak</em>, which
+              keeps each browser's profile in its own private directory rather than in
+              <code>~/.mozilla</code> or <code>~/.config</code>. Hydra registers those
+              locations itself on every launch, so simply starting Hydra once is the fix
+              — the install script only covers a browser that has already been run at
+              least once.
+            </li>
+            <li>Restart the browser so it picks up the newly registered host.</li>
+            <li>
+              Still stuck? Check that
+              <strong>Hydra&nbsp;→&nbsp;Options&nbsp;→&nbsp;General</strong> has this browser
+              ticked under <em>Capture downloads from the following browsers</em>.
+            </li>
+          </ol>
+          <button class="btn btn-ghost" id="recheck" type="button">Check again</button>
+        </div>
+      </section>
 
-      <div class="card">
-        <h2>🖱 Right-click &amp; text selection</h2>
-        <p>
-          Right-click any link, image, or video → <em>Download with Hydra</em>.
-          Or simply <strong>highlight links on a page</strong> — a floating
-          <em>Download with Hydra</em> button appears. Several
-          links at once open Hydra's batch download box.
-        </p>
-      </div>
+      <section>
+        <h2 class="sec">What you get</h2>
+        <div class="cards">
+          <article class="card">
+            <div class="ico">
+              <svg viewBox="0 0 24 24"><path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z" /></svg>
+            </div>
+            <h3>Automatic capture</h3>
+            <p>
+              Click any download and Hydra takes it over — multi-connection, resumable, with your
+              cookies carried along. Which file types are captured is set in
+              <strong>Hydra&nbsp;→&nbsp;Options&nbsp;→&nbsp;File&nbsp;Types</strong>.
+            </p>
+            <p>Hold <kbd>Alt</kbd> while clicking to let the browser keep one download.</p>
+          </article>
 
-      <div class="card">
-        <h2>🎬 Media sniffing</h2>
-        <p>
-          When a page plays direct video or audio files, a counter appears on the
-          Hydra toolbar icon. Open the popup to grab any of them.
-        </p>
-      </div>
+          <article class="card">
+            <div class="ico">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 3l7.5 17 2.3-6.7 6.7-2.3L4 3z" />
+              </svg>
+            </div>
+            <h3>Right-click &amp; text selection</h3>
+            <p>
+              Right-click any link, image, or video → <em>Download with Hydra</em>. Or simply
+              <strong>highlight links on a page</strong> — a floating <em>Download with Hydra</em>
+              button appears. Several links at once open Hydra's batch download box.
+            </p>
+          </article>
 
-      <div class="card warn">
-        <p>
-          <strong>One-time setup:</strong> the extension talks to the Hydra app
-          through a native messaging host. If you have not run it yet:
-          <code>scripts/install-native-host.sh</code>, then restart the browser.
-        </p>
-      </div>
+          <article class="card">
+            <div class="ico">
+              <svg viewBox="0 0 24 24">
+                <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+                <path d="M10 9.5l5 2.5-5 2.5v-5z" />
+              </svg>
+            </div>
+            <h3>Media sniffing</h3>
+            <p>
+              When a page plays direct video or audio files, a counter appears on the Hydra toolbar
+              icon. Open the popup to grab any of them.
+            </p>
+          </article>
+
+          <article class="card">
+            <div class="ico">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 2.8l9 4.7-9 4.7-9-4.7 9-4.7z" />
+                <path d="M3 12.2l9 4.7 9-4.7" />
+                <path d="M3 16.8l9 4.7 9-4.7" />
+              </svg>
+            </div>
+            <h3>HLS &amp; DASH streams</h3>
+            <p>
+              Segmented video shows up under <strong>Streams</strong> in the popup as one entry,
+              not a thousand segments — with the quality, bitrate and estimated size the manifest
+              declares. Pick a variant and Hydra fetches it. DRM-protected streams are listed as
+              unsupported and are never touched.
+            </p>
+          </article>
+        </div>
+      </section>
 
       <footer>
-        <a href="https://github.com/ja7ad/hydra" target="_blank" rel="noopener">
-          Hydra on GitHub — docs, source, and releases
-        </a>
-        · Free software, GPL-3.0
+        <a href="https://hydra.javad.dev" target="_blank" rel="noopener">hydra.javad.dev</a>
+        <a href="https://github.com/ja7ad/hydra" target="_blank" rel="noopener">Source &amp; releases</a>
+        <span class="spacer"></span>
+        <span>Free software · GPL-3.0</span>
       </footer>
-    </main>
+    </div>
+    <script src="welcome.js"></script>
   </body>
 </html>

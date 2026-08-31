@@ -2,13 +2,17 @@
 .\" hydra(1) - adaptive multi-source file retriever
 .\" Written for man(7): renders on groff (Linux) and mandoc (macOS, *BSD,
 .\" illumos) alike. No GNU-only macros, no UTF-8 in the source.
-.TH HYDRA 1 "2026-08-17" "hydra 0.2.2" "User Commands"
+.TH HYDRA 1 "2026-08-30" "hydra" "User Commands"
 .
 .SH NAME
-hydra \- multi-source file retriever with reassignable byte ranges
+hydra, hya \- multi-source file retriever with reassignable byte ranges
 .
 .SH SYNOPSIS
 .B hydra
+.RI [ options ]
+.IR URL ...
+.br
+.B hya
 .RI [ options ]
 .IR URL ...
 .br
@@ -93,6 +97,27 @@ Pass
 to take
 .B \-x
 on faith.
+.
+.PP
+A URL whose path ends in
+.BR .m3u8 ", " .m3u
+or
+.B .mpd
+is tried as an adaptive-stream manifest before anything else, as are all
+URLs given with
+.B \-\-inspect
+or
+.BR \-\-list\-streams .
+HLS and DASH describe a ladder of renditions cut into hundreds of segments,
+which is a different job from assembling reassignable ranges over one object.
+The extension only decides whether the attempt is worth one small
+.BR GET ;
+the body settles it, so a
+.B .m3u8
+that answers with a login page costs that one request and then falls through
+to an ordinary download.
+See
+.BR STREAMS .
 .
 .SH OPTIONS
 .SS Output
@@ -302,6 +327,98 @@ would make
 parse
 .B v
 as a filename.
+.
+.SS Adaptive streams
+.TP
+.BI \-\-quality " HEIGHT"
+Preferred rendition height, e.g.\&
+.BR "\-\-quality 720" .
+An exact match wins; failing that the nearest rendition
+.I below
+the request is taken, and only when every rendition is larger than the
+request is the smallest of them used.
+Never a larger one by surprise \(em asking for 720 on a ladder that offers
+only 1080p and 2160p gives 1080p, not 2160p.
+Without it the first rendition the manifest lists is used, which is the
+publisher's own default.
+.TP
+.BI \-\-container " FMT"
+Container for the finished file:
+.B mp4
+(default) or
+.BR ts .
+MPEG-TS segments become MP4 through a system
+.BR ffmpeg (1);
+with no ffmpeg on this machine, ask for
+.B ts
+and keep the assembled transport stream.
+Any other value is treated as
+.BR mp4 ;
+see
+.BR BUGS .
+.TP
+.B \-\-list\-streams
+Print the renditions a manifest offers, then exit.
+A manifest is a few kilobytes, so this is the cheap way to see what
+.B \-\-quality
+is choosing between.
+The listing goes to standard output: the protocol and URL, then one indented
+line per rendition
+.RB ( "720p  1400 kbps  avc1.64001f" ),
+and for DASH the audio representations after the video ones.
+A URL that turns out not to be a manifest is a failed premise, not an
+invitation to download it: the run exits 1 having written nothing.
+.TP
+.B \-\-inspect
+Report what the server says about a URL, then exit.
+No body is transferred either way.
+For a manifest this is the same rendition listing
+.B \-\-list\-streams
+prints; for an ordinary object it is the URL after redirects (each hop
+printed as it is followed), the file name the server implies, the size, the
+content type, the extension, whether byte ranges are accepted \(em that is,
+whether a lost connection costs the whole transfer \(em the validator, the
+modification time rendered in
+.I local
+time, and any
+.B Content\-Disposition.
+A URL that is not a manifest is an ordinary answer here, which is the whole
+difference from
+.BR \-\-list\-streams .
+.TP
+.BI \-\-record\-seconds " SECONDS"
+Record a live stream for this much media, then finish the file.
+The budget is spent in the
+.I media
+the manifest declares per segment, not on the wall clock: a DVR window is
+drained far faster than real time, so a wall-clock timer would hand back
+hours of it for a "60 seconds" ask.
+Without this flag a live recording runs until the broadcast ends or Ctrl-C
+stops it; either way the result is a finished, playable file.
+.PP
+.B \-x
+means segments in flight for a stream, exactly as it means connections per
+source for a file: 8 by default, capped at 32.
+.B \-\-limit\-rate
+caps the whole transfer rather than each segment.
+.B \-\-adaptive
+tunes ranged file downloads and has no meaning for segments; a run that
+passes it against a stream is told so rather than having it silently dropped.
+.PP
+.B \-\-inspect
+and
+.B \-\-list\-streams
+ask a question about
+.I one
+object, so they refuse rather than be dropped: combining either with
+.BR \-\-spider ", " \-\-stdout ", " \-\-no\-save ", " \-\-checksum ", " \-\-range
+or
+.BR \-\-start\-pos ,
+or passing several URLs without
+.BR \-\-mirrors ,
+is a usage error (exit 2).
+The same list governs auto-detection, quietly: with any of those flags in
+play a manifest URL is fetched as the ordinary file it also is.
 .
 .SH INTEGRITY
 .TP
@@ -624,6 +741,125 @@ SFTP is the best fit of any protocol for this scheduler and is unbuilt only
 because it needs an SSH transport; SCP streams a whole file with no offsets,
 so there are no ranges to schedule and it will not be built.
 .
+.SH STREAMS
+HLS
+.RB ( .m3u8 )
+and DASH
+.RB ( .mpd )
+manifests are handled by a separate path: a manifest is not a file, so it
+cannot go through the range scheduler at all.
+.PP
+A master playlist is read for its ladder, one rendition is chosen (see
+.BR \-\-quality ),
+and its media playlist is fetched and turned into a plan \(em after which no
+further playlist is read.
+DASH carries video and audio as separate representations, so both are
+planned and the two finished tracks are combined at the end.
+Relative URIs resolve against the address the manifest
+.I finally
+came from, not the address asked for: a CDN answering with a redirect to a
+regional edge is the common case, and up to five hops are followed both for
+the manifest and, independently, for each segment \(em carrying the segment's
+byte range with it, so a playlist that carves every segment out of one file
+does not fetch that whole file per segment.
+.PP
+Progress is a single line on standard error, so standard output stays clean;
+.BR \-q ", " \-\-json
+and
+.B \-\-no\-progress
+each silence it.
+.
+.SS Naming the output
+.B \-O
+and
+.B \-P
+mean what they always mean.
+Without
+.BR \-O ,
+the name comes from the manifest's path with the container's extension
+appended \(em except that manifests are almost always called something
+generic, so a last component of
+.BR index ", " master ", " manifest ", " playlist ", " mono ", " stream ,
+.BR media ", " video " or " main
+is skipped in favour of the directory above it, which is nearly always the
+asset id.
+.
+.SS Containers and ffmpeg
+Segments are assembled first and converted afterwards, and what is possible
+depends on what the segments are:
+.TS
+tab(@) box;
+lb lb lb lb
+l  l  l  l .
+Segments@Asked@With ffmpeg@Without
+_
+MPEG-TS@ts@placed as assembled@placed as assembled
+MPEG-TS@mp4@remuxed@refused
+fragmented MP4@mp4@remuxed, faststart@kept as assembled
+fragmented MP4@ts@remuxed@refused
+DASH video+audio@mp4@combined@refused
+.TE
+.PP
+The remux is always a stream copy, never a re-encode.
+For fragmented MP4 it is an improvement rather than a requirement \(em the
+assembly already plays \(em so when ffmpeg declines, the assembled file is
+kept and the reason is printed.
+For MPEG-TS to MP4 the thing asked for genuinely cannot be produced, so that
+is an error instead: the transfer exits 1 and the staged
+.IB output .part.t N
+files are left in place, playable on their own, rather than deleted because
+the last step could not run.
+.PP
+ffmpeg is found on
+.B PATH
+and, on a desktop where
+.B PATH
+is minimal, in the usual install directories
+.RI ( /opt/homebrew/bin ", " /usr/local/bin ", " "C:\(rsProgram Files\(rsffmpeg\(rsbin" ,
+and so on).
+.
+.SS Encryption and DRM
+HLS AES-128 is ordinary content protection, not DRM: the playlist names a
+key URL and it is fetched over the same session as everything else, so those
+streams download normally and the key count is reported.
+Anything else is refused before a byte is written.
+A manifest declaring Widevine, PlayReady, FairPlay or MPEG common encryption
+is refused as the boundary it is \(em hydra does not bypass the technical
+measures that protect audio and video content \(em and
+.B SAMPLE\-AES
+and its relatives are refused as not implemented.
+Live streams under any encryption are refused too: keys rotate mid-broadcast
+and appending ciphertext would "succeed" over a file of noise.
+.
+.SS Live recording
+A live manifest publishes a sliding window and has no end of its own, so it
+is recorded rather than downloaded: the window is refetched at the interval
+the manifest implies, new segments are appended in playlist order, and the
+file is finished when the broadcast ends, when
+.B \-\-record\-seconds
+is spent, or on Ctrl-C.
+Stopping a recording is the end of it, not an interruption; the file is
+complete and playable.
+.PP
+An encoder that restarts renumbers its segments, which is detected and
+followed rather than being seen as segments already taken.
+A segment that cannot be fetched is a gap the recording moves past; a
+manifest that publishes nothing at all three refreshes running is an error.
+A recording keeps no checkpoint \(em there is nothing to resume into once the
+broadcast has moved on \(em so, unlike a VOD assembly, it cannot be continued
+later.
+.
+.SS Resuming a VOD assembly
+Each track is assembled into
+.IB output .part.t N
+beside a checkpoint sidecar
+.IB output .part.t N .ck
+recording how many segments and bytes are already in it.
+Ctrl-C during an assembly exits 1 and says which staging file was kept;
+running the same command again reuses it when the plan still matches, and
+starts over when it does not.
+Both are removed once the finished file is in place.
+.
 .SH COMPATIBILITY
 .B wget
 and
@@ -847,6 +1083,16 @@ harness, or a flag refused by the active compatibility dialect.
 The distinction is load-bearing for scripts: exit 2 means the command was
 wrong and retrying it verbatim cannot help, while exit 1 means the command
 was right and the network or the server was not.
+.PP
+Streams follow the same rule.
+.B \-\-list\-streams
+on a URL that is not a manifest exits 1; a refused stream (DRM, an
+unsupported encryption, a live playlist that published nothing) exits 1; an
+interrupted assembly exits 1 with its staging files kept; and combining
+.B \-\-inspect
+or
+.B \-\-list\-streams
+with a flag that contradicts it exits 2.
 .
 .SH ENVIRONMENT
 .TP
@@ -902,6 +1148,22 @@ cannot leave a sidecar describing a state the file was never in.
 \fIoutput\fB.1\fR, \fIoutput\fB.2\fR, ...
 Non-destructive alternate output names, used when the target exists and the
 run is not interactive. wget's convention, bounded at 9999.
+.TP
+.IB output .part.t N
+Staging file for stream track
+.IR N :
+the segments as assembled, before the container step.
+Kept when the run is interrupted, so the next run can continue it, and kept
+when the final conversion fails, because it is playable on its own.
+.TP
+.IB output .part.t N .ck
+Checkpoint for that staging file: the segments and bytes already written.
+A VOD assembly resumes from it when the plan still matches; a live recording
+writes none.
+.TP
+.IB output .part.s N .\|.\|. ", " output .part.i N
+Transient per-segment and init-segment staging files, removed as each one is
+appended.
 .TP
 .I $XDG_STATE_HOME/hydra/queue.json
 Interactive queue state.
@@ -976,6 +1238,46 @@ hydra \-\-emit\-manifest f.manifest.json \-O f.bin https://example.com/f.bin
 .fi
 .RE
 .PP
+See what a stream offers before fetching any of it:
+.PP
+.RS 4
+.nf
+hydra \-\-list\-streams https://cdn.example/asset/master.m3u8
+.fi
+.RE
+.PP
+Take the 720p rendition, or the nearest below it:
+.PP
+.RS 4
+.nf
+hydra \-\-quality 720 https://cdn.example/asset/master.m3u8
+.fi
+.RE
+.PP
+Keep the transport stream instead of remuxing, on a machine with no ffmpeg:
+.PP
+.RS 4
+.nf
+hydra \-\-container ts \-O talk.ts https://cdn.example/asset/index.m3u8
+.fi
+.RE
+.PP
+Record two minutes of a live broadcast and finish the file:
+.PP
+.RS 4
+.nf
+hydra \-\-record\-seconds 120 https://live.example/channel.m3u8
+.fi
+.RE
+.PP
+Ask what a URL is, whatever it turns out to be:
+.PP
+.RS 4
+.nf
+hydra \-\-inspect https://example.com/f
+.fi
+.RE
+.PP
 Install tab completion for the current shell:
 .PP
 .RS 4
@@ -1038,6 +1340,36 @@ terminal closing.
 Exiting the event loop would otherwise kill them, since they are tasks in
 the same process.
 .
+.SH THE hya NAME
+.B hya
+is the same program under a shorter name. Every install channel \- the
+install scripts, Homebrew, the deb, rpm and AUR packages, the macOS installer
+and the Windows installer \- puts the CLI on
+.B PATH
+under both spellings, as a symlink where the platform allows one and as a
+second copy where it does not.
+.PP
+It exists for two reasons. Three letters is less to type for a command run as
+often as a download; and
+.B hydra
+is also the name of THC\-Hydra, the login auditor that Debian, Ubuntu, Kali,
+Arch and Homebrew all ship, so a machine can carry two unrelated
+.B hydra
+programs and resolve whichever comes first on
+.BR PATH .
+.B hya
+is unambiguous.
+.PP
+Shell completions are name\-bound \- a completion script names the command it
+completes \- so the packages install a set for each name. To add the short
+name's set by hand:
+.PP
+.RS 4
+.nf
+hydra install\-completions \-\-bin\-name hya
+.fi
+.RE
+.
 .SH SEE ALSO
 .BR hydra\-interactive (1),
 .BR hydra\-checksum (1),
@@ -1045,6 +1377,8 @@ the same process.
 .BR hydra\-formats (1),
 .BR hydra\-bench (1),
 .BR hydra\-completions (1),
+.BR hydra\-host (1),
+.BR ffmpeg (1),
 .BR wget (1),
 .BR curl (1),
 .BR aria2c (1)
@@ -1089,6 +1423,35 @@ Multi-file runs do not deduplicate output names against each other, so URLs
 with colliding basenames overwrite one another while both report success.
 See
 .BR NOTES .
+.PP
+.B \-\-container
+recognises exactly two values.
+.B ts
+asks for the transport stream; every other spelling \(em
+.BR mp4 ", " webm ", " mkv ", " typo
+\(em is treated as
+.BR mp4 ,
+so a container hydra cannot produce is not refused, it is quietly ignored.
+.PP
+.B \-\-json
+produces no JSON for a stream.
+It still implies quiet, so a successful stream download under
+.B \-\-json
+prints nothing at all and exits 0; the file is there, but a script reading
+stdout gets an empty document rather than a result object.
+.PP
+Stream handling looks at one URL only.
+Several URLs without
+.B \-\-mirrors
+disable it entirely, so each
+.B .m3u8
+is saved as the few kilobytes of playlist text it literally is, and with
+.B \-\-mirrors
+only the first URL is used \(em the others are not consulted, because a
+stream is assembled from segments rather than across mirrors.
+.PP
+A live recording cannot be resumed or continued: it writes no checkpoint, so
+a second run appends nothing and starts a new file.
 .PP
 The long help for
 .B \-\-proxy

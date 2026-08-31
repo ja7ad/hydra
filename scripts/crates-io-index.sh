@@ -10,7 +10,7 @@
 # crate stands against crates.io — the same comparison the check job makes.
 
 # crates.io name -> manifest directory: crates/hydra-core holds the hya-core
-# crate, crates/hydra-net holds hya-net.
+# crate, crates/hydra-net holds hya-net, crates/hydra-stream holds hya-stream.
 crate_dir() {
   echo "hydra-${1#hya-}"
 }
@@ -50,12 +50,24 @@ is_indexed() {
 
 # Latest version on the registry, ignoring yanked releases. The sparse index
 # serves one JSON object per line in publish order, so the last live line is
-# the current version. Empty when the crate has never been published.
+# the current version. Empty when the crate has never been published (a 404
+# from the sparse index) — checked via HTTP status rather than `curl -f`,
+# whose exit 22 on 404 would otherwise abort the caller under `set -e`.
 latest_indexed_version() {
-  local name="$1"
-  curl -sf -A "$(crate_user_agent "$name" latest)" "$(sparse_index_url "$name")" \
-    | jq -r 'select(.yanked | not) | .vers' \
-    | tail -1
+  local name="$1" tmp status
+  tmp=$(mktemp)
+  status=$(curl -s -o "$tmp" -w '%{http_code}' -A "$(crate_user_agent "$name" latest)" "$(sparse_index_url "$name")")
+  if [ "$status" = "404" ]; then
+    rm -f "$tmp"
+    return 0
+  fi
+  if [ "$status" -ge 400 ]; then
+    rm -f "$tmp"
+    echo "error: crates.io index request for ${name} failed with HTTP ${status}" >&2
+    return 1
+  fi
+  jq -r 'select(.yanked | not) | .vers' "$tmp" | tail -1
+  rm -f "$tmp"
 }
 
 # `a` is strictly newer than `b` under version sort. Used to refuse a manifest
@@ -69,8 +81,8 @@ version_gt() {
 # root Cargo.toml intentionally omits one (see commit d8b0285: local builds
 # would otherwise need the pin bumped in lockstep with every hya-core/hya-net
 # version change). The publish job stamps the pin in here instead, against its
-# own ephemeral checkout right before publishing the dependent crate — nothing
-# is committed back.
+# own ephemeral checkout right before publishing the dependent crates
+# (hya-net, hya-stream) — nothing is committed back.
 pin_workspace_dependency_version() {
   local name="$1" dir version
   dir=$(crate_dir "$name")
@@ -93,7 +105,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
 
   status=0
   printf '%-10s %-12s %-12s %s\n' CRATE MANIFEST REGISTRY STATUS
-  for crate in hya-core hya-net; do
+  for crate in hya-core hya-net hya-stream; do
     version=$(crate_version "$crate")
     latest=$(latest_indexed_version "$crate")
     if [ -z "$latest" ]; then

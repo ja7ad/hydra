@@ -27,6 +27,7 @@ mod macos_menu;
 mod macos_surface;
 mod menubus;
 mod model;
+mod nmhost;
 mod scan;
 mod sounds;
 mod theme;
@@ -83,10 +84,7 @@ fn boot() -> (App, Task<Message>) {
     }
     log::init(cfg.log_level.as_deref());
     let state = model::load_state();
-    log::info(&format!(
-        "session start (hydra-gui {})",
-        env!("CARGO_PKG_VERSION")
-    ));
+    log::banner();
 
     // The engine thread must exist before the first subscription poll takes
     // its event receiver.
@@ -97,6 +95,9 @@ fn boot() -> (App, Task<Message>) {
     // the native-messaging host on a loopback socket (port in ipc.json).
     extbus::publish_config(&cfg);
     extbus::start();
+    // Register the native-messaging host with every installed browser, so a
+    // fresh install works without anyone running the shell script.
+    nmhost::ensure_registered();
 
     let quota_saved = (state.dl_quota.used, state.dl_quota.window_start);
     let mut app = App {

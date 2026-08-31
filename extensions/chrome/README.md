@@ -14,7 +14,9 @@ Browser integration for [Hydra](../../README.md): automatic
 download capture, right-click "Download with Hydra", "Download all links",
 a floating "Download with Hydra" button when you highlight links on a page
 (single link downloads directly, several open the batch box), per-tab media
-sniffing with a badge counter, and a welcome page on first install.
+sniffing with a badge counter, HLS/DASH stream detection with quality
+selection, a floating "Download this video" bar over players, and a welcome
+page on first install.
 
 ## How it works
 
@@ -36,13 +38,32 @@ extension ──────────┤                                     
   `ipc.json`) and **launches the GUI minimized** when it is not running —
   the only path that can start the app.
 - Every GUI reply carries the current capture settings, so the file-type
-  list, excluded sites, and the "Google Chrome" checkbox in Hydra's
-  Options propagate to the extension automatically.
+  list, excluded sites, and **this browser's** checkbox under Hydra's
+  Options > General propagate to the extension automatically. Each request
+  names the browser it came from, so the rows in that list govern their own
+  browser rather than sharing one flag.
+- **The in-page bar** (`content.js`) mirrors IDM's: hovering a player shows
+  "Download this video", and hovering that drops a numbered list of every
+  variant in every container Hydra can actually produce — TS *and* MP4 for
+  MPEG-TS segments, MP4 only for fragmented MP4 and DASH — named after the
+  page title, cheapest quality first, with "Download all" at the top. It
+  lists only what the background already sniffed; it never probes the page
+  or the network. Turn it off from the popup.
+- Adaptive streams are sniffed as one entry per manifest, never per segment:
+  a `.m3u8` or `.mpd` response is fetched once, parsed for its variants
+  (resolution, bitrate, codecs, duration), and listed under **Streams** in
+  the popup. Variant playlists a master already covers are folded into it,
+  and segments are kept out of the direct-media list. A manifest that
+  declares Widevine, PlayReady, FairPlay or common encryption is shown as
+  unsupported and is never sent — Hydra does not circumvent DRM.
 - Hold **Alt** while clicking a link to bypass capture once.
 
 ## Install
 
-1. Build and register the native host (macOS/Linux):
+1. Register the native host. **The Hydra app does this itself** on every
+   start, for every browser installed for your user, so normally there is
+   nothing to do here. From a source checkout, where the app may not have
+   been launched yet, the script does the same thing:
 
    ```bash
    scripts/install-native-host.sh
@@ -160,8 +181,11 @@ Extensions.
 - `referer` and per-download `user_agent` are transmitted and logged, but
   the engine does not yet send them (StartSpec has no header support);
   cookies **are** applied.
-- Segmented streams (HLS `.m3u8` / DASH) are deliberately not sniffed —
-  Hydra downloads files, it does not mux segment streams.
+- Streams whose manifest declares DRM (Widevine, PlayReady, FairPlay,
+  common encryption) are listed as protected and are never sent — Hydra
+  does not circumvent DRM. Live HLS/DASH under any encryption is refused by
+  the engine for the same reason keys make it impossible to record honestly.
+
 ## Do I need `hydra-host` on every OS?
 
 Only for one job: **starting Hydra when it is not already running.** Every

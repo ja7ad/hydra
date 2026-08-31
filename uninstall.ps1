@@ -10,7 +10,8 @@
 #   irm https://raw.githubusercontent.com/ja7ad/hydra/main/uninstall.ps1 | iex
 #
 # Removes everything install.ps1 created: %LOCALAPPDATA%\Programs\Hydra
-# (binaries, extensions, scripts), the start-menu and desktop shortcuts, the
+# (binaries including the hya shorthand, extensions, scripts), the start-menu
+# and desktop shortcuts, the
 # "Apps & features" entry, the user-PATH entry, the native-messaging registry
 # keys and manifests, and the login-item Run entry. Config and state in
 # %APPDATA%\hydra are kept unless -Purge is given.
@@ -39,7 +40,7 @@ function Remove-Path([string]$Path) {
 
 # Stop running instances so files are not locked. hydra-updater is the
 # self-update finisher: it can be mid-swap in the very directory being removed.
-$Running = @(Get-Process -Name hydra, hydra-gui, hydra-host, hydra-updater -ErrorAction SilentlyContinue)
+$Running = @(Get-Process -Name hydra, hya, hydra-gui, hydra-host, hydra-updater -ErrorAction SilentlyContinue)
 foreach ($p in $Running) { $null = $p.CloseMainWindow() }
 if ($Running.Count -gt 0) { Start-Sleep -Milliseconds 1200 }
 $Running | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue

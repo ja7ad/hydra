@@ -15,6 +15,12 @@ path = "src/main.rs"
 [dependencies]
 hya-core = { workspace = true }
 hya-net = { workspace = true }
+# HLS/DASH manifests and segment assembly, shared with the desktop app so
+# both produce the same file from the same manifest.
+hya-stream = { workspace = true }
+# Local-time rendering for `--inspect`: servers state Last-Modified in GMT,
+# which is right on the wire and unhelpful on a terminal.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 # `hydra update`: release check + download-link resolution (report-only).
 hya-updater = { workspace = true }
 tokio = { workspace = true }

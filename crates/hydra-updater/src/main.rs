@@ -30,12 +30,34 @@ use std::path::{Path, PathBuf};
 #[command(name = "hydra-updater", about = "Hydra update finisher", version)]
 struct Args {
     /// Directory holding the new release's files (an extracted bundle root).
-    #[arg(long = "src-dir", value_name = "DIR")]
-    src_dir: PathBuf,
+    #[arg(
+        long = "src-dir",
+        value_name = "DIR",
+        required_unless_present = "src_file",
+        conflicts_with = "src_file"
+    )]
+    src_dir: Option<PathBuf>,
+
+    /// The new `.AppImage`, for an AppImage install. Paired with
+    /// `--appimage`: one downloaded file replacing one installed file, with
+    /// no bundle to extract and no directory to walk.
+    #[arg(long = "src-file", value_name = "FILE", requires = "appimage")]
+    src_file: Option<PathBuf>,
 
     /// Directory of the running install to update (where hydra-gui lives).
-    #[arg(long = "install-dir", value_name = "DIR")]
-    install_dir: PathBuf,
+    #[arg(
+        long = "install-dir",
+        value_name = "DIR",
+        required_unless_present = "appimage"
+    )]
+    install_dir: Option<PathBuf>,
+
+    /// The installed `.AppImage` to replace. An AppImage install is one
+    /// file wherever the user keeps it, not a directory of binaries, so it
+    /// is named outright rather than derived from the running executable
+    /// (which lives in a mount that is gone by the time this runs).
+    #[arg(long = "appimage", value_name = "FILE", requires = "src_file")]
+    appimage: Option<PathBuf>,
 
     /// Version the new files carry, stamped into a macOS bundle's Info.plist.
     /// Not `--version`: clap owns that one, and it prints this binary's own
@@ -64,8 +86,8 @@ fn main() -> std::process::ExitCode {
     log.line(&format!(
         "hydra-updater {} starting: src={} install={}{}",
         env!("CARGO_PKG_VERSION"),
-        args.src_dir.display(),
-        args.install_dir.display(),
+        show(args.src_file.as_deref().or(args.src_dir.as_deref())),
+        show(args.appimage.as_deref().or(args.install_dir.as_deref())),
         if args.apply_only { " (apply-only)" } else { "" }
     ));
 
@@ -78,7 +100,23 @@ fn main() -> std::process::ExitCode {
     let opts = hya_updater::ApplyOptions {
         version: args.app_version.clone(),
     };
-    match hya_updater::apply_with(&args.src_dir, &args.install_dir, &opts) {
+    // An AppImage is replaced as one file; every other install is a
+    // directory of binaries the new bundle is copied over. clap has already
+    // established that exactly one of the two pairs was given.
+    let outcome = match (
+        &args.appimage,
+        &args.src_file,
+        &args.src_dir,
+        &args.install_dir,
+    ) {
+        (Some(dest), Some(src), _, _) => hya_updater::replace_appimage(src, dest),
+        (_, _, Some(src), Some(dir)) => hya_updater::apply_with(src, dir, &opts),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "need --src-dir with --install-dir, or --src-file with --appimage",
+        )),
+    };
+    match outcome {
         Ok(report) => {
             log.line(&format!("replaced: {}", report.replaced.join(", ")));
             if !report.skipped.is_empty() {
@@ -125,14 +163,27 @@ fn elevate(args: &Args, log: &mut Log) -> std::io::Result<()> {
         ));
     };
     let me = std::env::current_exe()?;
-    let mut argv: Vec<&OsStr> = vec![
-        me.as_os_str(),
-        OsStr::new("--apply-only"),
-        OsStr::new("--src-dir"),
-        args.src_dir.as_os_str(),
-        OsStr::new("--install-dir"),
-        args.install_dir.as_os_str(),
-    ];
+    let mut argv: Vec<&OsStr> = vec![me.as_os_str(), OsStr::new("--apply-only")];
+    match (&args.appimage, &args.src_file) {
+        (Some(dest), Some(src)) => {
+            argv.push(OsStr::new("--src-file"));
+            argv.push(src.as_os_str());
+            argv.push(OsStr::new("--appimage"));
+            argv.push(dest.as_os_str());
+        }
+        _ => {
+            let (Some(src), Some(dir)) = (&args.src_dir, &args.install_dir) else {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "nothing to re-run: no source and install directory",
+                ));
+            };
+            argv.push(OsStr::new("--src-dir"));
+            argv.push(src.as_os_str());
+            argv.push(OsStr::new("--install-dir"));
+            argv.push(dir.as_os_str());
+        }
+    }
     if let Some(v) = &args.app_version {
         argv.push(OsStr::new("--app-version"));
         argv.push(OsStr::new(v));
@@ -171,15 +222,28 @@ fn relaunch(args: &Args, log: &mut Log) {
         // Fall through: running the executable directly still works, it just
         // skips LaunchServices.
     }
-    let dir: &Path = &args.install_dir;
-    match std::process::Command::new(exe)
-        .args(&args.relaunch_args)
-        .current_dir(dir)
-        .spawn()
-    {
+    // An AppImage has no install directory; the image's own directory is
+    // the closest thing, and the relaunched process gets $OWD from the
+    // runtime anyway.
+    let dir: Option<&Path> = args
+        .install_dir
+        .as_deref()
+        .or_else(|| args.appimage.as_deref().and_then(Path::parent));
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(&args.relaunch_args);
+    if let Some(dir) = dir {
+        cmd.current_dir(dir);
+    }
+    match cmd.spawn() {
         Ok(_) => log.line(&format!("relaunched {}", exe.display())),
         Err(e) => log.line(&format!("relaunch failed: {e}")),
     }
+}
+
+/// A path for the log, or `-` when the run did not carry one.
+fn show(p: Option<&Path>) -> String {
+    p.map(|p| p.display().to_string())
+        .unwrap_or_else(|| "-".into())
 }
 
 /// Append-only log in the staging directory; the updater has no other way to

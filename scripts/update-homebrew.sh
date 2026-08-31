@@ -80,10 +80,20 @@ class Hydra < Formula
     man1.install Dir["docs/man/*.1"] if Dir.exist?("docs/man")
 
     generate_completions_from_executable(bin/"hydra", "completions")
+
+    # "hydra" is also THC-Hydra, which Homebrew ships as hydra too, and three
+    # letters types better for a command run as often as a download. A
+    # symlink, so it follows whatever "hydra" this keg has.
+    bin.install_symlink bin/"hydra" => "hya"
+    # A completion script names the command it completes, so the short name
+    # needs its own set.
+    generate_completions_from_executable(bin/"hydra", "completions", "--bin-name", "hya",
+                                         base_name: "hya")
   end
 
   test do
     assert_match version.to_s, shell_output("#{bin}/hydra --version")
+    assert_match version.to_s, shell_output("#{bin}/hya --version")
   end
 end
 EOF
@@ -106,6 +116,8 @@ cask "hydra" do
 
     app "Hydra Download Manager.app"
     binary "#{appdir}/Hydra Download Manager.app/Contents/MacOS/hydra"
+    # The short second name, for the same reason the formula has one.
+    binary "#{appdir}/Hydra Download Manager.app/Contents/MacOS/hydra", target: "hya"
     manpage "#{appdir}/Hydra Download Manager.app/Contents/Resources/man/man1/hydra.1"
   end
 EOF
@@ -121,6 +133,7 @@ cat >> "${TAP_DIR}/Casks/hydra.rb" <<EOF
     url "https://github.com/ja7ad/hydra/releases/download/v#{version}/hydra-#{version}-linux-#{arch}.tar.gz"
 
     binary "hydra-#{version}-linux-#{arch}/hydra"
+    binary "hydra-#{version}-linux-#{arch}/hydra", target: "hya"
     binary "hydra-#{version}-linux-#{arch}/hydra-gui"
     binary "hydra-#{version}-linux-#{arch}/hydra-host"
     manpage "hydra-#{version}-linux-#{arch}/man/hydra.1"

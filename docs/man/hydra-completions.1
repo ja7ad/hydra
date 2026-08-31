@@ -1,5 +1,5 @@
 .\" hydra-completions(1)
-.TH HYDRA\-COMPLETIONS 1 "2026-08-17" "hydra 0.2.2" "User Commands"
+.TH HYDRA\-COMPLETIONS 1 "2026-08-17" "hydra" "User Commands"
 .
 .SH NAME
 hydra-completions, hydra-install-completions \- shell tab-completion scripts
@@ -7,11 +7,15 @@ hydra-completions, hydra-install-completions \- shell tab-completion scripts
 .SH SYNOPSIS
 .B hydra completions
 .I SHELL
+.RI [ \-\-bin\-name
+.IR NAME ]
 .br
 .B hydra install-completions
 .RI [ SHELL ]
 .RI [ \-\-system ]
 .RI [ \-\-dry\-run ]
+.RI [ \-\-bin\-name
+.IR NAME ]
 .
 .SH DESCRIPTION
 Both subcommands generate a completion script from the same
@@ -70,6 +74,22 @@ Print the destination path and the remaining step without writing
 anything. Useful for checking where a script would land before committing
 to it.
 .TP
+.BI \-\-bin\-name " NAME"
+Generate the script for
+.I NAME
+rather than for
+.BR hydra ,
+and \- for
+.B install\-completions
+\- put it where that name's completions are looked up. The name worth
+passing is
+.BR hya ,
+the CLI's short second spelling: a completion script names the command it
+completes, so the
+.B hydra
+one never fires for it. The packages install both sets already; this is for
+an install done by hand.
+.TP
 .BR \-h ", " \-\-help
 Print help.
 .
@@ -86,6 +106,14 @@ fish@$XDG_CONFIG_HOME/fish/completions/hydra.fish@yes
 elvish@$XDG_CONFIG_HOME/elvish/lib/hydra\-completion.elv@no, needs "use" in rc.elv
 powershell@$XDG_CONFIG_HOME/powershell/hydra\-completion.ps1@no, needs dot\-sourcing from $PROFILE
 .TE
+.PP
+Passing
+.B \-\-bin\-name hya
+substitutes that name throughout the table:
+.IR completions/hya ,
+.IR _hya ,
+.IR hya.fish ,
+and so on.
 .PP
 .B $XDG_DATA_HOME
 and
@@ -162,6 +190,7 @@ hydra install\-completions                 # detect $SHELL, install for this use
 hydra install\-completions fish
 hydra install\-completions bash \-\-system   # needs root
 hydra install\-completions \-\-dry\-run       # see the destination, write nothing
+hydra install\-completions \-\-bin\-name hya # the same, for the short name
 .fi
 .RE
 .

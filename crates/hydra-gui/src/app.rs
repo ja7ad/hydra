@@ -106,6 +106,7 @@ pub enum MenuAction {
     Language(String),
     HomePage,
     Contribute,
+    ReportIssue,
     About,
     Permissions,
     MoveToQueue(String),
@@ -115,6 +116,8 @@ pub enum MenuAction {
     OpenFolderSel,
     PowerSaveToggle,
     Shortcuts,
+    /// Open the session log in the system's default viewer.
+    Logs,
     /// Help > Check for updates: a manual, user-visible version check —
     /// unlike the silent startup check it also reports "up to date" and
     /// connection failures.
@@ -157,6 +160,7 @@ impl MenuAction {
             MenuAction::Language(l) => format!("lang:{l}"),
             MenuAction::HomePage => "homepage".into(),
             MenuAction::Contribute => "contribute".into(),
+            MenuAction::ReportIssue => "report_issue".into(),
             MenuAction::About => "about".into(),
             MenuAction::Permissions => "permissions".into(),
             MenuAction::MoveToQueue(q) => format!("move_q:{q}"),
@@ -166,6 +170,7 @@ impl MenuAction {
             MenuAction::OpenFolderSel => "open_folder_sel".into(),
             MenuAction::PowerSaveToggle => "power_save".into(),
             MenuAction::Shortcuts => "shortcuts".into(),
+            MenuAction::Logs => "logs".into(),
             MenuAction::CheckUpdates => "check_updates".into(),
         }
     }
@@ -232,6 +237,7 @@ impl MenuAction {
             "hide_cats" => MenuAction::HideCategories,
             "homepage" => MenuAction::HomePage,
             "contribute" => MenuAction::Contribute,
+            "report_issue" => MenuAction::ReportIssue,
             "about" => MenuAction::About,
             "permissions" => MenuAction::Permissions,
             "rm_q" => MenuAction::RemoveFromQueue,
@@ -240,6 +246,7 @@ impl MenuAction {
             "open_folder_sel" => MenuAction::OpenFolderSel,
             "power_save" => MenuAction::PowerSaveToggle,
             "shortcuts" => MenuAction::Shortcuts,
+            "logs" => MenuAction::Logs,
             "check_updates" => MenuAction::CheckUpdates,
             _ => return None,
         })
@@ -261,6 +268,20 @@ pub struct AddUrlState {
     /// Filename the browser had already resolved (Content-Disposition et
     /// al.) — better than what the URL path implies.
     pub capture_name: Option<String>,
+    /// What the address turned out to be, when it is a manifest. A stream
+    /// has to be asked which rendition BEFORE it starts — there is no
+    /// changing your mind halfway through a hundred segments.
+    pub stream: Option<crate::engine::StreamProbe>,
+    /// The address `stream` describes, so an edited address invalidates it.
+    pub stream_of: String,
+    pub stream_probing: bool,
+    pub stream_error: Option<String>,
+    pub quality: Option<crate::engine::StreamQuality>,
+    /// "MP4" or "TS".
+    pub container: String,
+    /// Minutes to record a live stream for, as typed. Empty means "until I
+    /// press Stop".
+    pub record_minutes: String,
 }
 
 /// A capture parked behind the duplicate-confirmation dialog.
@@ -497,6 +518,59 @@ pub struct BatchState {
     pub category: String,
     pub to_dir: bool,
     pub dir: String,
+    /// Which rendition to take for any HLS/DASH manifest in the list.
+    ///
+    /// One choice for the whole batch rather than a picker per URL: probing
+    /// fifty manifests to build fifty dropdowns would be slow and nobody
+    /// wants to answer the same question fifty times. The engine resolves
+    /// this against each manifest's own ladder when it starts.
+    pub stream_quality: BatchQuality,
+    /// "MP4" or "TS".
+    pub stream_container: String,
+}
+
+/// The rendition a batch asks for, as a preference rather than an exact
+/// rendition: each manifest has its own ladder and may not offer this height.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BatchQuality {
+    #[default]
+    Best,
+    P1080,
+    P720,
+    P480,
+    P360,
+}
+
+impl BatchQuality {
+    pub const ALL: [BatchQuality; 5] = [
+        BatchQuality::Best,
+        BatchQuality::P1080,
+        BatchQuality::P720,
+        BatchQuality::P480,
+        BatchQuality::P360,
+    ];
+
+    pub fn height(self) -> Option<u32> {
+        match self {
+            BatchQuality::Best => None,
+            BatchQuality::P1080 => Some(1080),
+            BatchQuality::P720 => Some(720),
+            BatchQuality::P480 => Some(480),
+            BatchQuality::P360 => Some(360),
+        }
+    }
+}
+
+impl std::fmt::Display for BatchQuality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            BatchQuality::Best => crate::i18n::tr("Best quality"),
+            BatchQuality::P1080 => "1080p".into(),
+            BatchQuality::P720 => "720p".into(),
+            BatchQuality::P480 => "480p".into(),
+            BatchQuality::P360 => "360p".into(),
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -646,6 +720,13 @@ pub enum Message {
     OptTabSet(OptTab),
     /// Extensions page: open a browser's add-on store in the default browser.
     OptExtStore(&'static str),
+    // Add URL: stream inspection
+    /// The address looks like a manifest; go and read what it offers.
+    AddrProbeStream,
+    AddrStreamProbed(Box<Result<crate::engine::StreamProbe, String>>),
+    AddrQuality(crate::engine::StreamQuality),
+    AddrContainer(String),
+    AddrRecordMinutes(String),
     OptOk,
     OptDraft(OptField),
     // update dialog
@@ -688,6 +769,8 @@ pub enum Message {
     BatchCategory(String),
     BatchDir(String),
     BatchOk,
+    BatchStreamQuality(BatchQuality),
+    BatchStreamContainer(String),
     // generic dialog buttons
     ConfirmYes,
     ConfirmRemoveFile(bool),
@@ -708,6 +791,7 @@ pub enum OptField {
     CheckUpdates(bool),
     BetaChannel(bool),
     StartInTray(bool),
+    CloseToTray(bool),
     /// Only where the Dock/taskbar checkbox exists (macOS, Windows, Linux).
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     HideTaskbar(bool),
@@ -1234,6 +1318,21 @@ impl App {
                 if warn {
                     h += 40.0;
                 }
+                // The stream panel is a BLOCK, not a line: a "Stream" row,
+                // the quality and container pickers, and for a live stream
+                // the record-minutes row. None of it was accounted for, so a
+                // probed manifest pushed its own pickers past the bottom of
+                // the window — the quality list the user is being asked to
+                // choose from was exactly the part that fell off.
+                h += match &self.add_url.stream {
+                    _ if self.add_url.stream_probing => 28.0,
+                    // A refusal offers nothing to choose, but the sentence
+                    // explaining it wraps to two or three lines.
+                    Some(p) if p.drm.is_some() => 64.0,
+                    Some(p) if p.live => 108.0,
+                    Some(_) => 68.0,
+                    None => 0.0,
+                };
                 (760.0, h)
             }
             // New-download layout is short; Properties adds status/size/
@@ -1552,6 +1651,16 @@ impl App {
         }
         let user_agent = self.cfg.settings.user_agent.clone();
         let adaptive = self.cfg.settings.adaptive_conns;
+        // Read here with the others: the item is borrowed mutably below.
+        let remote_time = self.cfg.settings.server_file_date;
+        // Read before the item is borrowed mutably below; a stream uses the
+        // same connection count a file download would.
+        let stream_conns = self
+            .item(id)
+            .map(|d| self.conns_for(&d.url))
+            .unwrap_or_default();
+        // Same source the ranged path uses, read before the mutable borrow.
+        let stream_limit = self.item(id).and_then(|d| self.effective_limit(d));
         // Re-downloading over a file a scan flagged: the old verdict and its
         // log describe bytes that are being replaced.
         crate::scan::skip(id);
@@ -1571,6 +1680,41 @@ impl App {
         d.conns.clear();
         let part = d.part_file().to_string_lossy().into_owned();
         d.part_path = Some(part.clone());
+        if let Some(si) = d.stream.clone() {
+            // Streams keep their own per-track checkpoints beside this
+            // staging path; the span bookkeeping below describes byte ranges
+            // of ONE file and would wrongly wipe `downloaded` here. What is
+            // already on disk is reported by the engine's first Progress.
+            let ss = engine::StreamSpec {
+                id,
+                manifest: d.url.clone(),
+                protocol: si.protocol,
+                variant_url: si.variant_url,
+                height: si.height,
+                bandwidth: si.bandwidth,
+                container: si.container,
+                cookies: d.cookies.clone(),
+                referer: si.referer,
+                // The browser's UA when the extension sent one: the origin
+                // handed the manifest to THAT client, not to Hydra.
+                user_agent: si.user_agent.unwrap_or(user_agent),
+                temp_path: part,
+                final_path: d.full_path().to_string_lossy().into_owned(),
+                // The same connection count a file download would use.
+                conns: stream_conns,
+                max_seconds: si.max_seconds,
+                limit: stream_limit,
+            };
+            engine::send(Cmd::StartStream(Box::new(ss)));
+            self.save_state();
+            return if open_progress {
+                let seed = self.item(id).and_then(|d| d.speed_limit);
+                self.prog.entry(id).or_insert_with(|| prog_state_seed(seed));
+                self.open_window(WinKind::Progress(id))
+            } else {
+                Task::none()
+            };
+        }
         // A resume is only a resume while the staging file still matches the
         // spans we recorded for it. Persisted spans are sanitized first —
         // `mark_done` must never be handed overlapping or inverted ranges
@@ -1607,6 +1751,7 @@ impl App {
             cookies: d.cookies.clone(),
             limit: None,
             adaptive,
+            remote_time,
         };
         let url = d.url.clone();
         let limit = self.effective_limit(self.item(id).unwrap());
@@ -1783,10 +1928,12 @@ impl App {
             retries: 0,
             disp_progress: 0.0,
             eta_secs: None,
+            recorded_secs: None,
             conns: vec![],
             status_line: String::new(),
             shutdown_after: false,
             shutdown_action: PowerAction::default(),
+            stream: None,
         });
         self.save_state();
         id
@@ -2099,7 +2246,14 @@ impl App {
     fn adopt_probed(&mut self, id: DlId, name: Option<String>, size: Option<u64>) -> Task<Message> {
         let mut adopted = false;
         if let Some(d) = self.item_mut(id) {
-            if d.size.is_none() {
+            // A probe answers once, so its size is adopted once — but a
+            // stream has no probe. Its size is a running projection from the
+            // segments that have landed, and it gets better as they do, so
+            // for those the newer number always wins. Without this the bar
+            // is drawn against the manifest's first bitrate guess for the
+            // whole transfer and then jumps when the real size arrives.
+            let refine = d.stream.is_some();
+            if d.size.is_none() || (refine && size.is_some()) {
                 d.size = size;
             }
             // Only adopt a server name if the user hasn't renamed.
@@ -2178,6 +2332,7 @@ impl App {
                 id,
                 done,
                 rate,
+                recorded,
                 eta,
                 conns,
                 held,
@@ -2200,6 +2355,9 @@ impl App {
                     d.eta_secs = eta;
                     d.conns = conns;
                     d.held = held;
+                    // Only a live recording reports one; carrying the last
+                    // value forward would freeze the clock on a paused row.
+                    d.recorded_secs = recorded;
                     if d.state == DlState::Connecting {
                         d.state = DlState::Receiving;
                     }
@@ -2468,11 +2626,13 @@ impl App {
                         self.save_state();
                         self.save_config();
                         self.flush_saves();
-                        if crate::tray::is_active() {
+                        if self.cfg.settings.close_to_tray && crate::tray::is_active() {
                             // Hydra lives on in the system tray; Exit is in
                             // the tray menu (and the app menu on macOS).
                             // Without a tray there would be no way back to
-                            // the app, so closing quits instead.
+                            // the app, so closing quits instead — and so it
+                            // does when Options > General turns close-to-tray
+                            // off, which asks for a plain quit.
                             self.main_id = None;
                             Task::none()
                         } else {
@@ -3084,7 +3244,76 @@ impl App {
             Message::AddrChanged(s) => {
                 self.add_url.address = s;
                 self.add_url.error = None;
+                // An edited address no longer describes the manifest we
+                // read; showing its quality list would be a lie.
+                let addr = self.add_url.address.trim().to_string();
+                if self.add_url.stream_of != addr {
+                    self.add_url.stream = None;
+                    self.add_url.stream_error = None;
+                    self.add_url.quality = None;
+                }
+                let resize = self.resize_open(WinKind::AddUrl);
+                // Automatic: a manifest address inspects itself, so the user
+                // is choosing a quality rather than discovering afterwards
+                // that they could have.
+                if manifest_address(&addr)
+                    && !self.add_url.stream_probing
+                    && self.add_url.stream_of != addr
+                {
+                    return Task::batch([resize, self.update(Message::AddrProbeStream)]);
+                }
+                resize
+            }
+            Message::AddrProbeStream => {
+                let url = self.add_url.address.trim().to_string();
+                if url.is_empty() || self.add_url.stream_probing {
+                    return Task::none();
+                }
+                self.add_url.stream_probing = true;
+                self.add_url.stream_error = None;
+                self.add_url.stream_of = url.clone();
+                let ua = self.cfg.settings.user_agent.clone();
+                let cookies = self.add_url.capture_cookies.clone();
+                Task::perform(crate::engine::probe_stream(url, ua, cookies), |r| {
+                    Message::AddrStreamProbed(Box::new(r))
+                })
+            }
+            Message::AddrStreamProbed(result) => {
+                self.add_url.stream_probing = false;
+                match *result {
+                    Ok(probe) => {
+                        // Default to the best rendition, which is what
+                        // someone who does not touch the picker means.
+                        self.add_url.quality = probe.qualities.first().cloned();
+                        // MPEG-TS can be saved as-is; fragmented MP4 cannot,
+                        // so do not offer a container that needs ffmpeg the
+                        // user may not have.
+                        self.add_url.container = "MP4".into();
+                        self.add_url.stream = Some(probe);
+                    }
+                    Err(e) => {
+                        // Not a manifest after all: fall back silently to an
+                        // ordinary download rather than blocking the dialog.
+                        self.add_url.stream = None;
+                        self.add_url.stream_error = Some(e);
+                    }
+                }
                 self.resize_open(WinKind::AddUrl)
+            }
+            Message::AddrQuality(q) => {
+                self.add_url.quality = Some(q);
+                Task::none()
+            }
+            Message::AddrContainer(c) => {
+                self.add_url.container = c;
+                Task::none()
+            }
+            Message::AddrRecordMinutes(v) => {
+                // Digits only: this becomes a duration, and a half-typed
+                // number should not silently mean something else.
+                self.add_url.record_minutes =
+                    v.chars().filter(|c| c.is_ascii_digit()).take(5).collect();
+                Task::none()
             }
             Message::AddrAuthToggled(b) => {
                 self.add_url.use_auth = b;
@@ -3122,9 +3351,47 @@ impl App {
                     .take()
                     .filter(|s| !s.is_empty());
                 let cap_name = self.add_url.capture_name.take().filter(|s| !s.is_empty());
-                let name = cap_name
+                // A manifest that was inspected becomes a STREAM item: the
+                // chosen rendition and container decide the filename, which
+                // the URL path cannot.
+                let stream = self
+                    .add_url
+                    .stream
                     .clone()
-                    .unwrap_or_else(|| engine::file_name_from_url(&url));
+                    .filter(|p| p.drm.is_none())
+                    .map(|p| {
+                        let q = self.add_url.quality.clone();
+                        let container = if self.add_url.container.eq_ignore_ascii_case("ts") {
+                            "TS"
+                        } else {
+                            "MP4"
+                        };
+                        let minutes: u64 = self.add_url.record_minutes.parse().unwrap_or(0);
+                        crate::model::StreamInfo {
+                            protocol: p.protocol.clone(),
+                            variant_url: q.as_ref().and_then(|q| q.url.clone()),
+                            height: q.as_ref().and_then(|q| q.height),
+                            bandwidth: q.as_ref().and_then(|q| q.bandwidth),
+                            container: container.into(),
+                            referer: None,
+                            user_agent: None,
+                            live: p.live,
+                            max_seconds: (p.live && minutes > 0).then(|| minutes * 60),
+                        }
+                    });
+                let name = match &stream {
+                    Some(si) => {
+                        let ext = if si.container.eq_ignore_ascii_case("ts") {
+                            "ts"
+                        } else {
+                            "mp4"
+                        };
+                        format!("{}.{ext}", stream_base_name(&url))
+                    }
+                    None => cap_name
+                        .clone()
+                        .unwrap_or_else(|| engine::file_name_from_url(&url)),
+                };
                 let cat = crate::model::categorize(&name, &self.cfg.categories);
                 let dir = self
                     .cat_dir(cat.as_deref())
@@ -3148,6 +3415,21 @@ impl App {
                 }
                 let id = self.add_item(url, auth, None);
                 self.apply_capture_extras(id, cap_cookies, cap_name);
+                if let Some(si) = stream {
+                    let cat = crate::model::categorize(&name, &self.cfg.categories);
+                    let dir = self
+                        .cat_dir(cat.as_deref())
+                        .or_else(|| self.cat_dir(None))
+                        .unwrap_or_default();
+                    if let Some(d) = self.item_mut(id) {
+                        d.file_name = name.clone();
+                        d.category = cat;
+                        d.save_dir = dir;
+                        // Resumable by whole segments, not byte ranges.
+                        d.resume = Some(true);
+                        d.stream = Some(si);
+                    }
+                }
                 self.add_url = AddUrlState::default();
                 let close = self.close_window(WinKind::AddUrl);
                 if self.cfg.settings.show_file_info_dialog {
@@ -3198,6 +3480,60 @@ impl App {
                         ..AddUrlState::default()
                     };
                     self.update(Message::AddUrlOk)
+                }
+                crate::extbus::ExtEvent::Stream(s) => {
+                    // Not the capture dialog: a manifest cannot be probed
+                    // for a size or a name, so the entry is built from what
+                    // the extension already read out of it and started.
+                    crate::log::info(&format!("ext: stream capture for {}", s.url));
+                    self.capture_raise = true;
+                    let container = s.container.clone().unwrap_or_else(|| "MP4".into());
+                    let ext = if container.eq_ignore_ascii_case("ts") {
+                        "ts"
+                    } else {
+                        "mp4"
+                    };
+                    let base = s
+                        .filename
+                        .as_deref()
+                        .map(sanitize_file_name)
+                        .filter(|b| !b.is_empty())
+                        .unwrap_or_else(|| "stream".to_string());
+                    let file_name = format!("{base}.{ext}");
+                    // The URL says `.m3u8`; the FILE is a video, so the
+                    // category has to be decided from the name we chose.
+                    let category = categorize(&file_name, &self.cfg.categories);
+                    let save_dir = self
+                        .cat_dir(category.as_deref())
+                        .or_else(|| self.cat_dir(None))
+                        .unwrap_or_else(|| ".".into());
+                    let id = self.add_item(s.url.clone(), None, None);
+                    if let Some(d) = self.item_mut(id) {
+                        d.file_name = file_name;
+                        d.category = category;
+                        d.save_dir = save_dir;
+                        d.cookies = s.cookies.clone();
+                        d.size = s.size;
+                        // Resumable, but by whole segments rather than byte
+                        // ranges: a paused stream carries on from the last
+                        // segment that landed.
+                        d.resume = Some(true);
+                        d.stream = Some(crate::model::StreamInfo {
+                            protocol: s.protocol.clone().unwrap_or_else(|| "hls".into()),
+                            variant_url: s
+                                .variant_url
+                                .clone()
+                                .or_else(|| s.variant.as_ref().and_then(|v| v.url.clone())),
+                            height: s.variant.as_ref().and_then(|v| v.height),
+                            bandwidth: s.variant.as_ref().and_then(|v| v.bandwidth),
+                            container,
+                            referer: s.referer.clone().or_else(|| s.tab_url.clone()),
+                            user_agent: s.user_agent.clone(),
+                            live: s.live,
+                            max_seconds: None,
+                        });
+                    }
+                    self.start_download(id, true)
                 }
                 crate::extbus::ExtEvent::Links(urls) => {
                     self.capture_raise = true;
@@ -4054,6 +4390,14 @@ impl App {
                 self.batch.dir = d;
                 Task::none()
             }
+            Message::BatchStreamQuality(q) => {
+                self.batch.stream_quality = q;
+                Task::none()
+            }
+            Message::BatchStreamContainer(c) => {
+                self.batch.stream_container = c;
+                Task::none()
+            }
             Message::BatchOk => {
                 self.parse_batch();
                 let checked: Vec<String> = self
@@ -4070,12 +4414,57 @@ impl App {
                 let cat_override = self.batch.to_category.then(|| self.batch.category.clone());
                 let dir_override = self.batch.to_dir.then(|| self.batch.dir.clone());
                 let queue = Some("Main download queue".to_string());
+                let want_height = self.batch.stream_quality.height();
+                let container = if self.batch.stream_container.eq_ignore_ascii_case("ts") {
+                    "TS"
+                } else {
+                    "MP4"
+                };
                 for url in checked {
+                    // A manifest in the list is a STREAM, not a file: the
+                    // batch's one quality choice is resolved against each
+                    // manifest's own ladder when it starts.
+                    let stream = manifest_address(&url).then(|| crate::model::StreamInfo {
+                        protocol: if url
+                            .split(['?', '#'])
+                            .next()
+                            .unwrap_or(&url)
+                            .to_ascii_lowercase()
+                            .ends_with(".mpd")
+                        {
+                            "dash".into()
+                        } else {
+                            "hls".into()
+                        },
+                        variant_url: None,
+                        height: want_height,
+                        bandwidth: None,
+                        container: container.into(),
+                        referer: None,
+                        user_agent: None,
+                        live: false,
+                        max_seconds: None,
+                    });
                     // A name the probe resolved (a redirector's real target, or
                     // a `Content-Disposition`) beats the one the pasted URL
                     // implies, and it decides the category with it.
                     let probed = self.batch.names.get(&url).cloned();
+                    let stream_name = stream.as_ref().map(|si| {
+                        let ext = if si.container.eq_ignore_ascii_case("ts") {
+                            "ts"
+                        } else {
+                            "mp4"
+                        };
+                        format!("{}.{ext}", stream_base_name(&url))
+                    });
                     let id = self.add_item(url, None, queue.clone());
+                    if let Some(si) = stream {
+                        if let Some(d) = self.item_mut(id) {
+                            d.resume = Some(true);
+                            d.stream = Some(si);
+                        }
+                    }
+                    let probed = stream_name.or(probed);
                     if let Some(name) = probed.filter(|n| !n.is_empty()) {
                         let cat = categorize(&name, &self.cfg.categories);
                         let dir = self.cat_dir(cat.as_deref());
@@ -4536,6 +4925,10 @@ impl App {
                 let _ = open::that_detached("https://github.com/ja7ad/hydra");
                 Task::none()
             }
+            MenuAction::ReportIssue => {
+                let _ = open::that_detached("https://github.com/ja7ad/hydra/issues");
+                Task::none()
+            }
             MenuAction::About => self.open_window(WinKind::About),
             MenuAction::Permissions => self.update(Message::OpenPermissions),
             MenuAction::MoveToQueue(q) => {
@@ -4572,6 +4965,22 @@ impl App {
                 Task::none()
             }
             MenuAction::Shortcuts => self.open_window(WinKind::Shortcuts),
+            MenuAction::Logs => {
+                // The log is the first thing to ask for when a stream failed
+                // in a way the row could not explain, so it is one click
+                // from the Help menu rather than a path to be looked up.
+                let path = crate::log::path();
+                if !path.exists() {
+                    // Nothing has been written yet; an empty file beats
+                    // "nothing happened when I clicked it".
+                    if let Some(dir) = path.parent() {
+                        let _ = std::fs::create_dir_all(dir);
+                    }
+                    let _ = std::fs::write(&path, "");
+                }
+                let _ = open::that_detached(&path);
+                Task::none()
+            }
             MenuAction::PowerSaveToggle => {
                 self.cfg.settings.power_save = !self.cfg.settings.power_save;
                 engine::set_power_save(self.cfg.settings.power_save);
@@ -4663,6 +5072,7 @@ impl App {
             OptField::CheckUpdates(b) => s.check_updates_on_startup = b,
             OptField::BetaChannel(b) => s.beta_channel = b,
             OptField::StartInTray(b) => s.start_in_tray = b,
+            OptField::CloseToTray(b) => s.close_to_tray = b,
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             OptField::HideTaskbar(b) => s.hide_from_taskbar = b,
             OptField::PowerSave(b) => {
@@ -5092,6 +5502,77 @@ pub fn sum_spans(spans: &[(u64, u64)]) -> u64 {
 /// told "these bytes arrived, never fetch them again", so spans read back
 /// from disk are not trusted as-is: inverted spans drop, spans past the
 /// object end clamp, and overlapping or adjacent spans merge.
+/// A page title made safe to be a filename on any of the three platforms.
+///
+/// The extension already trims what it can see, but the name arrives from a
+/// web page and must never be trusted to be a leaf name: a `/` or a `..` in
+/// it would place the finished file outside the category directory.
+/// Whether an address is worth reading as a manifest.
+///
+/// The body decides in the end, but fetching every address the user types
+/// would be both slow and rude; the extension is the cheap filter.
+/// A filename for a stream, from its manifest URL.
+///
+/// Manifests are called `index.m3u8` or `master.mpd` almost universally, so
+/// the directory above is what actually names the asset.
+pub fn stream_base_name(url: &str) -> String {
+    let bare = url.split(['?', '#']).next().unwrap_or(url);
+    let path = match bare.find("://") {
+        Some(i) => {
+            let rest = &bare[i + 3..];
+            rest.find('/').map(|j| &rest[j..]).unwrap_or("")
+        }
+        None => bare,
+    };
+    let mut parts = path.rsplit('/').filter(|p| !p.is_empty());
+    let file = parts.next().unwrap_or("stream");
+    let stem = file.rsplit_once('.').map(|(s, _)| s).unwrap_or(file);
+    const GENERIC: &[&str] = &[
+        "index", "master", "manifest", "playlist", "mono", "stream", "media", "video", "main",
+    ];
+    let picked = if GENERIC.contains(&stem.to_ascii_lowercase().as_str()) {
+        parts.next().unwrap_or(stem)
+    } else {
+        stem
+    };
+    let cleaned = sanitize_file_name(picked);
+    if cleaned.is_empty() {
+        "stream".into()
+    } else {
+        cleaned
+    }
+}
+
+pub fn manifest_address(url: &str) -> bool {
+    let lower = url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(url)
+        .to_ascii_lowercase();
+    (lower.starts_with("http://") || lower.starts_with("https://"))
+        && (lower.ends_with(".m3u8") || lower.ends_with(".m3u") || lower.ends_with(".mpd"))
+}
+
+pub fn sanitize_file_name(raw: &str) -> String {
+    let cleaned: String = raw
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => ' ',
+            c if (c as u32) < 0x20 => ' ',
+            c => c,
+        })
+        .collect();
+    let collapsed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    // Leading dots hide the file; a name that is only dots is not a name.
+    let trimmed = collapsed.trim_matches(['.', ' ']).to_string();
+    trimmed
+        .chars()
+        .take(120)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
 pub fn sanitize_spans(spans: &[(u64, u64)], size: Option<u64>) -> Vec<(u64, u64)> {
     let mut v: Vec<(u64, u64)> = spans
         .iter()
@@ -5327,10 +5808,12 @@ mod tests {
             retries: 3,
             disp_progress: 0.0,
             eta_secs: None,
+            recorded_secs: None,
             conns: vec![],
             status_line: String::new(),
             shutdown_after: false,
             shutdown_action: PowerAction::default(),
+            stream: None,
         }
     }
 
@@ -5485,6 +5968,96 @@ mod tests {
             Some("ftp-user")
         );
         assert!(find_login("https://unrelated.com/x.zip", &logins).is_none());
+    }
+
+    #[test]
+    fn progress_never_draws_past_a_full_bar() {
+        // A stream's size is a projection, so it can lag the bytes already
+        // on disk. The fraction must still be a fraction.
+        let mut d = item(1, "/tmp", "x.mp4", None, DlState::Receiving);
+        d.size = Some(1_000);
+        d.downloaded = 1_200;
+        assert_eq!(d.progress(), 1.0);
+        d.downloaded = 250;
+        assert_eq!(d.progress(), 0.25);
+        // No size at all is no progress, not a divide.
+        d.size = None;
+        assert_eq!(d.progress(), 0.0);
+        d.size = Some(0);
+        assert_eq!(d.progress(), 0.0);
+    }
+
+    #[test]
+    fn a_timed_recording_has_a_real_progress_bar() {
+        use crate::model::live_progress;
+        // Asked for 300 s and 150 s are captured: genuinely half done.
+        assert!((live_progress(Some(300), Some(150.0)) - 0.5).abs() < 1e-6);
+        // Overrunning the limit cannot draw more than a full bar.
+        assert!((live_progress(Some(300), Some(400.0)) - 1.0).abs() < 1e-6);
+        // No limit set, or nothing recorded yet: there is no fraction to
+        // show, and bytes must not stand in for one — a live stream has no
+        // size for them to be a fraction OF.
+        assert_eq!(live_progress(None, Some(150.0)), 0.0);
+        assert_eq!(live_progress(Some(300), None), 0.0);
+        assert_eq!(live_progress(Some(0), Some(10.0)), 0.0);
+    }
+
+    #[test]
+    fn a_stream_is_named_after_its_asset_not_its_manifest() {
+        // Every stream on the internet is called index.m3u8; the directory
+        // above it is what actually distinguishes them.
+        assert_eq!(
+            stream_base_name("https://hls.ex/live_cdn/abc/emcQJ0pGpremocy/index.m3u8"),
+            "emcQJ0pGpremocy"
+        );
+        assert_eq!(stream_base_name("https://cdn.ex/a/master.m3u8"), "a");
+        assert_eq!(stream_base_name("https://cdn.ex/x/mono.m3u8"), "x");
+        // A manifest with a real name keeps it.
+        assert_eq!(
+            stream_base_name("https://cdn.ex/a/bbb_30fps.mpd"),
+            "bbb_30fps"
+        );
+        // Query strings are not part of a name.
+        assert_eq!(stream_base_name("https://cdn.ex/a/show.m3u8?t=1"), "show");
+        // Nothing usable still yields a filename, and never a path.
+        assert_eq!(stream_base_name("https://cdn.ex/"), "stream");
+        assert!(!stream_base_name("https://e/a/../../etc/passwd.m3u8").contains('/'));
+    }
+
+    #[test]
+    fn only_manifest_addresses_are_inspected() {
+        assert!(manifest_address("https://cdn.ex/a/index.m3u8"));
+        assert!(manifest_address("http://cdn.ex/a/x.mpd"));
+        assert!(manifest_address("https://cdn.ex/a/x.m3u8?token=abc"));
+        // Case does not matter.
+        assert!(manifest_address("https://cdn.ex/A/INDEX.M3U8"));
+        // An ordinary file is not probed, so typing one costs nothing.
+        assert!(!manifest_address("https://cdn.ex/a/video.mp4"));
+        assert!(!manifest_address("https://cdn.ex/a/"));
+        // Nor is anything that is not even an http address yet.
+        assert!(!manifest_address("cdn.ex/a/index.m3u8"));
+        assert!(!manifest_address("ftp://cdn.ex/a/index.m3u8"));
+        assert!(!manifest_address(""));
+    }
+
+    #[test]
+    fn a_page_title_cannot_escape_the_save_directory() {
+        // The name arrives from a web page: separators and traversal must
+        // not survive into a path.
+        assert_eq!(sanitize_file_name("../../etc/passwd"), "etc passwd");
+        assert_eq!(
+            sanitize_file_name("a/b\\c:d*e?f\"g<h>i|j"),
+            "a b c d e f g h i j"
+        );
+        assert_eq!(sanitize_file_name("  ..  "), "");
+        assert_eq!(sanitize_file_name(".hidden"), "hidden");
+        assert_eq!(
+            sanitize_file_name("Free HLS Player - Online M3U8 Player & Stream Tester | Castr"),
+            "Free HLS Player - Online M3U8 Player & Stream Tester Castr"
+        );
+        // Control characters are not names either.
+        assert_eq!(sanitize_file_name("a\u{0}b\nc"), "a b c");
+        assert!(sanitize_file_name(&"x".repeat(400)).chars().count() <= 120);
     }
 
     #[test]

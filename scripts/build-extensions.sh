@@ -23,6 +23,8 @@
 #     --crx-key PEM  the RSA private key to sign the .crx with. It MUST be the
 #                    key behind the `key` field pinned in the Chromium
 #                    manifest, or the extension id changes — see below.
+#     --store        also pack a key-less Chromium zip for uploading to Chrome
+#                    Web Store / Edge Add-ons — see below for why.
 #     --print-help   print the install instructions and exit, without
 #                    building. --prefix DIR spells the paths as they will be
 #                    on the target machine.
@@ -34,12 +36,13 @@
 # Output layout — flat on purpose, so a packaging script can drop the whole
 # directory into the application root as-is:
 #
-#     <out>/hydra-chrome-<version>.zip    packed, Chromium family
-#     <out>/hydra-chrome-<version>.crx    signed CRX3, Chromium family
-#     <out>/hydra-firefox-<version>.xpi   packed, Firefox
-#     <out>/chrome/                       the same build, unpacked
-#     <out>/firefox/                      the same build, unpacked
-#     <out>/INSTALL.txt                   install help for these UNSIGNED builds
+#     <out>/hydra-chrome-<version>.zip           packed, Chromium family
+#     <out>/hydra-chrome-<version>.crx           signed CRX3, Chromium family
+#     <out>/hydra-chrome-<version>-webstore.zip  packed, key-less (--store only)
+#     <out>/hydra-firefox-<version>.xpi          packed, Firefox
+#     <out>/chrome/                              the same build, unpacked
+#     <out>/firefox/                             the same build, unpacked
+#     <out>/INSTALL.txt                          install help for these UNSIGNED builds
 #
 # Both packed files are plain zip archives with manifest.json at the ROOT —
 # a wrapper directory makes Firefox reject the .xpi outright and makes the
@@ -56,9 +59,14 @@
 #
 # The pinned `key` in the Chromium manifest is what fixes the extension id
 # (jpnonmbbkjdpeebdhkjoliklfhkdcomj) that the native messaging host
-# allow-lists, so it is kept in all three (strip it only for a Web Store
-# upload). Chromium requires a .crx to be signed by exactly that key: signing
-# with any other one is still packed, but the manifest key is rewritten to
+# allow-lists, so it is kept in the .zip, the .crx and the unpacked copy.
+# Chrome Web Store and Edge Add-ons both assign their own id on publish, and
+# Edge's manifest validator rejects a `key` field outright ("The manifest
+# shouldn't contain the key field"), so --store packs a separate
+# *-webstore.zip with `key` stripped — that is the one to upload to either
+# store; the other artifacts keep the pin for native messaging. Chromium
+# requires a .crx to be signed by exactly that key: signing with any other
+# one is still packed, but the manifest key is rewritten to
 # match the signer (otherwise the browser rejects the file outright) and the
 # id changes with it. The WebSocket transport does not care — it accepts any
 # extension origin — but the native messaging fallback, which is also the
@@ -77,6 +85,7 @@ PREFIX=""
 SIGN=0
 CRX=auto
 CRX_KEY="${HYDRA_CRX_KEY:-}"
+STORE=0
 PRINT_HELP=0
 QUIET=0
 
@@ -89,6 +98,7 @@ while [ $# -gt 0 ]; do
     --crx) CRX=1 ;;
     --no-crx) CRX=0 ;;
     --crx-key) CRX_KEY="${2:?--crx-key needs a .pem file}"; shift ;;
+    --store) STORE=1 ;;
     --print-help) PRINT_HELP=1 ;;
     --quiet) QUIET=1 ;;
     -h | --help)
@@ -170,7 +180,7 @@ verify_archive() { # <archive>
 import sys, zipfile
 print('\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))" "$archive")
   for required in manifest.json background.js content.js popup.html popup.js \
-                  popup.css welcome.html icons/icon48.png; do
+                  popup.css welcome.html welcome.js icons/icon48.png; do
     case $'\n'"$entries"$'\n' in
       *$'\n'"$required"$'\n'*) ;;
       *)
@@ -387,6 +397,25 @@ if [ "$TARGETS" = all ] || [ "$TARGETS" = chrome ]; then
   make_zip "$OUT/$CHROME_ZIP" "$OUT/chrome"
   verify_archive "$OUT/$CHROME_ZIP"
   echo "built: ${OUT#"$REPO/"}/$CHROME_ZIP  (unpacked: ${OUT#"$REPO/"}/chrome)"
+
+  if [ "$STORE" = 1 ]; then
+    # Chrome Web Store and Edge Add-ons both assign their own extension id on
+    # publish; Edge's validator hard-rejects a manifest that still carries
+    # the pinned `key`, so this is a separate copy with it removed.
+    STORE_STAGE="$OUT/.store-stage"
+    copy_unpacked "$OUT/chrome" "$STORE_STAGE"
+    py -c "
+import json, sys
+path = sys.argv[1]
+m = json.load(open(path))
+m.pop('key', None)
+json.dump(m, open(path, 'w'), indent=2)" "$STORE_STAGE/manifest.json"
+    CHROME_WEBSTORE_ZIP="hydra-chrome-$VERSION-webstore.zip"
+    make_zip "$OUT/$CHROME_WEBSTORE_ZIP" "$STORE_STAGE"
+    verify_archive "$OUT/$CHROME_WEBSTORE_ZIP"
+    rm -rf "$STORE_STAGE"
+    echo "built: ${OUT#"$REPO/"}/$CHROME_WEBSTORE_ZIP  (upload this one to Chrome Web Store / Edge Add-ons)"
+  fi
 
   # A .crx needs a signing key. With --crx one is generated when missing;
   # otherwise it is packed only if a key is already there, so a machine

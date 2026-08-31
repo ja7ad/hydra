@@ -266,6 +266,182 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # ---------------------------------------------------------------- AppImage
+  #
+  # A separate job from `build`, on the OLDEST supported Ubuntu, and that is
+  # the whole point: an AppImage's compatibility floor is the glibc it was
+  # linked against, and the release matrix runs on ubuntu-latest, whose glibc
+  # is newer than Debian stable's. Building here gives one file that runs on
+  # everything from Ubuntu 22.04 and Debian 12 upwards.
+  #
+  # It is also the only Linux artifact Hydra can update itself from: the deb
+  # and the rpm install into /usr, which only dpkg or rpm may rewrite, so the
+  # in-app updater refuses them and offers the package instead. An AppImage is
+  # a single file the user owns, so the update replaces that file — see
+  # UpdateMethod::AppImage in crates/hydra-updater.
+  build-appimage:
+    name: AppImage ${{ matrix.arch }}
+    needs: [verify-version]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    env:
+      VERSION: ${{ needs.verify-version.outputs.version }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # The same build dependencies as the linux legs of `build`, plus the
+      # AppImage toolchain: zsync for the delta-update information the image
+      # advertises, desktop-file-utils for the desktop-entry validation
+      # appimagetool runs, squashfs-tools for the image itself. No FUSE:
+      # appimagetool is an AppImage and the runners have none, so it is run
+      # with APPIMAGE_EXTRACT_AND_RUN instead.
+      - name: Install build and packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libx11-dev libxrandr-dev \
+            libxcb1-dev libxkbcommon-dev imagemagick \
+            zsync desktop-file-utils squashfs-tools
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: appimage-${{ matrix.target }}
+
+      - name: Build CLI, GUI, native-messaging host, and update finisher
+        run: cargo build --release --locked --target ${{ matrix.target }} -p hya-cli -p hya-gui -p hya-host -p hya-updater
+
+      # The same script a developer runs as `make appimage`. CI has no private
+      # packaging steps: an "official" artifact produced by YAML nobody can
+      # run locally is one nobody can reproduce.
+      - name: Build the AppImage
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+          # appimagetool ships as an AppImage and the runners have no FUSE.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          set -euo pipefail
+          scripts/package-appimage.sh --no-build
+          mkdir -p dist
+          cp target/dist/*.AppImage dist/
+          cp target/dist/*.AppImage.zsync dist/ 2>/dev/null || \
+            echo "note: no .zsync produced; the image carries no update information"
+          ls -lh dist/
+
+      # A smoke test, because an AppImage that cannot start is indistinguishable
+      # from one that was never built. Headless, so only the paths that do not
+      # need a display are exercised: the runtime mounts the image, AppRun
+      # dispatches, and the CLI inside it runs.
+      - name: Smoke-test the image
+        run: |
+          set -euo pipefail
+          IMG=$(readlink -f "$(ls -1 dist/*.AppImage | head -1)")
+          chmod +x "$IMG"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          "$IMG" --hydra-version
+          "$IMG" --hydra-exec hydra --version
+          "$IMG" --hydra-exec hydra-updater --help >/dev/null
+          # Desktop integration into a throwaway HOME: the menu entry and the
+          # native-messaging wrapper are what make the browser extensions
+          # reach an app that lives in a mount with a different path on every
+          # run, so "the image starts" is not enough to call this working.
+          HOME=$(mktemp -d)
+          export HOME
+          "$IMG" --hydra-install
+          test -x "$HOME/.local/share/hydra/hydra-host"
+          test -f "$HOME/.local/share/applications/hydra.desktop"
+          # The wrapper the browsers are pointed at must name the image file,
+          # not a path inside the mount it is running from.
+          grep -q "$(basename "$IMG")" "$HOME/.local/share/hydra/hydra-host"
+          "$IMG" --hydra-uninstall
+          [ ! -e "$HOME/.local/share/applications/hydra.desktop" ]
+          echo "ok"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydra-appimage-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  # Proof that the one image really does run across the Ubuntu line, rather
+  # than an assumption about glibc symbol versioning.
+  #
+  # There is deliberately no second BUILD here. An AppImage's compatibility
+  # floor is the glibc it was linked against, so building the same image again
+  # on 24.04 or 26.04 would produce a file that runs on strictly FEWER systems
+  # than the 22.04 one — and, sharing its name, would race it into the release.
+  # Building once on the oldest supported release and proving the result
+  # forward is the only arrangement where "supports 22.04 through 26.10" is a
+  # tested claim.
+  #
+  # Containers, because GitHub hosts runner images for LTS releases only —
+  # 22.10 and 24.10 have no runner label and never will. The image is started
+  # with APPIMAGE_EXTRACT_AND_RUN because containers have no FUSE; that skips
+  # the runtime's mount, which is the one part of an AppImage that does not
+  # depend on the host's libraries, and exercises everything that does.
+  verify-appimage:
+    name: AppImage runs on Ubuntu ${{ matrix.release }}
+    needs: [build-appimage]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ["22.04", "22.10", "24.04", "24.10", "25.04", "26.04", "26.10"]
+    steps:
+      - name: Download the AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: hydra-appimage-x86_64
+          path: dist
+
+      - name: Run it on Ubuntu ${{ matrix.release }}
+        env:
+          RELEASE: ${{ matrix.release }}
+        run: |
+          set -euo pipefail
+          # Releases that Canonical has not published yet (and ones Docker Hub
+          # has retired) are reported, not failed: this matrix is meant to
+          # stay ahead of the Ubuntu calendar, and a tag that does not exist
+          # is a fact about the calendar rather than about the image.
+          if ! docker manifest inspect "ubuntu:$RELEASE" >/dev/null 2>&1; then
+            echo "::notice::ubuntu:$RELEASE is not on Docker Hub yet; nothing to verify against"
+            exit 0
+          fi
+          IMG=$(readlink -f "$(ls -1 dist/*.AppImage | head -1)")
+          chmod +x "$IMG"
+          docker run --rm -v "$IMG:/hydra.AppImage:ro" -e APPIMAGE_EXTRACT_AND_RUN=1 \
+            "ubuntu:$RELEASE" /bin/sh -euc '
+              ldd --version | head -1
+              cp /hydra.AppImage /tmp/hydra.AppImage
+              chmod +x /tmp/hydra.AppImage
+              # The CLI and the finisher link the same C library the GUI does;
+              # what a container cannot exercise is the display server, not
+              # the loader, so these two answer the portability question.
+              /tmp/hydra.AppImage --hydra-version
+              /tmp/hydra.AppImage --hydra-exec hydra --version
+              /tmp/hydra.AppImage --hydra-exec hydra-updater --help >/dev/null
+              mkdir -p /tmp/home
+              HOME=/tmp/home /tmp/hydra.AppImage --hydra-install
+              test -x /tmp/home/.local/share/hydra/hydra-host
+            '
+
   # ---------------------------------------------------------------- libhydra
   #
   # The embeddable C ABI is a SEPARATE deliverable from the CLI/GUI bundle, and
@@ -553,7 +729,16 @@ jobs:
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: [verify-version, build, build-ffi, build-ffi-android, build-ffi-apple]
+    needs:
+      [
+        verify-version,
+        build,
+        build-appimage,
+        verify-appimage,
+        build-ffi,
+        build-ffi-android,
+        build-ffi-apple,
+      ]
     if: github.ref_type == 'tag'
     permissions:
       contents: write
@@ -640,13 +825,16 @@ jobs:
             mkdir -p "$RPM_TOP/SOURCES" "$RPM_TOP/SRPMS" "$RPM_TOP/SPECS" "$RPM_TOP/BUILD"
             git archive --format=tar.gz --prefix="hydra-${VERSION}/" HEAD > "$RPM_TOP/SOURCES/hydra-${VERSION}.tar.gz"
 
-            # Build the Source RPM (SRPM) with dynamic version from release tag
-            rpmbuild -bs \
-              --define "_topdir $RPM_TOP" \
-              --define "_version ${VERSION}" \
-              packaging/rpm/hydra.spec
+            # Render the spec with the release version baked in. Copr imports
+            # the spec and the tarball into dist-git and then re-runs
+            # `rpmbuild -bs` in mock without our command-line defines, so the
+            # version has to be in the spec itself rather than in `--define`.
+            scripts/render-rpm-spec.sh "$VERSION" "$RPM_TOP/SPECS/hydra.spec"
 
-            SRPM=$(ls "$RPM_TOP"/SRPMS/hydra-*.src.rpm)
+            # Build the Source RPM (SRPM); the spec now carries the version itself
+            rpmbuild -bs --define "_topdir $RPM_TOP" "$RPM_TOP/SPECS/hydra.spec"
+
+            SRPM=$(ls "$RPM_TOP"/SRPMS/hydra-${VERSION}-*.src.rpm)
             echo "Built SRPM: $SRPM"
 
             # Submit SRPM to Copr build system

@@ -20,8 +20,8 @@
 ;   * Hydra Download Manager  - the GUI app + logo + shortcuts
 ;   * IPC host                - hydra-host.exe, native-messaging manifests,
 ;                               and the HKCU registry keys the browsers read
-;   * CLI (hydra.exe)         - with $INSTDIR appended to the user PATH so
-;                               all binaries resolve in cmd/PowerShell
+;   * CLI (hydra.exe + the   - with $INSTDIR appended to the user PATH so
+;     hya.exe short name)      all binaries resolve in cmd/PowerShell
 ;   * Browser extensions      - packed .zip/.xpi + unpacked chrome/ and
 ;                               firefox/, with INSTALL.txt instructions
 ;
@@ -215,9 +215,15 @@ Section "Browser IPC Host" SEC_HOST
   WriteRegStr HKCU "Software\Mozilla\NativeMessagingHosts\${HOST_NAME}"                    "" "$INSTDIR\${HOST_NAME}.firefox.json"
 SectionEnd
 
-Section "Command-Line Tool (hydra) + PATH" SEC_CLI
+Section "Command-Line Tool (hydra, hya) + PATH" SEC_CLI
   SetOutPath "$INSTDIR"
   File "${BUILD_DIR}\hydra.exe"
+  ; The short second name for the CLI: `hydra` is also THC-Hydra, the login
+  ; auditor, and three letters types better for a command run as often as a
+  ; download. A second copy rather than a link: this installer runs per-user
+  ; without elevation, and Windows grants symlinks only to an elevated shell
+  ; or with Developer Mode on. hya_updater re-copies it after a self update.
+  File /oname=hya.exe "${BUILD_DIR}\hydra.exe"
 
   ; Append $INSTDIR to the per-user PATH (HKCU\Environment) so `hydra`,
   ; `hydra-gui`, and `hydra-host` resolve in cmd, PowerShell, and any
@@ -375,6 +381,7 @@ Section "Uninstall"
 
   Delete "$INSTDIR\hydra-gui.exe"
   Delete "$INSTDIR\hydra.exe"
+  Delete "$INSTDIR\hya.exe"
   Delete "$INSTDIR\hydra-host.exe"
   Delete "$INSTDIR\${HOST_NAME}.json"
   Delete "$INSTDIR\${HOST_NAME}.firefox.json"

@@ -70,12 +70,22 @@ pub async fn check(beta: bool) -> Result<Option<UpdateInfo>, String> {
     if !hya_updater::is_newer(rel.version(), env!("CARGO_PKG_VERSION")) {
         return Ok(None);
     }
-    let Some(asset) = rel.gui_asset() else {
+    // Running from an AppImage, the update IS the new AppImage: the release
+    // tarball would only be unpackable over a read-only mount that stops
+    // existing when this process does.
+    let appimage = hya_updater::appimage_path();
+    let asset = match &appimage {
+        Some(_) => rel.appimage_asset(),
+        None => rel.gui_asset(),
+    };
+    let Some(asset) = asset else {
         crate::log::warn(&format!(
-            "update {} available but has no {}-{} bundle",
+            "update {} available but has no {} bundle",
             rel.version(),
-            hya_updater::os_tag(),
-            hya_updater::arch_tag()
+            match &appimage {
+                Some(_) => format!("{}.AppImage", hya_updater::appimage_arch()),
+                None => format!("{}-{}", hya_updater::os_tag(), hya_updater::arch_tag()),
+            }
         ));
         return Ok(None);
     };
@@ -94,8 +104,12 @@ pub async fn check(beta: bool) -> Result<Option<UpdateInfo>, String> {
         .map(hya_updater::update_method)
         .unwrap_or(hya_updater::UpdateMethod::Package);
     let in_place = method.is_self_update();
-    let where_ = install_dir
+    // For an AppImage the install is the image file, not the mount
+    // `current_exe()` reports — say so in the log, that is the path the
+    // finisher will rewrite.
+    let where_ = appimage
         .as_deref()
+        .or(install_dir.as_deref())
         .map(|d| d.display().to_string())
         .unwrap_or_else(|| "the install directory".into());
     if !in_place {
@@ -110,6 +124,7 @@ pub async fn check(beta: bool) -> Result<Option<UpdateInfo>, String> {
             rel.version(),
             match method {
                 hya_updater::UpdateMethod::Elevated => "in place, after authorisation",
+                hya_updater::UpdateMethod::AppImage => "by replacing the image file",
                 _ => "in place",
             }
         ));
@@ -129,7 +144,13 @@ pub async fn check(beta: bool) -> Result<Option<UpdateInfo>, String> {
             .asset("SHA256SUMS.txt")
             .map(|a| a.browser_download_url.clone()),
         in_place,
-        needs_auth: matches!(method, hya_updater::UpdateMethod::Elevated),
+        needs_auth: match method {
+            hya_updater::UpdateMethod::Elevated => true,
+            // The image may sit in /opt or /usr/local/bin; the finisher
+            // elevates on its own, but the dialog should warn first.
+            hya_updater::UpdateMethod::AppImage => hya_updater::appimage_needs_auth(),
+            _ => false,
+        },
         package,
     }))
 }
@@ -195,13 +216,25 @@ async fn drive(
     }
 
     let _ = tx.send(UpdateEvent::Preparing).await;
-    let unpack = stage.join("unpacked");
-    let _ = std::fs::remove_dir_all(&unpack);
-    let bundle = hya_updater::extract(&archive, &unpack)?;
+    // An AppImage download is the finished article: one executable file that
+    // replaces the installed one. Everything else arrives as an archive of
+    // binaries to unpack and copy over.
+    let appimage = hya_updater::appimage_path();
+    let bundle = match &appimage {
+        Some(_) => None,
+        None => {
+            let unpack = stage.join("unpacked");
+            let _ = std::fs::remove_dir_all(&unpack);
+            Some(hya_updater::extract(&archive, &unpack)?)
+        }
+    };
 
     // The finisher: prefer the NEW release's copy (version-matched to what it
     // installs), fall back to the one shipped next to the running app. Either
-    // way it runs from the staging dir so the swap never overwrites it.
+    // way it runs from the staging dir so the swap never overwrites it. An
+    // AppImage has only the second option — the download is a squashfs image,
+    // not a directory, and mounting it to fish one binary out would buy
+    // nothing the shipped finisher cannot already do.
     let updater_name = if cfg!(target_os = "windows") {
         "hydra-updater.exe"
     } else {
@@ -212,14 +245,16 @@ async fn drive(
         .parent()
         .ok_or_else(|| std::io::Error::other("executable has no parent directory"))?
         .to_path_buf();
-    let updater_src: PathBuf = [bundle.join(updater_name), install_dir.join(updater_name)]
-        .into_iter()
+    let updater_src: PathBuf = bundle
+        .iter()
+        .map(|b| b.join(updater_name))
+        .chain(std::iter::once(install_dir.join(updater_name)))
         .find(|p| p.is_file())
         .ok_or_else(|| {
             std::io::Error::other(format!(
                 "no {updater_name} in the release bundle or next to the app; \
                  the downloaded update is at {}",
-                bundle.display()
+                archive.display()
             ))
         })?;
     let updater = stage.join(updater_name);
@@ -231,17 +266,33 @@ async fn drive(
     }
 
     let mut cmd = std::process::Command::new(&updater);
-    cmd.arg("--src-dir")
-        .arg(&bundle)
-        .arg("--install-dir")
-        .arg(&install_dir)
-        // What the new files are: a macOS `.app` carries its version in
-        // Info.plist, which nothing in the archive itself can tell the
-        // finisher.
-        .arg("--app-version")
-        .arg(&info.version)
-        .arg("--relaunch")
-        .arg(&exe);
+    match (&appimage, &bundle) {
+        // Replace the image file the user launched, and relaunch that same
+        // path — not `current_exe()`, which points into a mount that will
+        // not exist a moment from now.
+        (Some(img), _) => {
+            cmd.arg("--src-file")
+                .arg(&archive)
+                .arg("--appimage")
+                .arg(img)
+                .arg("--relaunch")
+                .arg(img);
+        }
+        (None, Some(bundle)) => {
+            cmd.arg("--src-dir")
+                .arg(bundle)
+                .arg("--install-dir")
+                .arg(&install_dir)
+                // What the new files are: a macOS `.app` carries its version
+                // in Info.plist, which nothing in the archive itself can tell
+                // the finisher.
+                .arg("--app-version")
+                .arg(&info.version)
+                .arg("--relaunch")
+                .arg(&exe);
+        }
+        (None, None) => return Err(std::io::Error::other("nothing was extracted to install")),
+    }
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -261,6 +312,12 @@ async fn drive(
 /// Startup housekeeping: remove `.old` files a previous update left behind
 /// (Windows cannot delete the old exe while it is still tearing down).
 pub fn sweep_leftovers() {
+    // The AppImage case first: the previous image was renamed aside next to
+    // itself, and `current_exe()` points at a mount that never holds one.
+    if let Some(img) = hya_updater::appimage_path() {
+        hya_updater::sweep_appimage_leftover(&img);
+        return;
+    }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             hya_updater::sweep_old_files(dir);

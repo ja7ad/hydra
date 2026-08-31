@@ -195,6 +195,8 @@ pub fn reinstall(state: &MenuState, queues: &[String], languages: &[String]) {
         &item("Contribute on GitHub", MenuAction::Contribute),
         &item("Keyboard Shortcuts", MenuAction::Shortcuts),
         &item("Permissions", MenuAction::Permissions),
+        &item("Logs", MenuAction::Logs),
+        &item("Report an Issue", MenuAction::ReportIssue),
         &item("Check for updates", MenuAction::CheckUpdates),
         &item("About Hydra", MenuAction::About),
     ]);

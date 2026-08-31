@@ -90,6 +90,10 @@ pub struct DownloadItem {
     pub disp_progress: f32,
     #[serde(skip)]
     pub eta_secs: Option<u64>,
+    /// Seconds of MEDIA captured, for a live recording. A live stream has no
+    /// size, so this is what the progress dialog shows in place of one.
+    #[serde(skip)]
+    pub recorded_secs: Option<f64>,
     #[serde(skip)]
     pub conns: Vec<ConnRow>,
     #[serde(skip)]
@@ -101,6 +105,54 @@ pub struct DownloadItem {
     pub shutdown_after: bool,
     #[serde(default)]
     pub shutdown_action: PowerAction,
+    /// Set when `url` names an adaptive-stream MANIFEST rather than a file.
+    /// Its presence is what routes the item to the stream-aware engine path
+    /// instead of the range scheduler.
+    #[serde(default)]
+    pub stream: Option<StreamInfo>,
+}
+
+/// What a stream item needs beyond a URL: which rendition was chosen, and
+/// what container the user asked the finished file to be. Persisted so a
+/// restarted stream picks the same rendition instead of silently re-choosing.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct StreamInfo {
+    /// "hls" or "dash".
+    pub protocol: String,
+    /// The variant playlist chosen in the browser, when one was.
+    #[serde(default)]
+    pub variant_url: Option<String>,
+    #[serde(default)]
+    pub height: Option<u32>,
+    #[serde(default)]
+    pub bandwidth: Option<u64>,
+    /// "MP4" or "TS".
+    #[serde(default)]
+    pub container: String,
+    /// Page the stream played on; sent as `Referer` with every segment.
+    #[serde(default)]
+    pub referer: Option<String>,
+    /// The BROWSER's User-Agent, not Hydra's. Origins that gate on it hand
+    /// a different playlist — or none — to anything else.
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    #[serde(default)]
+    pub live: bool,
+    /// Stop a live recording after this many seconds and finish the file.
+    #[serde(default)]
+    pub max_seconds: Option<u64>,
+}
+
+/// How far a live recording has got, as a fraction.
+///
+/// Only a recording with a time limit has one: seconds captured against
+/// seconds asked for. Without a limit there is no end to be a fraction of,
+/// and bytes cannot stand in — a live stream has no size.
+pub fn live_progress(max_seconds: Option<u64>, recorded: Option<f64>) -> f32 {
+    match (max_seconds, recorded) {
+        (Some(limit), Some(done)) if limit > 0 => (done / limit as f64).clamp(0.0, 1.0) as f32,
+        _ => 0.0,
+    }
 }
 
 impl DownloadItem {
@@ -120,8 +172,18 @@ impl DownloadItem {
     }
 
     pub fn progress(&self) -> f32 {
+        // A live recording has no size, so bytes can say nothing about how
+        // far along it is — but a recording with a time limit does have a
+        // real fraction, and it is the one the person set. Seconds captured
+        // against seconds asked for is the honest bar for that case.
+        if let Some(si) = self.stream.as_ref().filter(|s| s.live) {
+            return live_progress(si.max_seconds, self.recorded_secs);
+        }
         match self.size {
-            Some(s) if s > 0 => (self.downloaded as f64 / s as f64) as f32,
+            // Clamped: a size that is an estimate can lag the bytes it is
+            // meant to bound, and a fraction over 1.0 draws a bar past its
+            // own track.
+            Some(s) if s > 0 => (self.downloaded as f64 / s as f64).min(1.0) as f32,
             _ => 0.0,
         }
     }
@@ -297,6 +359,12 @@ pub struct Settings {
     pub beta_channel: bool,
     /// Autostart launches come up in the tray without opening the window.
     pub start_in_tray: bool,
+    /// Closing the main window leaves Hydra running in the system tray
+    /// (default) instead of quitting, so queues and transfers carry on.
+    /// Off: the close button ends the session the way File > Exit does.
+    /// Ignored when no tray icon could be installed — without one there
+    /// would be no way back into the app, so closing always quits then.
+    pub close_to_tray: bool,
     /// Fewer wakeups everywhere: slower UI refresh, no glide animation,
     /// coarser engine ticks. Transfer speed is unaffected.
     pub power_save: bool,
@@ -394,6 +462,7 @@ impl Default for Settings {
             check_updates_on_startup: true,
             beta_channel: false,
             start_in_tray: true,
+            close_to_tray: true,
             power_save: false,
             hide_from_taskbar: false,
             gpu_render: false,

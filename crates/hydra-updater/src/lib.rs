@@ -106,6 +106,15 @@ impl Release {
         self.package_asset_for(prefix, ext, arch)
     }
 
+    /// The `.AppImage` for this machine, when the release ships one.
+    ///
+    /// Matched by shape like [`package_asset`](Self::package_asset) rather
+    /// than by an exact name: the file carries the workspace version, which
+    /// a pre-release tag does not have to agree with.
+    pub fn appimage_asset(&self) -> Option<&ReleaseAsset> {
+        self.package_asset_for("Hydra-", ".AppImage", appimage_arch())
+    }
+
     fn package_asset_for(&self, prefix: &str, ext: &str, arch: &str) -> Option<&ReleaseAsset> {
         self.assets
             .iter()
@@ -288,6 +297,98 @@ fn windows_arch() -> &'static str {
     }
 }
 
+// ------------------------------------------------------------------- AppImage
+
+/// Architecture as an AppImage names itself (`uname -m`), which is neither
+/// the archives' [`arch_tag`] nor dpkg's.
+pub fn appimage_arch() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else {
+        "x86_64"
+    }
+}
+
+/// The `.AppImage` file this process is running from, or `None` when it is
+/// not running from one.
+///
+/// The AppImage runtime exports `APPIMAGE` (the image file the user
+/// launched) and `APPDIR` (the read-only mount it was expanded into) into
+/// the application it starts. `current_exe()` reports a path inside that
+/// mount, which is useless to an updater: it is read-only, its name changes
+/// on every run, and it ceases to exist when the process does. The single
+/// file that IS the install is `APPIMAGE`, and replacing it is the whole
+/// update.
+///
+/// Both variables are required: `APPIMAGE` alone can be inherited by a
+/// child process that is not itself an AppImage.
+pub fn appimage_path() -> Option<PathBuf> {
+    std::env::var_os("APPDIR")?;
+    let p = PathBuf::from(std::env::var_os("APPIMAGE")?);
+    p.is_file().then_some(p)
+}
+
+/// Release asset holding the AppImage for this machine:
+/// `Hydra-0.3.4-x86_64.AppImage`.
+pub fn appimage_asset_name(version: &str) -> String {
+    format!("Hydra-{version}-{}.AppImage", appimage_arch())
+}
+
+/// Whether replacing this AppImage will need an authorisation prompt: the
+/// image sits in a directory this user cannot write (`/opt`, `/usr/local/bin`).
+///
+/// The finisher does not consult this — it tries the swap and elevates on
+/// `PermissionDenied`. It exists so the dialog can say so before the
+/// download rather than after it.
+pub fn appimage_needs_auth() -> bool {
+    match appimage_path() {
+        Some(img) => !img.parent().is_some_and(dir_is_writable),
+        None => false,
+    }
+}
+
+/// Install `src` as the AppImage at `dest`.
+///
+/// An AppImage install is one executable file, so this is [`apply_with`]'s
+/// whole job reduced to a single [`replace_file`]: the old image is renamed
+/// aside, the new one is copied into its name, and it inherits the old
+/// file's mode (an AppImage that is not executable is not an install). The
+/// running image is still FUSE-mounted from the old inode while this
+/// happens, which is exactly why it is renamed rather than truncated.
+pub fn replace_appimage(src: &Path, dest: &Path) -> io::Result<ApplyReport> {
+    if !src.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("no AppImage to install at {}", src.display()),
+        ));
+    }
+    if !dest.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("no installed AppImage at {}", dest.display()),
+        ));
+    }
+    replace_file(src, dest)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(dest)?.permissions().mode();
+        // The mode came from the old image, but a copy that lost its exec
+        // bits would leave the user with a file the desktop cannot start.
+        if mode & 0o111 == 0 {
+            std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o755))?;
+        }
+    }
+    Ok(ApplyReport {
+        replaced: vec![dest
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()],
+        ..ApplyReport::default()
+    })
+}
+
 /// The macOS application bundle `dir` sits inside, if any: the nearest
 /// enclosing `*.app` directory.
 ///
@@ -334,6 +435,11 @@ pub enum UpdateMethod {
     /// A package manager owns this install; only it may rewrite these files,
     /// so the update is offered as its own `.deb`/`.rpm`/`.pkg`/setup.
     Package,
+    /// The install is a single self-contained `.AppImage`. There are no
+    /// installed files to swap — the image file itself is replaced
+    /// ([`replace_appimage`]), which is also what keeps the thing portable:
+    /// wherever the user put it, that is what gets updated.
+    AppImage,
 }
 
 impl UpdateMethod {
@@ -353,6 +459,14 @@ impl UpdateMethod {
 /// behind dpkg's back leaves its database describing files that are no
 /// longer there.
 pub fn update_method(dir: &Path) -> UpdateMethod {
+    // An AppImage answers first, and without consulting `dir`: `dir` is the
+    // read-only mount the runtime made, so its ownership describes a
+    // temporary directory rather than the install. Whether the image file
+    // can be written is the finisher's problem, and it has an
+    // authorisation prompt for the answer.
+    if appimage_path().is_some() {
+        return UpdateMethod::AppImage;
+    }
     if package_managed(dir) {
         return UpdateMethod::Package;
     }
@@ -850,11 +964,59 @@ pub fn apply_with(
         };
         replace_file(&path, &dest)?;
         report.replaced.push(name.to_string_lossy().into_owned());
+        if name == cli_file_name() {
+            match refresh_cli_alias(&dest) {
+                Ok(true) => report.notes.push(format!("{CLI_ALIAS} refreshed")),
+                Ok(false) => {}
+                Err(e) => report
+                    .notes
+                    .push(format!("{CLI_ALIAS} refresh failed: {e}")),
+            }
+        }
     }
     if let Some(bundle) = &bundle {
         finish_bundle(bundle, opts.version.as_deref(), &mut report);
     }
     Ok(report)
+}
+
+/// The short second name every Hydra installer puts next to the CLI, because
+/// `hydra` is also THC-Hydra and three letters types better.
+pub const CLI_ALIAS: &str = if cfg!(windows) { "hya.exe" } else { "hya" };
+
+/// The CLI's file name in a release archive.
+fn cli_file_name() -> &'static str {
+    if cfg!(windows) {
+        "hydra.exe"
+    } else {
+        "hydra"
+    }
+}
+
+/// Put the `hya` shorthand back in step with the CLI at `cli`, which was just
+/// replaced.
+///
+/// On Unix the installers link it (`hya -> hydra`), so it follows the new
+/// binary on its own and this does nothing. Windows hands out a symlink only
+/// to an elevated shell or with Developer Mode on, so `install.ps1` may have
+/// left a hard link or a plain copy — and both still carry the OLD bits after
+/// [`try_replace`] renamed the file aside and wrote a new one in its place.
+///
+/// Only an alias that is already there is touched: an install that never had
+/// the short name does not gain one from an update.
+fn refresh_cli_alias(cli: &Path) -> io::Result<bool> {
+    let Some(alias) = cli.parent().map(|d| d.join(CLI_ALIAS)) else {
+        return Ok(false);
+    };
+    // symlink_metadata, so a link is seen as a link rather than followed.
+    match std::fs::symlink_metadata(&alias) {
+        Ok(meta) if meta.file_type().is_symlink() => Ok(false),
+        Ok(_) => {
+            replace_file(cli, &alias)?;
+            Ok(true)
+        }
+        Err(_) => Ok(false),
+    }
 }
 
 /// Where a release file lands inside a macOS application bundle, or `None`
@@ -1026,6 +1188,24 @@ fn try_replace(src: &Path, dest: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Remove the one `.old` leftover a previous AppImage update may have left
+/// beside the image.
+///
+/// Deliberately not [`sweep_old_files`]: an AppImage lives wherever the user
+/// put it — `~/Downloads`, a USB stick, a directory full of their own files
+/// — and deleting every `*.old` in it would be Hydra tidying up somebody
+/// else's directory. Only the file this updater itself would have created is
+/// removed.
+pub fn sweep_appimage_leftover(image: &Path) {
+    let old = image.with_extension(match image.extension().and_then(|e| e.to_str()) {
+        Some(ext) => format!("{ext}.old"),
+        None => "old".to_string(),
+    });
+    if old != image {
+        let _ = std::fs::remove_file(old);
+    }
+}
+
 /// Remove `.old` leftovers a previous update could not delete (Windows keeps
 /// the old exe locked until teardown finishes). Called on the next startup.
 pub fn sweep_old_files(install_dir: &Path) {
@@ -1048,6 +1228,48 @@ pub fn staging_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn appimage_asset_is_matched_by_shape() {
+        // Named from the workspace version, which a pre-release tag need not
+        // agree with — so the lookup must not depend on the spelling. The
+        // `.zsync` sidecar published next to it must never be picked up as
+        // the image, and neither must the other architecture's file.
+        let mut r = rel("v0.3.4-rc", true);
+        for name in [
+            "Hydra-0.3.4-x86_64.AppImage",
+            "Hydra-0.3.4-aarch64.AppImage",
+            "Hydra-0.3.4-x86_64.AppImage.zsync",
+            "Hydra-0.3.4-aarch64.AppImage.zsync",
+            "Hydra-0.3.4-x86_64.dmg",
+        ] {
+            r.assets.push(ReleaseAsset {
+                name: name.into(),
+                browser_download_url: String::new(),
+                size: 1,
+            });
+        }
+        assert_eq!(
+            r.appimage_asset().map(|a| a.name.as_str()),
+            Some(appimage_asset_name("0.3.4").as_str())
+        );
+        assert!(appimage_asset_name("0.3.4").ends_with(".AppImage"));
+    }
+
+    #[test]
+    fn appimage_asset_absent_when_the_release_ships_none() {
+        let r = rel("v0.3.4", false);
+        assert!(r.appimage_asset().is_none());
+    }
+
+    #[test]
+    fn appimage_method_ignores_the_mount_it_runs_from() {
+        // Not an AppImage run: `update_method` must keep answering from the
+        // directory, which is what every other install depends on.
+        assert!(appimage_path().is_none(), "APPIMAGE set in the test env");
+        assert!(!appimage_needs_auth());
+        assert!(UpdateMethod::AppImage.is_self_update());
+    }
 
     #[test]
     fn version_compare() {
@@ -1358,6 +1580,54 @@ mod tests {
             "new gui"
         );
         assert!(!plain.join("hydra").exists());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn a_copied_cli_alias_is_refreshed_but_a_linked_one_is_left_alone() {
+        // Windows may only be able to give `hya` the CLI's bits rather than
+        // its name, and those bits go stale the moment `hydra` is replaced.
+        let tmp = std::env::temp_dir().join(format!("hydra-alias-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let src = tmp.join("src");
+        let bin = tmp.join("bin");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::create_dir_all(&bin).unwrap();
+        let cli = cli_file_name();
+        std::fs::write(src.join(cli), b"new cli").unwrap();
+        std::fs::write(bin.join(cli), b"old cli").unwrap();
+        std::fs::write(bin.join(CLI_ALIAS), b"old cli").unwrap();
+
+        let report = apply(&src, &bin).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(bin.join(CLI_ALIAS)).unwrap(),
+            "new cli"
+        );
+        assert!(report.notes.iter().any(|n| n.contains(CLI_ALIAS)));
+
+        // A symlinked alias resolves through the name, so it is already
+        // current — and rewriting it would turn it into a second copy.
+        #[cfg(unix)]
+        {
+            std::fs::write(src.join(cli), b"newer cli").unwrap();
+            std::fs::remove_file(bin.join(CLI_ALIAS)).unwrap();
+            std::os::unix::fs::symlink(cli, bin.join(CLI_ALIAS)).unwrap();
+            apply(&src, &bin).unwrap();
+            assert!(std::fs::symlink_metadata(bin.join(CLI_ALIAS))
+                .unwrap()
+                .file_type()
+                .is_symlink());
+            assert_eq!(
+                std::fs::read_to_string(bin.join(CLI_ALIAS)).unwrap(),
+                "newer cli"
+            );
+        }
+
+        // An install that never had the short name does not gain one.
+        std::fs::remove_file(bin.join(CLI_ALIAS)).unwrap();
+        apply(&src, &bin).unwrap();
+        assert!(!bin.join(CLI_ALIAS).exists());
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

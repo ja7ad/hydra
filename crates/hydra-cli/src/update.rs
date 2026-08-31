@@ -31,7 +31,13 @@ pub async fn run(json: bool, beta: bool) -> ExitCode {
     // that produced them; it is not release content.
     let notes = hya_updater::clean_notes(&rel.body);
     let newer = hya_updater::is_newer(&latest, current);
-    let asset = rel.cli_asset();
+    // Inside an AppImage the standalone CLI tarball is the wrong answer:
+    // this binary lives in the image, and the image is what gets replaced.
+    let appimage = hya_updater::appimage_path();
+    let asset = match &appimage {
+        Some(_) => rel.appimage_asset(),
+        None => rel.cli_asset(),
+    };
 
     if json {
         let out = serde_json::json!({
@@ -96,18 +102,25 @@ pub async fn run(json: bool, beta: bool) -> ExitCode {
     }
     match asset {
         Some(a) => println!(
-            "Download ({}-{}): {}",
-            hya_updater::os_tag(),
-            hya_updater::arch_tag(),
+            "Download ({}): {}",
+            platform(&appimage),
             a.browser_download_url
         ),
         None => println!(
-            "No prebuilt archive for {}-{} in this release; see the release page.",
-            hya_updater::os_tag(),
-            hya_updater::arch_tag()
+            "No prebuilt archive for {} in this release; see the release page.",
+            platform(&appimage)
         ),
     }
     ExitCode::SUCCESS
+}
+
+/// How this build names the platform it wants an asset for: an AppImage by
+/// its own architecture spelling, everything else by the release archives'.
+fn platform(appimage: &Option<std::path::PathBuf>) -> String {
+    match appimage {
+        Some(_) => format!("{} AppImage", hya_updater::appimage_arch()),
+        None => format!("{}-{}", hya_updater::os_tag(), hya_updater::arch_tag()),
+    }
 }
 
 /// Whether a package manager owns this binary — a deb or rpm in `/usr/bin`,

@@ -5,6 +5,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.4.0] - 2026-08-31
+
+### Added
+
+- **HLS and MPEG-DASH Streaming Engine (`hya-stream`, `crates/hydra-stream`)**: Introduced `hya-stream`, a standalone media streaming engine and manifest parser designed for high-performance chunk assembly and live stream capture:
+  - **HLS Protocol Support**: Full parser for Master and Media playlists (`#EXTM3U`, `#EXT-X-STREAM-INF`, `#EXT-X-MEDIA`, `#EXT-X-MAP`, `#EXT-X-KEY`, `#EXT-X-BYTERANGE`, `#EXT-X-DISCONTINUITY`), audio/video/subtitle rendition grouping, live sliding windows, and AES-128-CBC encrypted segment decryption.
+  - **MPEG-DASH Support**: Complete MPD XML parser supporting multi-period manifests, AdaptationSets, Representations, SegmentTemplates (dynamic variable substitution for `$Number$`, `$Time$`, `$RepresentationID$`, SegmentTimeline, SegmentList, SegmentBase), initialization segments, and multi-track demuxing.
+  - **Segment Assembly Pipeline**: High-throughput asynchronous segment fetching with connection pooling, in-order segment sequencing, live stream recording with duration limits, and automated container packaging/muxing (MP4, MKV, TS, AAC, MP3) using FFmpeg.
+- **CLI Media Streaming & Inspection Commands (`hydra-cli`)**: Added stream downloading and inspection capabilities to the CLI:
+  - `--stream` / `--stream-quality <QUALITY>`: Select target stream resolution and quality (e.g. `best`, `1080p`, `720p`, `480p`, `360p`, `worst`, `audio_only`, or custom bitrate).
+  - `--stream-container <CONTAINER>`: Specify output media container format (`mp4`, `mkv`, `ts`, `aac`, `mp3`).
+  - `--stream-inspect` / `-i`: Probe remote HLS/DASH streams and display formatted tables of available video/audio streams, bitrates, resolutions, codecs, and durations without downloading.
+  - `--stream-duration <DURATION>`: Set maximum recording duration for live streams (e.g., `30m`, `2h`).
+  - `--stream-live`: Force live stream capture mode.
+  - `--stream-audio-track <TRACK>` / `--stream-video-track <TRACK>`: Explicitly select target audio and video track IDs.
+- **`hya` Command Shorthand & Unified Symlinks (`hydra-cli`, packaging targets)**: Added `hya` as an official first-class binary command and symlink alias across all installation methods and package formats (Arch Linux AUR, Debian/Ubuntu `.deb`, Fedora `.rpm`, Linux AppImage, macOS `.dmg`/`.pkg`, Homebrew formula, Windows NSIS installer, and shell/PowerShell install scripts). Generated native shell completion scripts for both `hydra` and `hya` aliases (Bash, Zsh, Fish, PowerShell, Elvish) and added the `hya.1` man page.
+- **GUI Stream Probing & Media Track Selection (`hydra-gui`)**:
+  - Integrated automated stream probing into the *Add URL* dialog when pasting HLS (`.m3u8`) or DASH (`.mpd`) links, presenting stream variant details (resolutions, bitrates, codecs), audio track selection dropdowns, and recording duration limit inputs.
+  - Added stream quality and container format preference controls directly in the *Batch Download* window.
+  - Added stream progress tracking in the *Download Progress* window, displaying live stream indicators, elapsed recording duration, segment counts, and active FFmpeg muxing status.
+- **Browser Extension Stream Sniffing & Floating Video Bar (`extensions/`, Chrome, Firefox, Safari, Edge, Brave)**:
+  - Bumped browser extensions to v0.3.0 with live HLS (`.m3u8`) and MPEG-DASH (`.mpd`) request sniffing and media stream capture.
+  - Added an in-page floating video download bar overlaid on HTML5 video elements for instant one-click downloading.
+  - Upgraded popup UI with media filter tabs (All, Videos, Audio, Documents, Images), live stream badges, quality selector dropdowns, and copy link actions.
+  - Redesigned onboarding welcome page (`welcome.html`) with real-time native messaging host connection testing and troubleshooting guides.
+  - Added support for Flatpak and Snap browser profile locations on Linux.
+- **Linux AppImage Packaging & In-App Self-Updates (`scripts/package-appimage.sh`, `hydra-updater`, CI)**:
+  - Added official multi-architecture Linux AppImage releases (`x86_64` and `aarch64`) bundling all required dependencies, desktop integration, icons, and native messaging host manifests.
+  - Added in-app AppImage self-updating via `hydra-updater` with `zsync` differential binary updating, atomic single-file replacement, and privilege elevation support (`pkexec` / `sudo`) for system installations.
+  - Integrated AppImage autostart registration and desktop launcher creation.
+- **Structured GUI Logging & In-App Log Viewer (`hydra-gui`)**:
+  - Added high-performance asynchronous structured logging with diagnostic startup banners (OS version, architecture, Hydra build, graphics/desktop environment).
+  - Added automatic real-time sensitive data redaction to sanitize authentication tokens, authorization headers, passwords, and private query parameters.
+  - Added an interactive in-app Log Viewer modal accessible via *Help → View Logs* and the native macOS menu bar, featuring log level filtering (Trace, Debug, Info, Warn, Error), text search, and clipboard export.
+  - Added a direct *Help → Report Issue* action to streamline bug reporting with environment context.
+- **Close to System Tray Option (`hydra-gui`)**: Added a *Close to system tray instead of exiting* option under *Options → General*, enabling users to minimize the application to the system tray upon closing the main window without interrupting active downloads.
+- **Automatic Native Messaging Host Installer (`hydra-gui`)**: Added automated browser native messaging host manifest registration on GUI startup for Chrome, Chromium, Firefox, Microsoft Edge, Brave, Vivaldi, Opera, and Tor, with connectivity status in *Options → Extensions*.
+- **Turkish Localization (`hydra-gui`)**: Added full Turkish (`tr`) language translation catalog across all menus, dialogs, settings, and notifications, expanding total supported GUI locales to 15.
+- **Documentation & Man Pages**: Added `hydra-host.1` man page for the native messaging host protocol, `crates/hydra-stream/README.md` for stream engine architecture, and updated Linux AppImage guides.
+
+### Fixed
+
+- **Remote File Modification Timestamp Preservation (`hydra-gui`)**: Fixed timestamp loss on completed downloads by extracting the `Last-Modified` HTTP header independently of cache validators and applying the exact remote modification timestamp to downloaded files (`set_mtime`) after final renaming when the *Preserve file date/time* setting is enabled.
+- **Fedora Copr Dynamic Version Rendering (`scripts/render-rpm-spec.sh`, CI)**: Fixed Fedora Copr SRPM build failures by dynamically rendering the version macro from Cargo manifests into `hydra.spec` before generating source RPMs.
+- **Cryptographic Key Safety in Test Suites (`hydra-stream`)**: Eliminated hard-coded cryptographic test keys and constant initialization vectors in unit tests.
+- **Crates.io Publishing Pipeline for Stream Engine (`.github/workflows/publish-crates.yml`, CI)**: Added `hya-stream` to the crates.io publishing workflow, dependency verification, and index synchronizers.
+
+### Changed & Refactored
+
+- **Pooled Object Fetching & Typed Redirects (`hya-net`)**: Added `fetch_object` to `hydra-net` for efficient pooled HTTP connection reuse during single-object and playlist fetches, along with typed `RedirectError` for explicit hop limit and redirect loop handling.
+- **Multi-Language Localization Updates (`hydra-gui`, `extensions/`)**: Comprehensively updated and synchronized translation strings across all 15 supported locales (`ar`, `de`, `en`, `es`, `fa`, `fr`, `he`, `ja`, `ko`, `nl`, `pt-BR`, `ru`, `tr`, `zh`, `zh-Hant`), including a French translation overhaul and new strings for stream downloads, FFmpeg status, log viewer, close-to-tray, and extension diagnostics.
+
+---
+
 ## [0.3.14] - 2026-08-29
 
 ### Added

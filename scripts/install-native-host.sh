@@ -82,12 +82,22 @@ case "$(uname -s)" in
     )
     ;;
   Linux)
+    # Snap and Flatpak give each browser its own private tree rather than
+    # using ~/.config or ~/.mozilla. Ubuntu has shipped Firefox as a SNAP by
+    # default since 22.04, so on a stock Ubuntu the classic paths match
+    # nothing at all — which is what "no supported browser profile found"
+    # used to mean, unhelpfully.
     DIRS=(
       "$HOME/.config/google-chrome/NativeMessagingHosts"
       "$HOME/.config/chromium/NativeMessagingHosts"
       "$HOME/.config/microsoft-edge/NativeMessagingHosts"
       "$HOME/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
       "$HOME/.config/vivaldi/NativeMessagingHosts"
+      "$HOME/snap/chromium/common/chromium/NativeMessagingHosts"
+      "$HOME/.var/app/com.google.Chrome/config/google-chrome/NativeMessagingHosts"
+      "$HOME/.var/app/org.chromium.Chromium/config/chromium/NativeMessagingHosts"
+      "$HOME/.var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+      "$HOME/.var/app/com.microsoft.Edge/config/microsoft-edge/NativeMessagingHosts"
     )
     BROWSER_ROOTS=(
       "$HOME/.config/google-chrome"
@@ -95,12 +105,26 @@ case "$(uname -s)" in
       "$HOME/.config/microsoft-edge"
       "$HOME/.config/BraveSoftware/Brave-Browser"
       "$HOME/.config/vivaldi"
+      "$HOME/snap/chromium/common/chromium"
+      "$HOME/.var/app/com.google.Chrome/config/google-chrome"
+      "$HOME/.var/app/org.chromium.Chromium/config/chromium"
+      "$HOME/.var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser"
+      "$HOME/.var/app/com.microsoft.Edge/config/microsoft-edge"
     )
     FF_DIRS=(
       "$HOME/.mozilla/native-messaging-hosts"
       "$HOME/.librewolf/native-messaging-hosts"
+      "$HOME/snap/firefox/common/.mozilla/native-messaging-hosts"
+      "$HOME/.var/app/org.mozilla.firefox/.mozilla/native-messaging-hosts"
+      "$HOME/.var/app/io.gitlab.librewolf-community/.librewolf/native-messaging-hosts"
     )
-    FF_ROOTS=("$HOME/.mozilla" "$HOME/.librewolf")
+    FF_ROOTS=(
+      "$HOME/.mozilla"
+      "$HOME/.librewolf"
+      "$HOME/snap/firefox/common/.mozilla"
+      "$HOME/.var/app/org.mozilla.firefox/.mozilla"
+      "$HOME/.var/app/io.gitlab.librewolf-community/.librewolf"
+    )
     ;;
   *)
     echo "On Windows, run the PowerShell installer instead:" >&2
@@ -152,7 +176,19 @@ EOF
 done
 
 if [ "$INSTALLED" = 0 ]; then
+  # Say WHERE it looked. "Nothing installed" on its own sends people to
+  # reinstall a browser that is already there, when the real answer is
+  # usually that it has not been run once yet and so has no profile.
   echo "no supported browser profile found; nothing installed" >&2
+  echo >&2
+  echo "Looked for a profile in:" >&2
+  for d in "${BROWSER_ROOTS[@]}" "${FF_ROOTS[@]}"; do
+    echo "  $d" >&2
+  done
+  echo >&2
+  echo "A browser that has never been launched has no profile yet: start it" >&2
+  echo "once, then run this again. Hydra also registers itself on every" >&2
+  echo "launch, so running the app is usually enough on its own." >&2
   exit 1
 fi
 

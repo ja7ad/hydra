@@ -157,6 +157,9 @@ pub fn view(app: &App) -> El<'_> {
             ]
             .spacing(12)
             .align_y(iced::Alignment::Center),
+            // Only shown when the list actually contains a manifest: a
+            // quality picker over a list of ordinary files would be noise.
+            streams_row(st),
             row![
                 iced::widget::space::horizontal(),
                 dlg_btn_primary(tr("OK"), Some(Message::BatchOk)),
@@ -170,5 +173,52 @@ pub fn view(app: &App) -> El<'_> {
     .width(Length::Fill)
     .height(Length::Fill)
     .style(theme::window)
+    .into()
+}
+
+/// The one stream setting a batch needs, when it has any streams in it.
+///
+/// A picker per URL would mean probing every manifest to build it, and
+/// answering the same question once per link. One preference for the batch
+/// is resolved against each manifest's own ladder as it starts.
+fn streams_row(st: &crate::app::BatchState) -> El<'_> {
+    let n = st
+        .checks
+        .iter()
+        .filter(|(u, on)| *on && crate::app::manifest_address(u))
+        .count();
+    if n == 0 {
+        return iced::widget::space::horizontal().height(0.0).into();
+    }
+    let container = if st.stream_container.is_empty() {
+        "MP4".to_string()
+    } else {
+        st.stream_container.clone()
+    };
+    row![
+        text(format!(
+            "{n} {}",
+            tr("stream(s) in this list — download at")
+        ))
+        .size(theme::FONT_SIZE),
+        pick_list(
+            crate::app::BatchQuality::ALL.to_vec(),
+            Some(st.stream_quality),
+            Message::BatchStreamQuality
+        )
+        .text_size(theme::FONT_SIZE)
+        .style(theme::picker)
+        .width(150.0),
+        pick_list(
+            vec!["MP4".to_string(), "TS".to_string()],
+            Some(container),
+            Message::BatchStreamContainer
+        )
+        .text_size(theme::FONT_SIZE)
+        .style(theme::picker)
+        .width(90.0),
+    ]
+    .spacing(12)
+    .align_y(iced::Alignment::Center)
     .into()
 }

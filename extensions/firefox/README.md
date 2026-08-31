@@ -2,7 +2,7 @@
 
 Same code, same transport, same behaviour as the
 [Chrome extension](../chrome/README.md) — including **automatic download
-capture**, which Firefox fully supports.
+capture**, which Firefox fully supports, and **HLS/DASH stream sniffing**.
 
 ## Why there is no separate source tree
 
@@ -40,9 +40,13 @@ latter is regenerated on every sync.
 
 ## Install
 
-1. Register the native host (it writes Firefox's manifest into
+1. Register the native host. **The Hydra app does this itself** on every
+   start — it writes Firefox's manifest into
    `~/Library/Application Support/Mozilla/NativeMessagingHosts` on macOS,
-   `~/.mozilla/native-messaging-hosts` on Linux):
+   `~/.mozilla/native-messaging-hosts` on Linux, and points
+   `HKCU\Software\Mozilla\NativeMessagingHosts` at it on Windows — so
+   normally there is nothing to do here. From a source checkout, where the
+   app may not have been launched yet, the script does the same thing:
 
    ```bash
    scripts/install-native-host.sh

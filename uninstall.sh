@@ -9,8 +9,9 @@
 #   ... | bash -s -- --prefix ~/.local
 #   ... | bash -s -- --app-dir ~/Applications   # macOS, if you installed there
 #
-# Removes everything install.sh created: hydra, hydra-gui, hydra-host and
-# hydra-updater from <prefix>/bin (binaries or symlinks into the app bundle),
+# Removes everything install.sh created: hydra, the hya shorthand, hydra-gui,
+# hydra-host and hydra-updater from <prefix>/bin (binaries or symlinks into
+# the app bundle),
 # <prefix>/share/hydra, the desktop launcher and icons, the autostart login
 # item, and the native-messaging manifests. Also removes the macOS
 # "Hydra Download Manager.app" from /Applications and ~/Applications. Config
@@ -113,12 +114,24 @@ fi
 
 # Man pages, by exact name: a glob like hydra*.1 could hit the unrelated
 # THC hydra(1) if it shares the prefix.
-MAN_PAGES=(hydra.1 hydra-interactive.1 hydra-checksum.1 hydra-parity.1
-           hydra-formats.1 hydra-bench.1 hydra-completions.1)
+MAN_PAGES=(hydra.1 hya.1 hydra-interactive.1 hydra-checksum.1 hydra-parity.1
+           hydra-formats.1 hydra-bench.1 hydra-completions.1 hydra-host.1)
+
+# rm_alias PATH TARGET — remove the hya shorthand, but only while it is still
+# the symlink install.sh made. Someone else's `hya` on the same prefix keeps
+# the name; that is the whole point of installing it non-destructively.
+rm_alias() {
+  [ -L "$1" ] || return 0
+  case "$(readlink "$1")" in
+    hydra|"$2") rm_path "$1" ;;
+    *) ;;
+  esac
+}
 
 # Binaries + share dir + man pages from the tarball install.
 if [ -n "$PREFIX" ]; then PREFIXES=("$PREFIX"); else PREFIXES=(/usr/local "$USER_HOME/.local"); fi
 for prefix in "${PREFIXES[@]}"; do
+  rm_alias "$prefix/bin/hya" "$prefix/bin/hydra"
   rm_path "$prefix/bin/hydra"
   rm_path "$prefix/bin/hydra-gui"
   rm_path "$prefix/bin/hydra-host"

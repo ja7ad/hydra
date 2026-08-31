@@ -41,6 +41,11 @@ fn hinted<'a>(el: impl Into<El<'a>>, hint: String) -> El<'a> {
     .into()
 }
 
+/// Palette entries are packed hex; unpack one for a `text` colour.
+fn hex(v: u32) -> iced::Color {
+    iced::Color::from_rgb8((v >> 16) as u8, (v >> 8) as u8, v as u8)
+}
+
 fn section<'a>(title: String) -> El<'a> {
     row![text(title).size(theme::FONT_SIZE + 2.0),]
         .width(Length::Fill)
@@ -49,15 +54,34 @@ fn section<'a>(title: String) -> El<'a> {
 
 fn general(app: &App) -> El<'_> {
     let s = &app.options.draft;
+    // Which extensions are talking to Hydra right now. A tick with nothing
+    // beside it means the box is set but no extension has connected — which
+    // is the difference between "capture is off" and "capture cannot happen",
+    // and the list gave no way to tell them apart before.
+    let live = crate::extbus::live_browsers();
     let mut browsers = column![].spacing(4);
     for (i, (name, on)) in s.capture_browsers.iter().enumerate() {
+        let connected = live.iter().any(|b| b.eq_ignore_ascii_case(name));
         browsers = browsers.push(
-            checkbox(*on)
-                .label(name.clone())
-                .on_toggle(move |b| o(OptField::Browser(i, b)))
-                .size(15.0)
-                .text_size(theme::FONT_SIZE)
-                .style(theme::check),
+            row![
+                container(
+                    checkbox(*on)
+                        .label(name.clone())
+                        .on_toggle(move |b| o(OptField::Browser(i, b)))
+                        .size(15.0)
+                        .text_size(theme::FONT_SIZE)
+                        .style(theme::check),
+                )
+                .width(Length::Fill),
+                text(if connected {
+                    tr("extension connected")
+                } else {
+                    String::new()
+                })
+                .size(theme::FONT_SIZE - 1.0)
+                .color(hex(theme::PROGRESS_GREEN)),
+            ]
+            .align_y(iced::Alignment::Center),
         );
     }
     // Dock/taskbar visibility exists only where the tray can take over the
@@ -122,6 +146,14 @@ fn general(app: &App) -> El<'_> {
             tr("Autostart launches stay in the tray; open the window from the tray icon."),
         ),
         hinted(
+            checkbox(s.close_to_tray).label(tr("Close to system tray"))
+                .on_toggle(|b| o(OptField::CloseToTray(b)))
+                .size(15.0)
+                .text_size(theme::FONT_SIZE)
+                .style(theme::check),
+            tr("Closing the main window leaves Hydra running in the tray, where queues and transfers carry on; open it again from the tray icon. Off: closing the window exits Hydra."),
+        ),
+        hinted(
             checkbox(s.check_updates_on_startup).label(tr("Check for updates on startup"))
                 .on_toggle(|b| o(OptField::CheckUpdates(b)))
                 .size(15.0)
@@ -174,7 +206,9 @@ fn general(app: &App) -> El<'_> {
             .width(Length::Fill)
             .style(theme::panel)
             .into(),
-        text(tr("Browser extensions are configured from the extensions/ directory of the project."))
+        text(tr(
+            "Hydra registers itself with these browsers automatically; install the Hydra extension in each one you tick."
+        ))
             .size(theme::FONT_SIZE - 1.0)
             .color(theme::dim_text(&iced::Theme::Light))
             .into(),
@@ -680,6 +714,14 @@ const CHROME_STORE: &str =
     "https://chromewebstore.google.com/detail/hydra-download-manager-in/oieelfilllghmbnhofajpgpmmilfihmo";
 
 /// The Firefox Add-ons listing.
+/// The setup guide behind the FFmpeg row. A wiki page rather than a
+/// paragraph in this dialog: what to install differs per platform, and it
+/// changes faster than the app ships.
+const FFMPEG_WIKI: &str = "https://github.com/ja7ad/hydra/wiki/Hydra-ffmpeg-integration";
+
+/// The "not present" counterpart to `theme::PROGRESS_GREEN`.
+const OFFLINE_RED: u32 = 0xB3462E;
+
 const FIREFOX_STORE: &str = "https://addons.mozilla.org/en-US/firefox/addon/hdm-integration/";
 
 /// The Microsoft Edge Add-ons listing: same extension, Edge's own store.
@@ -712,6 +754,58 @@ fn ext_row<'a>(
             // run long once translated and a fixed 132 px clips them.
             match msg {
                 Some(m) => dlg_btn_auto_primary(label, Some(m)),
+                None => dlg_btn_auto(label, None),
+            },
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
+    )
+    .padding(10)
+    .width(Length::Fill)
+    .style(theme::panel)
+    .into()
+}
+
+/// The FFmpeg row, which reports what is actually on THIS machine rather
+/// than describing ffmpeg in the abstract. A green dot and no guide when it
+/// is installed; a red dot and the guide when it is not — the button is only
+/// there while it has something to tell you.
+fn ffmpeg_row<'a>() -> El<'a> {
+    let found = hya_stream::ffmpeg();
+    let (dot, about, label, link) = match &found {
+        Some(path) => (
+            hex(theme::PROGRESS_GREEN),
+            format!("{} {}", tr("FFmpeg installed!"), path.display()),
+            tr("Installed"),
+            None,
+        ),
+        None => (
+            hex(OFFLINE_RED),
+            tr("Not found on PATH. HLS and DASH still download, but MPEG-TS is saved as .ts instead of .mp4, and DASH audio stays in its own file."),
+            tr("FFmpeg setup guide"),
+            Some(FFMPEG_WIKI),
+        ),
+    };
+    container(
+        row![
+            row![
+                iced::widget::svg(crate::icons::folder_video())
+                    .width(30.0)
+                    .height(30.0),
+                text("\u{25CF}").size(theme::FONT_SIZE - 3.0).color(dot),
+            ]
+            .spacing(4)
+            .align_y(iced::Alignment::Center),
+            column![
+                text("FFmpeg").size(theme::FONT_SIZE + 1.0),
+                text(about)
+                    .size(theme::FONT_SIZE - 1.0)
+                    .color(theme::dim_text(&iced::Theme::Light)),
+            ]
+            .spacing(3)
+            .width(Length::Fill),
+            match link {
+                Some(url) => dlg_btn_auto_primary(label, Some(Message::OptExtStore(url))),
                 None => dlg_btn_auto(label, None),
             },
         ]
@@ -766,6 +860,8 @@ fn extensions(_app: &App) -> El<'_> {
             tr("Not on store yet"),
             None,
         ),
+        section(tr("Media tools")),
+        ffmpeg_row(),
     ]
     .spacing(10)
     .into()

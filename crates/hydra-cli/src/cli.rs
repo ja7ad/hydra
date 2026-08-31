@@ -308,6 +308,49 @@ pub struct Cli {
     #[arg(value_name = "URL")]
     pub urls: Vec<String>,
 
+    /// Preferred rendition height for an HLS/DASH stream, e.g. `--quality 720`.
+    ///
+    /// The nearest rendition at or below it is used — never a larger one, so
+    /// asking for 720 on a ladder that only has 1080 gives you the smallest
+    /// available rather than a surprise 4K download.
+    #[arg(long = "quality", value_name = "HEIGHT")]
+    pub quality: Option<u32>,
+
+    /// Container for a downloaded stream: `mp4` (default) or `ts`.
+    ///
+    /// MPEG-TS segments become MP4 through ffmpeg when it is installed;
+    /// without it, ask for `ts` and get the assembled transport stream.
+    #[arg(long = "container", value_name = "FMT", default_value = "mp4")]
+    pub container: String,
+
+    /// Report what the server says about a URL, then exit.
+    ///
+    /// For an ordinary object that is its size, type, and modification date;
+    /// for a stream manifest it is the renditions on offer. Nothing is
+    /// downloaded either way.
+    ///
+    /// Kept separate from `--list-streams` because the two differ on what a
+    /// URL that is NOT a manifest means: here it is an ordinary answer,
+    /// there it is a failed premise.
+    #[arg(long = "inspect")]
+    pub inspect: bool,
+
+    /// List the renditions a stream manifest offers, then exit.
+    ///
+    /// A manifest is a few kilobytes, so this is the cheap way to see what a
+    /// `--quality` is choosing between. A URL that turns out not to be a
+    /// manifest is an error, not an invitation to download it.
+    #[arg(long = "list-streams")]
+    pub list_streams: bool,
+
+    /// Record a LIVE stream for this many seconds, then finish the file.
+    ///
+    /// A live stream has no end of its own, so without this the only way to
+    /// stop is Ctrl-C. Either way the result is a complete, playable file —
+    /// stopping a recording is not an interruption, it is the end of it.
+    #[arg(long = "record-seconds", value_name = "SECONDS")]
+    pub record_seconds: Option<u64>,
+
     /// Write output to this file (`-O`).
     #[arg(short = 'O', long = "output", value_name = "FILE")]
     pub output: Option<PathBuf>,
@@ -842,6 +885,12 @@ pub enum Command {
         /// bash | zsh | fish | elvish | powershell
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+
+        /// Command the script completes. Defaults to `hydra`; pass `hya` for
+        /// the short name the installers link next to it, which needs its own
+        /// script because a completion script names the command it serves.
+        #[arg(long = "bin-name", value_name = "NAME")]
+        bin_name: Option<String>,
     },
 
     /// Check whether a newer hydra release is available.
@@ -919,6 +968,12 @@ pub enum Command {
         /// Print the destination path and script without writing anything.
         #[arg(long)]
         dry_run: bool,
+
+        /// Command the script completes. Defaults to `hydra`; pass `hya` for
+        /// the short name the installers link next to it, which needs its own
+        /// script because a completion script names the command it serves.
+        #[arg(long = "bin-name", value_name = "NAME")]
+        bin_name: Option<String>,
     },
 }
 

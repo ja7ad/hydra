@@ -30,6 +30,7 @@
 - [Installation](#installation)
   - [Homebrew (macOS / Linux)](#homebrew-macos--linux)
   - [Linux Packages (Ubuntu PPA / Fedora COPR / Arch Linux AUR)](#linux-packages-ubuntu-ppa--fedora-copr--arch-linux-aur)
+  - [AppImage (portable, self-updating)](#appimage-portable-self-updating)
   - [Quick Install (prebuilt binaries)](#quick-install-prebuilt-binaries)
   - [From Source](#from-source)
   - [Browser Extension](#browser-extension)
@@ -74,6 +75,7 @@
 
 ### CLI
 
+- **`hydra` or `hya`** — the same CLI under a short second name, on every platform
 - **`wget` / `curl` Compatible** — drop-in flag and dialect support
 - **Interactive TUI** — manage, pause, resume, and monitor queued downloads
 - **Smart File Sorting** — content-based type detection and auto-sort
@@ -148,6 +150,56 @@ paru -S hydra-download-manager-bin
 
 > AUR Packages: [hydra-download-manager](https://aur.archlinux.org/packages/hydra-download-manager) | [hydra-download-manager-bin](https://aur.archlinux.org/packages/hydra-download-manager-bin)
 
+### AppImage (portable, self-updating)
+
+One file, no installation, no root. Download it from the
+[latest release](https://github.com/ja7ad/hydra/releases/latest), make it
+executable, and run it:
+
+```bash
+chmod +x Hydra-*-x86_64.AppImage
+./Hydra-*-x86_64.AppImage
+```
+
+`aarch64` images are published alongside the `x86_64` ones. Every release is
+built on the oldest supported Ubuntu and verified to run on 22.04 through the
+current release, so one image covers the whole line and the distributions
+downstream of it.
+
+The image carries the GUI, the `hydra` CLI, the `hydra-host` native-messaging
+bridge and the update finisher. On its first start it writes a menu entry, a
+copy of the browser extensions and the native-messaging manifests into
+`~/.local/share/hydra` — all of them pointing at the image file, so moving or
+renaming it is repaired on the next launch. Nothing is written outside your
+home directory and nothing needs root.
+
+| Command | What it does |
+| --- | --- |
+| `./Hydra-*.AppImage` | run the GUI |
+| `./Hydra-*.AppImage --hydra-exec hydra …` | run the CLI inside the image |
+| `./Hydra-*.AppImage --hydra-install` | write the menu entry and browser manifests now |
+| `./Hydra-*.AppImage --hydra-uninstall` | remove them again (downloads and settings are kept) |
+| `./Hydra-*.AppImage --hydra-extensions` | print the directory to load the unpacked extensions from |
+
+Set `HYDRA_APPIMAGE_NO_INTEGRATION=1` for a run that writes nothing outside
+your download directory. For a fully self-contained copy — settings included —
+create a directory named after the image with a `.home` suffix next to it
+(`Hydra-0.3.14-x86_64.AppImage.home`); the AppImage runtime then uses it as
+`$HOME`, which is what makes the image portable across machines on a USB stick.
+
+**Updates.** This is the one Linux build Hydra can update itself: the deb and
+the rpm install into `/usr`, which only their package manager may rewrite, so
+the in-app updater offers you the new package instead of touching those files.
+An AppImage is a single file you own wherever you put it, so **Update Now**
+replaces that file and relaunches — including when it sits somewhere only root
+can write, where it asks for your password first. The image also advertises
+zsync update information, so `AppImageUpdate` and `appimaged` can update it
+too.
+
+Because it does not bundle GTK, the graphics stack or ALSA — those come from
+your desktop, where they are already correct — a portal-capable desktop is
+still what the file dialogs need. Nothing else is required.
+
 ### Quick Install (prebuilt binaries)
 
 **macOS / Linux** — installs the GUI bundle (GUI + CLI + browser extensions) by default:
@@ -174,12 +226,12 @@ CLI only:
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ja7ad/hydra/main/install.ps1))) -Cli
 ```
 
-The scripts detect your OS and architecture (amd64/arm64), fetch the matching archive from the [latest GitHub release](https://github.com/ja7ad/hydra/releases/latest), and install it — on Linux and macOS to `/usr/local` (falling back to `~/.local`; override with `--prefix DIR`), on Windows to `%LOCALAPPDATA%\Programs\Hydra`. GUI installs also register the browser native-messaging host. Pin a release with `--version vX.Y.Z` / `-Version vX.Y.Z`, or download the archives yourself from the [releases page](https://github.com/ja7ad/hydra/releases).
+The scripts detect your OS and architecture (amd64/arm64), fetch the matching archive from the [latest GitHub release](https://github.com/ja7ad/hydra/releases/latest), and install it — on Linux and macOS to `/usr/local` (falling back to `~/.local`; override with `--prefix DIR`), on Windows to `%LOCALAPPDATA%\Programs\Hydra`. The CLI lands under both `hydra` and the short `hya`; an existing `hya` on the same prefix is never overwritten. GUI installs also register the browser native-messaging host. Pin a release with `--version vX.Y.Z` / `-Version vX.Y.Z`, or download the archives yourself from the [releases page](https://github.com/ja7ad/hydra/releases).
 
 A GUI install is a real desktop app, not a loose binary:
 
 - **Windows** — a start-menu shortcut (`-Desktop` adds a desktop one) and an **Apps & features** entry, so Hydra is listed and uninstallable from Settings like any other app.
-- **macOS** — `Hydra Download Manager.app` is installed into `/Applications` (override with `--app-dir DIR`, e.g. `~/Applications`), with its icon and name in Launchpad, Spotlight, the Dock and the app switcher. `hydra`, `hydra-gui` and `hydra-host` in `<prefix>/bin` are symlinks into the app, so the CLI stays on `PATH` and one update refreshes both.
+- **macOS** — `Hydra Download Manager.app` is installed into `/Applications` (override with `--app-dir DIR`, e.g. `~/Applications`), with its icon and name in Launchpad, Spotlight, the Dock and the app switcher. `hydra`, `hya`, `hydra-gui` and `hydra-host` in `<prefix>/bin` are symlinks into the app, so the CLI stays on `PATH` and one update refreshes both.
 - **Linux** — the logo lands in the hicolor icon theme and a `hydra.desktop` entry in your applications directory (plus the prefix's, for a system-wide install), so the app shows up in the launcher, the dock and the switcher with its own icon.
 
 Either way the GUI can update itself in place afterwards (**Options → General → Check for updates**), including an install that lives in a root-owned directory — it asks for authorisation before replacing those files.
@@ -245,6 +297,7 @@ Every installer also ships pre-built extension packages with the app in both pac
 | macOS (.app / DMG) | `Hydra Download Manager.app/Contents/Resources/extensions` |
 | macOS (.pkg) | `/Library/Application Support/Hydra/extensions` |
 | Linux (.deb / .rpm) | `/usr/share/hydra-download-manager/extensions` |
+| Linux (AppImage) | `~/.local/share/hydra/extensions` |
 | Archive / `install.sh` | `<prefix>/share/hydra/extensions` |
 
 ##### Sideloading Unpacked / Development Builds
@@ -330,6 +383,14 @@ hydra https://example.com/archive.tar.gz
 # Specify output destination
 hydra https://example.com/archive.tar.gz -o output.tar.gz
 ```
+
+> **`hya` works everywhere `hydra` does.** Every install channel — the install
+> scripts, Homebrew, the `.deb`/`.rpm`/AUR packages, the macOS `.pkg` and the
+> Windows installer — puts the CLI on your `PATH` under both names. It is
+> three letters to type, and it is also the name to reach for on a machine
+> that already has [THC-Hydra](https://github.com/vanhauser-thc/thc-hydra),
+> the login auditor, which is `hydra` too. Shell completions are installed for
+> both; `hydra install-completions --bin-name hya` adds them by hand.
 
 ### Multi-Connection & Mirror Sources
 

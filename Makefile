@@ -6,6 +6,7 @@
 #   make deb        Debian/Ubuntu package                 -> target/dist/*.deb
 #   make rpm        Fedora/RHEL/openSUSE package          -> target/dist/*.rpm
 #   make linux      both deb and rpm
+#   make appimage   portable, self-updating AppImage    -> target/dist/*.AppImage
 #   make package    the right artifact(s) for the OS make runs on
 #
 #   make extensions  browser extensions: packed .xpi + .zip (+ .crx with a
@@ -31,7 +32,7 @@ VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 PROFILE ?= release
 CARGO   ?= cargo
 
-.PHONY: all build cli gui host app dmg deb rpm linux windows package clean \
+.PHONY: all build cli gui host app dmg deb rpm linux appimage windows package clean \
         extensions \
         require-macos require-linux ffi header header-check ffi-compat \
         ffi-test ffi-dist ffi-android ffi-apple
@@ -137,6 +138,14 @@ rpm: require-linux
 
 linux: require-linux
 	scripts/package-linux.sh all
+
+# One self-contained file the user owns wherever they put it — which is also
+# what lets Hydra update itself from it, unlike the deb and the rpm whose
+# files belong to the package manager.
+#
+#   make appimage ARGS=--no-build   package binaries that are already built
+appimage: require-linux
+	scripts/package-appimage.sh $(ARGS)
 
 windows:
 	scripts/build-windows-installer.sh x64

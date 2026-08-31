@@ -14,6 +14,35 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  rpm-spec:
+    name: RPM Spec
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Render the spec and build a source RPM
+        run: |
+          set -euo pipefail
+          # The release workflow ships whatever this produces to Copr, which
+          # rebuilds the SRPM from the imported spec with no defines of its own.
+          # Building one here catches a broken render, a stale placeholder or a
+          # malformed spec at PR time instead of at release time.
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          RPM_TOP="$RUNNER_TEMP/rpmbuild"
+          mkdir -p "$RPM_TOP"/{SOURCES,SRPMS,SPECS,BUILD}
+          git archive --format=tar.gz --prefix="hydra-${VERSION}/" HEAD \
+            > "$RPM_TOP/SOURCES/hydra-${VERSION}.tar.gz"
+
+          scripts/render-rpm-spec.sh "" "$RPM_TOP/SPECS/hydra.spec"
+          grep -q "^%global _version ${VERSION}$" "$RPM_TOP/SPECS/hydra.spec"
+
+          rpmbuild -bs --define "_topdir $RPM_TOP" "$RPM_TOP/SPECS/hydra.spec"
+          ls "$RPM_TOP"/SRPMS/hydra-${VERSION}-*.src.rpm
+
   fmt:
     name: Code Formatting
     runs-on: ubuntu-latest

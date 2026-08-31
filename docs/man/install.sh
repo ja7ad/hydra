@@ -12,7 +12,9 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 prefix=${PREFIX:-/usr/local}
 mandir=${MANDIR:-$prefix/share/man}/man1
-pages="hydra.1 hydra-interactive.1 hydra-checksum.1 hydra-parity.1 hydra-formats.1 hydra-bench.1 hydra-completions.1"
+# hya.1 is a symlink to hydra.1: the CLI answers to both names, and `man hya`
+# should reach the same page.
+pages="hydra.1 hya.1 hydra-interactive.1 hydra-checksum.1 hydra-parity.1 hydra-formats.1 hydra-bench.1 hydra-completions.1 hydra-host.1"
 
 # mandoc is the stricter of the two renderers and ships with macOS and the BSDs;
 # groff is the Linux default. Use whichever exists, prefer mandoc for lint.

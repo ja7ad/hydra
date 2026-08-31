@@ -30,6 +30,12 @@ override_dh_auto_install:
 	install -Dm755 target/release/hydra-gui debian/hydra/usr/bin/hydra-gui
 	install -Dm755 target/release/hydra-host debian/hydra/usr/bin/hydra-host
 
+	# Short second name for the CLI: `hydra` collides with THC-Hydra, which
+	# this package already Conflicts with, and three letters types better for
+	# a command run as often as a download. Relative, so it resolves inside
+	# whatever root the package is unpacked into.
+	ln -sf hydra debian/hydra/usr/bin/hya
+
 	install -Dm644 debian/hydra.desktop debian/hydra/usr/share/applications/hydra.desktop || install -Dm644 packaging/debian/hydra.desktop debian/hydra/usr/share/applications/hydra.desktop
 	install -Dm644 debian/hydra-autostart.desktop debian/hydra/etc/xdg/autostart/hydra.desktop || install -Dm644 packaging/debian/hydra-autostart.desktop debian/hydra/etc/xdg/autostart/hydra.desktop
 

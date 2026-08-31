@@ -40,6 +40,7 @@ mod progress;
 mod prompt;
 mod queue;
 mod realnet;
+mod stream;
 mod tui;
 mod update;
 mod url;
@@ -254,6 +255,37 @@ fn print_formats(as_json: bool, category: Option<&str>, what: Option<&str>) {
     }
 }
 
+/// The flag that stops this from being a plain, whole-object download, if
+/// any. `None` means the command line asks for the ordinary thing.
+///
+/// ONE list, two callers, on purpose. The stream path uses it to decide
+/// whether a manifest may be attempted at all, and `--inspect` uses it to
+/// refuse rather than be silently dropped. Kept as two hand-maintained
+/// copies, adding a mode flag to one and forgetting the other is what
+/// silently ignores a flag the user typed — the exact bug the refusal
+/// exists to prevent.
+fn plain_download_conflict(args: &cli::Cli) -> Option<&'static str> {
+    if args.spider {
+        return Some("--spider");
+    }
+    if args.stdout {
+        return Some("--stdout");
+    }
+    if args.no_save {
+        return Some("--no-save");
+    }
+    if args.checksum.is_some() {
+        return Some("--checksum");
+    }
+    if args.range.is_some() {
+        return Some("--range");
+    }
+    if args.start_pos.is_some() {
+        return Some("--start-pos");
+    }
+    None
+}
+
 /// Parse an HTTP byte range: `0-1023`, `1024-`, or `-512` (last 512 bytes).
 ///
 /// Returns a [`download::RangeSpec`] rather than a sentinel-encoded pair. An
@@ -418,8 +450,9 @@ async fn async_main() -> std::process::ExitCode {
         Some(cli::Command::Update { json, beta }) => {
             return update::run(*json, *beta).await;
         }
-        Some(cli::Command::Completions { shell }) => {
-            print!("{}", completions::render(*shell));
+        Some(cli::Command::Completions { shell, bin_name }) => {
+            let bin = bin_name.as_deref().unwrap_or(completions::DEFAULT_BIN);
+            print!("{}", completions::render(*shell, bin));
             return std::process::ExitCode::SUCCESS;
         }
         Some(cli::Command::CompatLink {
@@ -496,7 +529,9 @@ async fn async_main() -> std::process::ExitCode {
             shell,
             system,
             dry_run,
+            bin_name,
         }) => {
+            let bin = bin_name.as_deref().unwrap_or(completions::DEFAULT_BIN);
             let shell = match shell.or_else(completions::detect_shell) {
                 Some(s) => s,
                 None => {
@@ -507,15 +542,18 @@ async fn async_main() -> std::process::ExitCode {
                     return std::process::ExitCode::from(2);
                 }
             };
-            match completions::install(shell, *system, *dry_run) {
+            match completions::install(shell, *system, *dry_run, bin) {
                 Ok(dest) => {
                     if *dry_run {
                         println!(
-                            "would install {shell} completions to {}",
+                            "would install {shell} completions for {bin} to {}",
                             dest.path.display()
                         );
                     } else {
-                        println!("installed {shell} completions to {}", dest.path.display());
+                        println!(
+                            "installed {shell} completions for {bin} to {}",
+                            dest.path.display()
+                        );
                     }
                     if let Some(step) = dest.remaining_step {
                         println!("remaining step: {step}");
@@ -610,6 +648,100 @@ async fn async_main() -> std::process::ExitCode {
     // Several URLs mean several FILES unless mirror assembly is asked for. Building one
     // job per URL rather than one job with many sources is what makes that true.
     let multi = urls.len() > 1 && !args.mirrors;
+
+    // `--inspect` and `--list-streams` ask a QUESTION about one object. When
+    // the rest of the command line makes that question unanswerable, dropping
+    // the flag and carrying on turns "tell me about this" into "download
+    // this" — writing files the user never asked for. Say what clashed.
+    //
+    // Only flags the user TYPED are checked here. The manifest auto-detect
+    // below falls back to a plain download on purpose: nobody asked it a
+    // question, so it has nothing to refuse.
+    if args.inspect || args.list_streams {
+        let flag = if args.inspect {
+            "--inspect"
+        } else {
+            "--list-streams"
+        };
+        if let Some(other) = plain_download_conflict(&args) {
+            eprintln!("hydra: {flag} cannot be combined with {other}");
+            return std::process::ExitCode::from(2);
+        }
+        if multi {
+            eprintln!(
+                "hydra: {flag} reports on one URL at a time, but {} were given \
+                 (pass one, or --mirrors if they are mirrors of the same object)",
+                urls.len()
+            );
+            return std::process::ExitCode::from(2);
+        }
+    }
+
+    // A manifest is not a file, so it cannot go through the range scheduler.
+    // Only URLs that claim to be one are tried, and only in the plain
+    // download mode: --spider, --stdout, --checksum and friends all ask a
+    // question about a single object that a segmented stream cannot answer.
+    let plain = plain_download_conflict(&args).is_none();
+    // Either flag forces the attempt: both owe an answer that a plain
+    // download cannot give.
+    if !multi
+        && plain
+        && (args.list_streams || args.inspect || stream::looks_like_manifest(&urls[0]))
+    {
+        let sjob = stream::Job {
+            url: urls[0].clone(),
+            output: args.output.clone(),
+            output_dir: args.output_dir.clone(),
+            quality: args.quality,
+            container: args.container.clone(),
+            headers: args.headers.clone(),
+            user_agent: args.user_agent.clone(),
+            limit_rate,
+            quiet: args.quiet || args.json,
+            no_progress: args.no_progress,
+            insecure: args.insecure,
+            list: args.list_streams || args.inspect,
+            record_seconds: args.record_seconds,
+            // The same `-n` that governs connections for a file governs
+            // segments in flight for a stream.
+            conns: args.requested_conns().unwrap_or(0),
+        };
+
+        // `--adaptive` is about ranged file downloads; saying so beats
+        // silently ignoring a flag the user typed.
+        if args.adaptive && !args.quiet {
+            eprintln!("hydra: --adaptive does not apply to streams; using -x segments in flight");
+        }
+        match stream::run(sjob.clone()).await {
+            // Not a manifest. What that means depends on which flag asked:
+            // `--inspect` still owes an answer about the object, while
+            // `--list-streams` asked a question whose premise just failed.
+            // Neither may quietly start a download nobody requested.
+            stream::Verdict::NotAManifest if args.inspect => {
+                return match stream::inspect_file(&sjob).await {
+                    Ok(()) => std::process::ExitCode::SUCCESS,
+                    Err(e) => {
+                        eprintln!("hydra: {e}");
+                        std::process::ExitCode::FAILURE
+                    }
+                };
+            }
+            stream::Verdict::NotAManifest if args.list_streams => {
+                eprintln!("hydra: {} is not an HLS or DASH manifest", urls[0]);
+                return std::process::ExitCode::FAILURE;
+            }
+            // Not a stream, and nobody asked a question: download it.
+            stream::Verdict::NotAManifest => {}
+            stream::Verdict::Listed | stream::Verdict::Done { .. } => {
+                return std::process::ExitCode::SUCCESS
+            }
+            stream::Verdict::Failed(e) => {
+                eprintln!("hydra: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    }
+
     let job = download::Job {
         ticks: None,
         urls: if multi {

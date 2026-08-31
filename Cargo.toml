@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/hydra-core", "crates/hydra-net", "crates/hydra-ffi", "crates/hydra-cli", "crates/hydra-gui", "crates/hydra-host", "crates/hydra-updater"]
+members = ["crates/hydra-core", "crates/hydra-net", "crates/hydra-stream", "crates/hydra-ffi", "crates/hydra-cli", "crates/hydra-gui", "crates/hydra-host", "crates/hydra-updater"]
 resolver = "2"
 
 [workspace.package]
@@ -8,7 +8,7 @@ resolver = "2"
 # Manager" release. The library crates (hya-core, hya-net) do NOT inherit
 # it — each carries its own version in its manifest and bumps independently
 # on its own semver cadence.
-version = "0.3.14"
+version = "0.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ja7ad/hydra"
@@ -17,6 +17,9 @@ homepage = "https://github.com/ja7ad/hydra"
 [workspace.dependencies]
 hya-core = { path = "crates/hydra-core" }
 hya-net = {  path = "crates/hydra-net" }
+# HLS/DASH manifests and segment assembly. Depends on nothing of Hydra's, so
+# both the GPL binaries and a permissive consumer can use it.
+hya-stream = { path = "crates/hydra-stream" }
 # The C ABI over the engine. Depends on hya-core and hya-net only — never on
 # the GPL CLI/GUI crates, so it stays embeddable under MIT/Apache-2.0.
 hya-ffi = { path = "crates/hydra-ffi" }
@@ -43,6 +46,12 @@ reed-solomon-simd = "3"
 # what Content-MD5 and x-goog-hash carry, so verifying against them needs it.
 md-5 = "0.11"
 sha1 = "0.11"
+# HLS AES-128: the segments are AES-128-CBC with a key the playlist names
+# and fetches over the same authenticated session. Ordinary content
+# protection, not DRM — and audited implementations, because hand-rolling a
+# block cipher is how you get a subtly wrong one.
+aes = "0.9"
+cbc = { version = "0.2", features = ["block-padding"] }
 # SIMD byte search with runtime dispatch (AVX2/SSE2 on x86-64, NEON on aarch64)
 # and a scalar fallback. Used by the protocol framing paths.
 memchr = "2"

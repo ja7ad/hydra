@@ -54,10 +54,68 @@ pub struct ExtDownload {
     pub tab_url: Option<String>,
 }
 
+/// One rendition of a stream, as the extension read it out of the manifest.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ExtVariant {
+    /// The variant playlist itself, when the manifest named one. Used as the
+    /// fallback target when `ExtStream::variant_url` is absent.
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Height is what a person picks by, and what the engine matches on.
+    #[serde(default)]
+    pub height: Option<u32>,
+    #[serde(default)]
+    pub bandwidth: Option<u64>,
+    #[serde(default)]
+    pub codecs: Option<String>,
+}
+
+/// An adaptive stream handed over by the browser. Distinct from
+/// [`ExtDownload`] on purpose: the URL names a MANIFEST, not a file, so the
+/// ordinary capture path would save a few kilobytes of playlist text.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ExtStream {
+    /// The manifest, as the browser requested it.
+    pub url: String,
+    /// "hls" or "dash".
+    #[serde(default)]
+    pub protocol: Option<String>,
+    /// The exact variant playlist the user chose in the popup or the
+    /// in-page panel.
+    #[serde(default)]
+    pub variant_url: Option<String>,
+    #[serde(default)]
+    pub variant: Option<ExtVariant>,
+    /// "MP4" or "TS": the container the user picked.
+    #[serde(default)]
+    pub container: Option<String>,
+    /// Suggested name, taken from the page title.
+    #[serde(default)]
+    pub filename: Option<String>,
+    #[serde(default)]
+    pub cookies: Option<String>,
+    #[serde(default)]
+    pub referer: Option<String>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    #[serde(default)]
+    pub tab_url: Option<String>,
+    #[serde(default)]
+    pub live: bool,
+    /// Seconds, when the manifest stated one.
+    #[serde(default)]
+    pub duration: Option<f64>,
+    /// Bitrate x duration, as the extension estimated it.
+    #[serde(default)]
+    pub size: Option<u64>,
+}
+
 #[derive(Clone, Debug)]
 pub enum ExtEvent {
     /// Single captured download -> Download File Info dialog.
     Download(ExtDownload),
+    /// A manifest -> the stream-aware download path.
+    Stream(Box<ExtStream>),
     /// "Download all links": many URLs -> the batch window.
     Links(Vec<String>),
     /// Popup's "Open Hydra": surface the main window.
@@ -71,12 +129,18 @@ pub enum ExtEvent {
 /// Mirrors the Options fields the extension needs for filtering.
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct ExtConfig {
-    /// "Google Chrome" checkbox state under Options > General.
+    /// Capture flag for the browser that asked. Resolved per request from
+    /// `browsers` — an extension only ever sees its own row.
     pub capture: bool,
     /// Space-separated extension list (Options > File Types).
     pub auto_types: String,
     /// Sites whose downloads are never captured.
     pub dont_start_sites: String,
+    /// Every row of Options > General > "Capture downloads from the following
+    /// browsers", in order. Not serialized: the extension is told about
+    /// itself, not about the user's other browsers.
+    #[serde(skip)]
+    pub browsers: Vec<(String, bool)>,
 }
 
 static TX: OnceLock<UnboundedSender<ExtEvent>> = OnceLock::new();
@@ -103,23 +167,85 @@ pub fn take_events() -> Option<UnboundedReceiver<ExtEvent>> {
 /// UI thread pushes the fields the extension mirrors; called at boot and on
 /// every config save, so the socket side never touches `App`.
 pub fn publish_config(cfg: &crate::model::ConfigFile) {
-    let capture = cfg
-        .settings
-        .capture_browsers
+    let browsers = cfg.settings.capture_browsers.clone();
+    // Default for a request that does not say which browser it is (an
+    // extension older than the `browser` field): the Chromium-family row,
+    // which is what the previous single-flag behaviour meant.
+    let capture = browsers
         .iter()
-        .find(|(name, _)| {
-            name.contains("Chrome") || name.contains("Edge") || name.contains("Opera")
-        })
+        .find(|(name, _)| name.contains("Chrome"))
         .map(|(_, on)| *on)
         .unwrap_or(true);
     let snap = ExtConfig {
         capture,
         auto_types: cfg.settings.auto_types.clone(),
         dont_start_sites: cfg.settings.dont_start_sites.clone(),
+        browsers,
     };
     if let Ok(mut g) = CFG.lock() {
         *g = Some(snap);
     }
+}
+
+/// Browsers that have spoken to us recently, by the label Options shows.
+/// The extension heartbeats every 20 s, so anything inside a minute is a
+/// live connection; the window is generous so one dropped beat does not
+/// make the row flicker.
+static SEEN: Mutex<Option<Vec<(String, std::time::Instant)>>> = Mutex::new(None);
+const SEEN_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+fn note_browser(name: &str) {
+    let Ok(mut g) = SEEN.lock() else { return };
+    let list = g.get_or_insert_with(Vec::new);
+    let now = std::time::Instant::now();
+    match list.iter_mut().find(|(n, _)| n == name) {
+        Some(e) => e.1 = now,
+        None => list.push((name.to_string(), now)),
+    }
+}
+
+/// Labels of the browsers whose extension is connected right now, for the
+/// status column in Options > General.
+pub fn live_browsers() -> Vec<String> {
+    let Ok(g) = SEEN.lock() else { return vec![] };
+    let now = std::time::Instant::now();
+    g.as_ref()
+        .map(|l| {
+            l.iter()
+                .filter(|(_, t)| now.duration_since(*t) < SEEN_TTL)
+                .map(|(n, _)| n.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Resolve the row for the browser that sent this request. Matching is by
+/// the exact label the extension reports, then by keyword, so a rename in
+/// the settings list does not silently disable capture.
+fn capture_for(cfg: &ExtConfig, browser: Option<&str>) -> bool {
+    let Some(want) = browser else {
+        return cfg.capture;
+    };
+    let want_l = want.to_ascii_lowercase();
+    if let Some((_, on)) = cfg
+        .browsers
+        .iter()
+        .find(|(n, _)| n.eq_ignore_ascii_case(want))
+    {
+        return *on;
+    }
+    for key in ["edge", "opera", "firefox", "safari", "chrome"] {
+        if want_l.contains(key) {
+            if let Some((_, on)) = cfg
+                .browsers
+                .iter()
+                .find(|(n, _)| n.to_ascii_lowercase().contains(key))
+            {
+                return *on;
+            }
+        }
+    }
+    cfg.capture
 }
 
 fn config_snapshot() -> ExtConfig {
@@ -343,6 +469,38 @@ fn dispatch(req: &serde_json::Value, trusted: bool) -> serde_json::Value {
             }
             _ => (false, Some("bad download request")),
         },
+        Some("stream") => match serde_json::from_value::<ExtStream>(req.clone()) {
+            Ok(s) if !s.url.is_empty() => {
+                crate::log::info(&format!(
+                    "extbus: stream {} ({} {}, container={}, live={}, from={})",
+                    s.url,
+                    s.protocol.as_deref().unwrap_or("?"),
+                    s.variant
+                        .as_ref()
+                        .and_then(|v| v.height)
+                        .map(|h| format!("{h}p"))
+                        .unwrap_or_else(|| "auto".into()),
+                    s.container.as_deref().unwrap_or("MP4"),
+                    s.live,
+                    s.tab_url.as_deref().unwrap_or("-"),
+                ));
+                crate::log::debug(&format!(
+                    "extbus: stream codecs={} duration={} ua={}",
+                    s.variant
+                        .as_ref()
+                        .and_then(|v| v.codecs.as_deref())
+                        .unwrap_or("-"),
+                    s.duration
+                        .map(|d| format!("{d:.0}s"))
+                        .as_deref()
+                        .unwrap_or("-"),
+                    s.user_agent.as_deref().unwrap_or("-"),
+                ));
+                let _ = sender().send(ExtEvent::Stream(Box::new(s)));
+                (true, None)
+            }
+            _ => (false, Some("bad stream request")),
+        },
         Some("links") => {
             let urls: Vec<String> = req
                 .get("urls")
@@ -366,9 +524,15 @@ fn dispatch(req: &serde_json::Value, trusted: bool) -> serde_json::Value {
     };
 
     let cfg = config_snapshot();
+    // Every reply carries the settings the extension mirrors — but `capture`
+    // is that BROWSER's checkbox, not one flag shared by all of them.
+    let browser = req.get("browser").and_then(|b| b.as_str());
+    if let Some(b) = browser {
+        note_browser(b);
+    }
     let mut v = serde_json::json!({
         "ok": ok,
-        "capture": cfg.capture,
+        "capture": capture_for(&cfg, browser),
         "auto_types": cfg.auto_types,
         "dont_start_sites": cfg.dont_start_sites,
         "version": env!("CARGO_PKG_VERSION"),

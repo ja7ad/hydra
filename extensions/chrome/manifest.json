@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Hydra Download Manager Integration",
-  "version": "0.2.2",
-  "description": "A browser integration for Hydra: automatic download capture, right-click downloads, and media sniffing.",
+  "version": "0.3.0",
+  "description": "A browser integration for Hydra: automatic download capture, right-click downloads, and media/HLS/DASH stream sniffing.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt7NVgqBOTaCTKcon/gTK0M4VxY4ZKcyh0pWTVQoWfjJrJlTvRHaWFxE4ZbIj+88zNKJBxVa6uMdQKtK2V+NaPYR1NTYyTDh75UErRI+mx5RXa5c2kiwudl2jwHPsYcUU9NPMI4FwqVFaxEetvIS9J91/3ze5l+FbsZDF0Yvc9uR1dYNnnc//nGg1R+uL0/wus4INeccd9COj10+Aka2SeBkvrVlLs63AMFMkPpN9iIBwyhgs01bulVRFbvHK9m/TizLfthMHAyMCkUdCkZr6gEZbYbwNwGwKCUIswomoiVRgZx/FBFYrh6cRlfoLQZUbS7kFTShpfjm+zEGBkWQ3yQIDAQAB",
   "minimum_chrome_version": "116",
   "permissions": [

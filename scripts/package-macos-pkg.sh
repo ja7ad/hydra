@@ -18,7 +18,7 @@
 #   /usr/local/share/man/man1/hydra*.1
 #       CLI man pages, on the default man path ("man hydra" just works)
 #   postinstall:
-#       symlinks /usr/local/bin/hydra -> the CLI inside the bundle, and
+#       symlinks /usr/local/bin/{hydra,hya} -> the CLI inside the bundle, and
 #       writes the per-user native-messaging manifests for the console user
 #       (extension IDs baked in at build time, no python needed on the target)
 #
@@ -90,6 +90,11 @@ HOST_BIN="$APP/Contents/MacOS/hydra-host"
 
 mkdir -p /usr/local/bin
 ln -sf "$APP/Contents/MacOS/hydra" /usr/local/bin/hydra
+# The short second name for the CLI: `hydra` is also THC-Hydra, which
+# Homebrew ships, and three letters types better for a command run as often
+# as a download. Relative, so it resolves through whatever `hydra` is —
+# including after the app has updated itself.
+ln -sf hydra /usr/local/bin/hya
 
 CONSOLE_USER=$(stat -f%Su /dev/console 2>/dev/null || true)
 case "$CONSOLE_USER" in ""|root|loginwindow|_mbsetupuser) exit 0 ;; esac

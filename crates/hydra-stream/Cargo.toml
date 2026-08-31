@@ -1,0 +1,33 @@
+[package]
+name = "hya-stream"
+version = "0.1.1"
+edition.workspace = true
+# MIT OR Apache-2.0, like hya-core and hya-net and for the same reason: this
+# is a library built to be depended on. Manifest parsing and segment assembly
+# are useful well beyond the Hydra binaries, and copyleft here would force
+# every consumer — libhydra included — to become GPL. See LICENSING.md.
+license = "MIT OR Apache-2.0"
+repository.workspace = true
+homepage.workspace = true
+description = "HLS and MPEG-DASH manifest parsing, segment planning and assembly"
+readme = "README.md"
+
+[dependencies]
+# The same incremental-admission controller the range scheduler uses, applied
+# to the segment dimension: probe one more request at a time, keep it only if
+# it pays for itself. I/O-free, so it costs nothing but arithmetic.
+hya-core = { workspace = true }
+# `time` for the retry backoff, `rt` for the bounded-concurrency window.
+tokio = { workspace = true }
+# HLS AES-128 segment decryption.
+aes = { workspace = true }
+cbc = { workspace = true }
+
+[dev-dependencies]
+# `test-util` for `#[tokio::test(start_paused = true)]`: the stall timeout is
+# a minute of wall clock and three attempts of it is three minutes, which is
+# not a test anyone will run. Paused time settles it instantly.
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

@@ -15,6 +15,8 @@ path = "src/main.rs"
 [dependencies]
 hya-core = { workspace = true }
 hya-net = { workspace = true }
+# HLS/DASH manifests and segment assembly, shared with the CLI.
+hya-stream = { workspace = true }
 # Startup update check + the Update-Now download/extract/finisher pipeline.
 hya-updater = { workspace = true }
 # WebSocket handshake for the browser-extension bridge (extbus): the accept
@@ -145,6 +147,12 @@ winreg = "0.56"
 # so blake3's C NEON path cannot build — the pure-Rust implementation is
 # feature-unified in for Windows targets only (the GUI never bulk-hashes).
 blake3 = { version = "1", features = ["pure"] }
+
+[dev-dependencies]
+# Encrypting fixtures for the AES-128 end-to-end test: the decrypt side is
+# the library's, so the test has to be able to produce real ciphertext.
+aes = { workspace = true }
+cbc = { workspace = true }
 
 [lints]
 workspace = true

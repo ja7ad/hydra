@@ -15,6 +15,9 @@
 # hydra-updater.exe plus the browser extensions and native-host installer, into
 # %LOCALAPPDATA%\Programs\Hydra. -Cli installs only hydra.exe.
 #
+# Both modes also install hya.exe, a short second name for the CLI - see
+# New-CliAlias.
+#
 # A GUI install also gets a start-menu shortcut (-Desktop adds one on the
 # desktop) and an "Apps & features" entry, so Hydra is listed and uninstallable
 # the way Windows expects — the same things the .exe installer registers.
@@ -117,6 +120,39 @@ try {
 
   Copy-Item (Join-Path $Src "hydra.exe") $InstallDir -Force
   Write-Host "installed $InstallDir\hydra.exe"
+
+  # `hydra` is also THC-Hydra, the login auditor that Linux distributions and
+  # Homebrew ship, and three letters is a friendlier thing to type for a
+  # command run as often as a download - so the CLI answers to `hya` too.
+  #
+  # A symbolic link is the one shape that stays correct for free: it resolves
+  # through the name, and the in-app self update replaces hydra.exe in place.
+  # Windows hands those out only to an elevated shell or with Developer Mode
+  # on, so this falls back to a hard link and then to a plain copy; hya_updater
+  # refreshes both of those after an update, because they carry the bits
+  # rather than the name.
+  function New-CliAlias {
+    $HydraExe = Join-Path $InstallDir "hydra.exe"
+    $HyaExe = Join-Path $InstallDir "hya.exe"
+    Remove-Item $HyaExe -Force -ErrorAction SilentlyContinue
+    foreach ($Kind in "SymbolicLink", "HardLink") {
+      try {
+        New-Item -ItemType $Kind -Path $HyaExe -Target $HydraExe -ErrorAction Stop | Out-Null
+        Write-Host "installed $HyaExe ($Kind -> hydra.exe)"
+        return
+      } catch {
+        # Not available on this machine or filesystem; try the next shape.
+      }
+    }
+    Copy-Item $HydraExe $HyaExe -Force
+    Write-Host "installed $HyaExe (copy of hydra.exe)"
+  }
+  try {
+    New-CliAlias
+  } catch {
+    # The short name is a convenience: `hydra` itself is already installed.
+    Write-Warning "could not install the hya shorthand: $($_.Exception.Message)"
+  }
 
   if (-not $Cli) {
     Copy-Item (Join-Path $Src "hydra-gui.exe")  $InstallDir -Force

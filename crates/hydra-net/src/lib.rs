@@ -326,8 +326,8 @@ pub mod sink;
 pub mod transfer;
 
 pub use http::{
-    fetch_range_retry, fetch_small, fetch_streaming, fetch_streaming_observed, header_lookup,
-    probe, probe_resilient, probe_size_via_range, probe_via_get, Probe,
+    fetch_object, fetch_range_retry, fetch_small, fetch_streaming, fetch_streaming_observed,
+    header_lookup, probe, probe_resilient, probe_size_via_range, probe_via_get, Probe, Redirect,
 };
 pub use redirect::{html_redirect, html_redirect_target};
 pub use sink::SparseSink;

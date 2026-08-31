@@ -26,6 +26,24 @@ globalThis.chrome ??= globalThis.browser;
 const HOST = "com.hydra.host";
 const WS_PORTS = [6799, 16799];
 
+/// Which browser this copy is running in, spelled the way Hydra's
+/// Options > General list spells it. Every request carries it so the app can
+/// answer with THAT browser's capture checkbox — without it, one flag stood
+/// for all of them and the Firefox/Safari rows did nothing.
+///
+/// Chromium forks that do not identify themselves (Brave, Vivaldi, Arc) look
+/// like Chrome to the UA and are governed by the Chrome row, which is also
+/// the row their extension install is closest to.
+const BROWSER = (() => {
+  const ua = navigator.userAgent || "";
+  if (/\bEdg[A-Z]?\//.test(ua)) return "Microsoft Edge";
+  if (/\bOPR\/|\bOpera\//.test(ua)) return "Opera";
+  if (/\bFirefox\/|\bGecko\//.test(ua) && !/\bChrome\//.test(ua)) return "Mozilla Firefox";
+  if (/\bChrome\/|\bChromium\//.test(ua)) return "Google Chrome";
+  if (/\bSafari\//.test(ua)) return "Apple Safari";
+  return "Google Chrome";
+})();
+
 // Mirrors hydra-gui's Options > File Types default; overwritten by the GUI's
 // list on every round-trip.
 const DEFAULT_TYPES =
@@ -54,17 +72,54 @@ const MIME_EXT = {
   "video/x-flv": "FLV", "video/x-flash-video": "FLV",
   "video/mpeg": "MPG", "video/x-ms-wmv": "WMV", "video/x-ms-asf": "ASF",
   "video/3gpp": "3GP", "video/3gpp2": "3GP",
+  // Was in the old gate regex but never in this table, so it was sniffed and
+  // then labelled `null` — the exact drift deriving the gate from here ends.
+  "video/ogg": "OGV", "video/x-theora": "OGV",
   "audio/mpeg": "MP3", "audio/mp3": "MP3", "audio/x-mpeg": "MP3",
-  "audio/mp4": "M4A", "audio/mp4a-latm": "M4A", "audio/aac": "AAC",
-  "audio/wav": "WAV", "audio/x-wav": "WAV", "audio/x-ms-wma": "WMA",
-  "audio/ogg": "OGG", "audio/webm": "WEBM", "audio/flac": "FLAC",
+  "audio/mp4": "M4A", "audio/mp4a-latm": "M4A", "audio/x-m4a": "M4A",
+  "audio/m4a": "M4A", "audio/aac": "AAC", "audio/aacp": "AAC",
+  "audio/wav": "WAV", "audio/x-wav": "WAV", "audio/wave": "WAV",
+  "audio/vnd.wave": "WAV", "audio/x-pn-wav": "WAV",
+  "audio/x-ms-wma": "WMA",
+  "audio/ogg": "OGG", "application/ogg": "OGG", "audio/vorbis": "OGG",
+  "audio/opus": "OPUS", "audio/x-opus+ogg": "OPUS",
+  "audio/webm": "WEBM", "audio/flac": "FLAC", "audio/x-flac": "FLAC",
+  "audio/aiff": "AIFF", "audio/x-aiff": "AIFF",
+  "audio/basic": "AU", "audio/midi": "MIDI", "audio/x-midi": "MIDI",
+  "audio/3gpp": "3GP", "audio/3gpp2": "3GP", "audio/amr": "AMR",
 };
 
-// Direct media worth listing in the popup sniffer (no segmented HLS/DASH —
-// a plain downloader cannot merge streams).
-const MEDIA_MIME =
-  /^(video\/(mp4|webm|x-matroska|quicktime|x-msvideo|x-flv|mpeg)|audio\/(mpeg|mp4|aac|ogg|wav|flac|webm))/i;
+// Direct media worth listing in the popup sniffer. Segmented HLS/DASH is
+// handled separately, further down, as a stream rather than a file.
+//
+// DERIVED from MIME_EXT rather than restating it. The two were maintained by
+// hand and had already drifted — `video/ogg` was in the gate with no entry in
+// the table — and either half of a drift is a silent bug: a type in the table
+// but not the gate is never sniffed, one in the gate but not the table is
+// sniffed and then labelled `null`.
+//
+// An exact-match Set, not a prefix regex: the caller has already split the
+// parameters off the Content-Type, so there is nothing to prefix-match, and a
+// Set cannot accidentally match `audio/mpegurl` (an HLS playlist) the way
+// `/^audio\/mpeg/` did.
+const MEDIA_MIME_SET = new Set(
+  Object.keys(MIME_EXT).filter((m) => /^(?:audio|video)\//.test(m) || m === "application/ogg")
+);
+const isMediaMime = (mime) => MEDIA_MIME_SET.has((mime || "").toLowerCase());
+
+// A file server that does not know the type says `application/octet-stream`,
+// or says nothing at all. That is not a reason to ignore a song: for those
+// two answers ONLY, the extension decides. Anything with a real, non-media
+// Content-Type is still rejected on the type, so a .zip cannot sneak in by
+// being named .mp3.
+const VAGUE_MIME = /^(?:application\/(?:octet-stream|binary)|binary\/octet-stream)?$/i;
+const MEDIA_PATH =
+  /\.(?:mp3|m4a|m4b|aac|wav|wave|ogg|oga|opus|flac|aif|aiff|wma|amr|au|mid|midi|mp4|m4v|webm|mkv|mov|avi|flv|mpg|mpeg|wmv|3gp|3g2)(?:$|[?#])/i;
 const MEDIA_MIN_BYTES = 256 * 1024;
+// Audio carries an order of magnitude fewer bytes than video per second, so
+// the video floor silently hid whole songs, podcast chapters and voice
+// notes. Still high enough to keep UI blips and notification sounds out.
+const AUDIO_MIN_BYTES = 32 * 1024;
 const MEDIA_PER_TAB = 25;
 
 // ---------------------------------------------------------------- settings
@@ -75,6 +130,7 @@ async function getState() {
     guiCapture: true, // "Google Chrome" checkbox in hydra's Options
     autoTypes: DEFAULT_TYPES,
     skipSites: DEFAULT_SKIP,
+    videoPanel: true, // the floating Download button over <video> elements
     hydraSeen: false, // ever completed a round-trip
   });
 }
@@ -186,7 +242,7 @@ function wsRequest(msg, timeoutMs = 8000) {
     }, timeoutMs);
     pendingReqs.set(id, { resolve, timer });
     try {
-      ws.send(JSON.stringify({ ...msg, id }));
+      ws.send(JSON.stringify({ browser: BROWSER, ...msg, id }));
     } catch {
       clearTimeout(timer);
       pendingReqs.delete(id);
@@ -206,7 +262,7 @@ function native(msg) {
     };
     const failed = (e) => resolve({ ok: false, error: String(e), unreachable: true });
     try {
-      const ret = chrome.runtime.sendNativeMessage(HOST, msg, (reply) => {
+      const ret = chrome.runtime.sendNativeMessage(HOST, { browser: BROWSER, ...msg }, (reply) => {
         if (chrome.runtime.lastError) failed(chrome.runtime.lastError.message);
         else done(reply);
       });
@@ -444,6 +500,481 @@ wsConnect();
   }
 });
 
+// ------------------------------------------------------------ stream sniffer
+//
+// Adaptive streams arrive as a MANIFEST plus hundreds of short segments.
+// What belongs in the popup is the manifest — one logical stream — so the
+// segments are filtered out of the direct-media list instead of crowding it
+// out, and a master playlist swallows the variant playlists it points at.
+//
+// Everything here is read-only reconnaissance: manifests are parsed for
+// their variant table, and a stream whose manifest declares a DRM system is
+// listed as unsupported rather than handed to Hydra.
+
+const HLS_MIME =
+  /^(?:application\/(?:vnd\.apple\.mpegurl|x-mpegurl|mpegurl|octet-stream-m3u8)|(?:audio|video)\/(?:x-)?mpegurl)$/i;
+const DASH_MIME = /^(?:application\/dash\+xml|video\/vnd\.mpeg\.dash\.mpd)$/i;
+const HLS_PATH = /\.m3u8(?:$|[?#])/i;
+const DASH_PATH = /\.mpd(?:$|[?#])/i;
+
+// Segment shapes, kept out of the direct-media list. fMP4 segments are
+// served as video/mp4 and are big enough to clear MEDIA_MIN_BYTES, so the
+// URL is what distinguishes them from a real file.
+// NOT `.m4a` or `.m4v`: those are ordinary Apple container extensions for a
+// finished audio or video file, and treating them as segment shapes hid every
+// one of them from the sniffer. Real fMP4 segments are `.m4s`/`.cmfa`/`.cmfv`,
+// and anything under a detected manifest's directory is excluded separately
+// by the stream-directory check, which is the reliable filter.
+const SEGMENT_PATH =
+  /\.(?:ts|m4s|cmfv|cmfa|cmft|fmp4|mp4f|dash|init|key)(?:$|[?#])/i;
+const SEGMENT_MIME = /^(?:video|audio)\/mp2t$|^application\/x-mpegts$/i;
+
+const STREAMS_PER_TAB = 12;
+const MANIFEST_MAX_BYTES = 4 * 1024 * 1024;
+const MANIFEST_TIMEOUT_MS = 8000;
+
+/// Name the DRM system behind an HLS KEYFORMAT or a DASH schemeIdUri.
+/// Recognising one is how a stream gets marked unsupported — nothing here
+/// touches keys or licences.
+function drmName(id) {
+  const s = String(id || "").toLowerCase();
+  if (s.includes("edef8ba9-79d6-4ace-a3c8-27dcd51d21ed") || s.includes("widevine"))
+    return "Widevine";
+  if (s.includes("9a04f079-9840-4286-ab92-e65be0885f95") || s.includes("playready"))
+    return "PlayReady";
+  if (
+    s.includes("94ce86fb-07ff-4f43-adb8-93d2fa968ca2") ||
+    s.includes("fairplay") ||
+    s.includes("com.apple.streamingkeydelivery")
+  )
+    return "FairPlay";
+  if (s.includes("e2719d58-a985-b3c9-781a-b030af78d30e") || s.includes("clearkey"))
+    return "ClearKey";
+  return null;
+}
+
+function absUrl(u, base) {
+  try {
+    return new URL(u, base).href;
+  } catch {
+    return u;
+  }
+}
+
+/// Manifests are re-requested with a rotating auth token in the query, so
+/// identity is origin+path — the same key the direct-media sniffer uses.
+function streamKey(url) {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname;
+  } catch {
+    return String(url).split("?")[0];
+  }
+}
+
+/// A tab title made into a leaf filename. The in-page panel already sends
+/// one; the popup has no page context of its own, so the same name is
+/// derived here rather than letting the two paths disagree.
+function titleName(title) {
+  return (
+    String(title || "")
+      .replace(/[\\/:*?"<>|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^[.\s]+|[.\s]+$/g, "")
+      .slice(0, 120) || ""
+  );
+}
+
+/// Stable identity for one variant, so the popup can name the row's choice
+/// back to the service worker. Duplicated verbatim in popup.js — the two run
+/// in different contexts and must agree.
+function streamVariantId(v) {
+  return [v?.id ?? "", v?.url ?? "", v?.bandwidth ?? ""].join("|");
+}
+
+/// `KEY=value` / `KEY="quoted,value"` attribute lists, RFC 8216 §4.2.
+function hlsAttrs(line) {
+  const out = {};
+  for (const m of line.matchAll(/([A-Za-z0-9-]+)=("[^"]*"|[^,]*)/g)) {
+    out[m[1].toUpperCase()] = m[2].replace(/^"|"$/g, "");
+  }
+  return out;
+}
+
+function tagValue(line) {
+  const i = line.indexOf(":");
+  return i < 0 ? "" : line.slice(i + 1);
+}
+
+/// Parse a playlist. A master lists variants; a media playlist lists
+/// segments, and only it knows the duration and whether the stream is live.
+function parseHls(text, baseUrl) {
+  const info = {
+    protocol: "hls",
+    kind: "media",
+    live: false,
+    duration: null,
+    segments: 0,
+    drm: null,
+    encryption: null,
+    // "ts" (MPEG-TS segments, concatenable and remuxable) or "fmp4"
+    // (fragmented MP4 with an init map). It decides which output containers
+    // the in-page panel may offer.
+    segmentType: null,
+    variants: [],
+    audioTracks: 0,
+    children: [],
+  };
+  let ended = false;
+  let vod = false;
+  let pending = null;
+  let wantSegment = false;
+  let duration = 0;
+
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    if (line.startsWith("#EXT-X-STREAM-INF:")) {
+      info.kind = "master";
+      pending = hlsAttrs(tagValue(line));
+    } else if (line.startsWith("#EXT-X-MEDIA:")) {
+      const a = hlsAttrs(tagValue(line));
+      if (a.URI) info.children.push(absUrl(a.URI, baseUrl));
+      if ((a.TYPE || "").toUpperCase() === "AUDIO") info.audioTracks++;
+    } else if (line.startsWith("#EXT-X-KEY:") || line.startsWith("#EXT-X-SESSION-KEY:")) {
+      const a = hlsAttrs(tagValue(line));
+      const method = (a.METHOD || "").toUpperCase();
+      if (method === "NONE") continue;
+      const named = drmName(a.KEYFORMAT || "");
+      if (named) info.drm ||= named;
+      else if (method.startsWith("SAMPLE-AES")) info.drm ||= "SAMPLE-AES";
+      else if (method === "AES-128") info.encryption ||= "AES-128";
+    } else if (line.startsWith("#EXT-X-MAP:")) {
+      info.segmentType = "fmp4"; // an init map means fragmented MP4
+    } else if (line.startsWith("#EXTINF:")) {
+      info.segments++;
+      duration += parseFloat(tagValue(line)) || 0;
+      wantSegment = true;
+    } else if (line === "#EXT-X-ENDLIST") {
+      ended = true;
+    } else if (line.startsWith("#EXT-X-PLAYLIST-TYPE:")) {
+      vod = /VOD/i.test(tagValue(line));
+    } else if (!line.startsWith("#") && wantSegment) {
+      // The URI after an EXTINF is a segment; its extension names the
+      // container when no EXT-X-MAP said so.
+      wantSegment = false;
+      if (!info.segmentType) {
+        info.segmentType = /\.ts(?:$|[?#])/i.test(line) ? "ts" : "fmp4";
+      }
+    } else if (!line.startsWith("#") && pending) {
+      // The URI line that follows an EXT-X-STREAM-INF is that variant.
+      const res = /^(\d+)x(\d+)$/.exec(pending.RESOLUTION || "");
+      const url = absUrl(line, baseUrl);
+      info.variants.push({
+        url,
+        id: pending["NAME"] || null,
+        bandwidth:
+          parseInt(pending["AVERAGE-BANDWIDTH"] || pending.BANDWIDTH || "0", 10) || null,
+        width: res ? +res[1] : null,
+        height: res ? +res[2] : null,
+        codecs: pending.CODECS || null,
+        frameRate: parseFloat(pending["FRAME-RATE"]) || null,
+      });
+      info.children.push(url);
+      pending = null;
+    }
+  }
+
+  if (info.kind === "media") {
+    info.duration = duration || null;
+    // No ENDLIST and no VOD marker is the only signal a playlist gives that
+    // it is still growing.
+    info.live = !ended && !vod;
+  }
+  info.variants.sort((a, b) => (b.bandwidth || 0) - (a.bandwidth || 0));
+  return info;
+}
+
+/// ISO 8601 duration ("PT1H2M3.5S") in seconds. Years/months are not
+/// meaningful for a presentation and are ignored.
+function isoDuration(s) {
+  const m =
+    /^P(?:[\d.]+Y)?(?:[\d.]+M)?(?:([\d.]+)D)?(?:T(?:([\d.]+)H)?(?:([\d.]+)M)?(?:([\d.]+)S)?)?$/.exec(
+      String(s).trim()
+    );
+  if (!m) return null;
+  const n = (x) => parseFloat(x || "0") || 0;
+  return n(m[1]) * 86400 + n(m[2]) * 3600 + n(m[3]) * 60 + n(m[4]) || null;
+}
+
+/// Parse an MPD with regexes rather than DOMParser: a Chromium MV3 service
+/// worker has no DOM, and the handful of attributes needed here do not
+/// justify shipping an XML parser.
+function parseDash(text, baseUrl) {
+  const info = {
+    protocol: "dash",
+    kind: "mpd",
+    live: /\btype\s*=\s*"dynamic"/i.test(text),
+    segmentType: "fmp4", // DASH is fragmented MP4 (or WebM, also unmuxed)
+    duration: isoDuration(/mediaPresentationDuration\s*=\s*"([^"]+)"/i.exec(text)?.[1] || ""),
+    segments: 0,
+    drm: null,
+    encryption: null,
+    variants: [],
+    audioTracks: 0,
+    children: [],
+  };
+
+  let cencOnly = false;
+  for (const m of text.matchAll(/<ContentProtection\b([^>]*)>/gi)) {
+    const scheme = /schemeIdUri\s*=\s*"([^"]+)"/i.exec(m[1])?.[1] || "";
+    const named = drmName(scheme);
+    if (named) info.drm ||= named;
+    else if (/mp4protection/i.test(scheme)) cencOnly = true;
+  }
+  // Common encryption with no recognised system is still encrypted, and the
+  // key would have to come from a licence server either way.
+  if (!info.drm && cencOnly) info.drm = "CENC";
+
+  for (const block of text.split(/<AdaptationSet\b/i).slice(1)) {
+    const head = block.slice(0, block.indexOf(">") + 1);
+    const body = block.split(/<\/AdaptationSet>/i)[0];
+    const setType = (
+      /contentType\s*=\s*"([^"]+)"/i.exec(head)?.[1] ||
+      /mimeType\s*=\s*"([^"/]+)\//i.exec(head)?.[1] ||
+      ""
+    ).toLowerCase();
+
+    for (const r of body.matchAll(/<Representation\b([^>]*?)\/?>/gi)) {
+      const at = r[1];
+      const attr = (n) => new RegExp(`\\b${n}\\s*=\\s*"([^"]*)"`, "i").exec(at)?.[1] || null;
+      const type = setType || (attr("mimeType") || "").split("/")[0].toLowerCase();
+      if (type === "audio") {
+        info.audioTracks++;
+        continue;
+      }
+      if (type && type !== "video") continue; // subtitles, thumbnails
+      info.variants.push({
+        url: baseUrl,
+        id: attr("id"),
+        bandwidth: parseInt(attr("bandwidth") || "0", 10) || null,
+        width: parseInt(attr("width") || "0", 10) || null,
+        height: parseInt(attr("height") || "0", 10) || null,
+        codecs: attr("codecs"),
+        frameRate: parseFloat(attr("frameRate")) || null,
+      });
+    }
+  }
+  info.variants.sort((a, b) => (b.bandwidth || 0) - (a.bandwidth || 0));
+  return info;
+}
+
+function classifyManifest(text) {
+  if (/^﻿?\s*#EXTM3U/.test(text)) return "hls";
+  if (/<MPD[\s>]/i.test(text)) return "dash";
+  return null;
+}
+
+/// Fetch a manifest with the browser session's cookies. Bounded in time and
+/// size: a manifest is kilobytes, and anything claiming otherwise is not one.
+async function fetchManifest(url) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), MANIFEST_TIMEOUT_MS);
+  try {
+    const r = await fetch(url, { credentials: "include", cache: "no-store", signal: ctl.signal });
+    if (!r.ok) return null;
+    if (parseInt(r.headers.get("content-length") || "0", 10) > MANIFEST_MAX_BYTES) return null;
+    const text = await r.text();
+    return text.length > MANIFEST_MAX_BYTES ? null : text;
+  } catch {
+    return null; // CORS-blocked, offline, aborted: the entry stays thin.
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Per-tab serialization. The sniffer is a read-modify-write over session
+// storage and webRequest fires concurrently; without this, two responses
+// arriving together lose one of the entries.
+const tabLocks = new Map();
+function withTab(tabId, fn) {
+  const next = (tabLocks.get(tabId) || Promise.resolve()).then(fn, fn);
+  tabLocks.set(
+    tabId,
+    next.then(
+      () => {},
+      () => {}
+    )
+  );
+  return next;
+}
+
+async function tabStreams(tabId) {
+  const key = `streams_${tabId}`;
+  const got = await sessionStore().get(key);
+  return got[key] || [];
+}
+
+/// Keys of playlists a listed master already covers, so a variant seen
+/// afterwards is not listed as a stream of its own.
+async function tabStreamKids(tabId) {
+  const key = `streamkids_${tabId}`;
+  const got = await sessionStore().get(key);
+  return got[key] || [];
+}
+
+/// One HLS master, enriched with the duration and encryption its variants
+/// know about and it does not. The cheapest variant is fetched because the
+/// timeline is identical across them.
+async function enrichHlsMaster(info, pageUrl) {
+  const cheapest = info.variants[info.variants.length - 1];
+  if (!cheapest?.url) return info;
+  const text = await fetchManifest(cheapest.url);
+  if (!text) return info;
+  const media = parseHls(text, cheapest.url);
+  info.duration = media.duration;
+  info.segments = media.segments;
+  info.segmentType = media.segmentType;
+  info.live = media.live;
+  info.drm ||= media.drm;
+  info.encryption ||= media.encryption;
+  return info;
+}
+
+/// Record a manifest against its tab, replacing any variant entries the
+/// manifest turns out to own.
+async function noteStream(tabId, url, mime, tabUrl) {
+  const key = streamKey(url);
+  const list = await tabStreams(tabId);
+  const known = list.find((s) => s.key === key);
+  if (known) {
+    // A live player re-reads its playlist every few seconds, so this path is
+    // hit constantly. Only write when the URL actually changed — otherwise a
+    // single live tab rewrites session storage at the playlist's refresh
+    // rate for as long as it is open.
+    if (known.url !== url) {
+      known.url = url; // a rotated auth token
+      await sessionStore().set({ [`streams_${tabId}`]: list });
+    }
+    return;
+  }
+  if ((await tabStreamKids(tabId)).includes(key)) return; // a listed master owns it
+
+  const text = await fetchManifest(url);
+  const protocol =
+    (text && classifyManifest(text)) ||
+    (HLS_MIME.test(mime) || HLS_PATH.test(url) ? "hls" : DASH_PATH.test(url) ? "dash" : null);
+  if (!protocol) return;
+
+  let info;
+  if (!text) {
+    // Unreadable manifest: still worth listing, Hydra will fetch it itself.
+    info = {
+      protocol,
+      kind: protocol === "hls" ? "media" : "mpd",
+      live: false,
+      duration: null,
+      segments: 0,
+      drm: null,
+      encryption: null,
+      variants: [],
+      audioTracks: 0,
+      children: [],
+    };
+  } else if (protocol === "hls") {
+    info = parseHls(text, url);
+    if (info.kind === "master" && info.variants.length) info = await enrichHlsMaster(info, tabUrl);
+  } else {
+    info = parseDash(text, url);
+  }
+
+  const entry = {
+    key,
+    url,
+    mime: mime || null,
+    protocol: info.protocol,
+    kind: info.kind,
+    live: info.live,
+    duration: info.duration,
+    segments: info.segments,
+    drm: info.drm,
+    encryption: info.encryption,
+    segmentType: info.segmentType,
+    audioTracks: info.audioTracks,
+    variants: info.variants,
+    pageUrl: tabUrl || null,
+  };
+
+  const kidKeys = info.children.map(streamKey);
+  // A variant may have been listed before its master showed up; the master
+  // is the better entry, so the variants collapse into it.
+  const kept = list.filter((s) => !kidKeys.includes(s.key));
+  kept.push(entry);
+  while (kept.length > STREAMS_PER_TAB) kept.shift();
+
+  const kids = [...new Set([...(await tabStreamKids(tabId)), ...kidKeys])];
+  await sessionStore().set({
+    [`streams_${tabId}`]: kept,
+    [`streamkids_${tabId}`]: kids.slice(-STREAMS_PER_TAB * 20),
+  });
+}
+
+/// Ask Hydra for a stream download. `stream` is a distinct request type:
+/// a manifest is not a file, and handing it to the ordinary download path
+/// would save a few kilobytes of playlist text.
+async function sendStreamToHydra(entry, variant, opts = {}) {
+  // Defence in depth: the panel lists a protected stream as an unclickable
+  // note, so this should be unreachable from the UI.
+  if (entry.drm) {
+    return { ok: false, error: `${entry.drm} DRM: this stream is protected and cannot be downloaded` };
+  }
+  const target = variant?.url || entry.url;
+  const reply = await request({
+    type: "stream",
+    url: entry.url,
+    protocol: entry.protocol,
+    variant_url: target !== entry.url ? target : null,
+    variant: variant
+      ? {
+          id: variant.id,
+          url: variant.url,
+          width: variant.width,
+          height: variant.height,
+          bandwidth: variant.bandwidth,
+          codecs: variant.codecs,
+          frame_rate: variant.frameRate,
+        }
+      : null,
+    variants: entry.variants,
+    container: opts.container || (entry.segmentType === "ts" ? "TS" : "MP4"),
+    filename: opts.filename || null,
+    segment_type: entry.segmentType,
+    live: entry.live,
+    duration: entry.duration,
+    encryption: entry.encryption,
+    audio_tracks: entry.audioTracks,
+    // Only a finite presentation has a size to estimate; a live playlist's
+    // duration is its sliding window.
+    size:
+      !entry.live && variant?.bandwidth && entry.duration
+        ? Math.round((variant.bandwidth * entry.duration) / 8)
+        : null,
+    cookies: await cookieHeader(entry.url),
+    user_agent: navigator.userAgent,
+    referer: entry.pageUrl || null,
+    tab_url: entry.pageUrl || null,
+    mime: entry.mime || null,
+  });
+  // Builds without a stream-aware path answer "unknown type"; say so rather
+  // than quietly downloading the playlist as a text file.
+  if (reply && !reply.ok && /unknown type/i.test(reply.error || "")) {
+    return { ok: false, error: "this Hydra version cannot download streams — update Hydra" };
+  }
+  return reply;
+}
+
 // ------------------------------------------------------------ media sniffer
 
 async function tabMedia(tabId) {
@@ -452,48 +983,107 @@ async function tabMedia(tabId) {
   return got[key] || [];
 }
 
-async function setMediaBadge(tabId, count) {
+/// One badge for everything grabbable on the tab: direct files and streams.
+async function refreshBadge(tabId) {
+  const n = (await tabMedia(tabId)).length + (await tabStreams(tabId)).length;
   try {
     await chrome.action.setBadgeBackgroundColor({ color: "#2c6e31", tabId });
-    await chrome.action.setBadgeText({ tabId, text: count ? String(count) : "" });
+    await chrome.action.setBadgeText({ tabId, text: n ? String(n) : "" });
   } catch {
     // Tab may already be gone.
+  }
+  // Nudge the in-page panel: a manifest usually lands while the pointer is
+  // already resting on the player.
+  try {
+    Promise.resolve(chrome.tabs.sendMessage(tabId, { type: "hydra-media-changed" })).catch(
+      () => {}
+    );
+  } catch {
+    // No content script here (chrome://, the PDF viewer, a closed tab).
   }
 }
 
 chrome.webRequest?.onResponseStarted.addListener(
-  async (details) => {
+  (details) => {
     if (details.tabId < 0) return;
     const headers = Object.fromEntries(
       (details.responseHeaders || []).map((h) => [h.name.toLowerCase(), h.value])
     );
     const mime = (headers["content-type"] || "").split(";")[0].trim();
-    if (!MEDIA_MIME.test(mime)) return;
+    const url = details.url.split("#")[0];
+
+    // A manifest first: its MIME is often a generic text type, so the path
+    // gets a vote too.
+    if (HLS_MIME.test(mime) || DASH_MIME.test(mime) || HLS_PATH.test(url) || DASH_PATH.test(url)) {
+      withTab(details.tabId, async () => {
+        const tab = await chrome.tabs.get(details.tabId).catch(() => null);
+        await noteStream(details.tabId, url, mime, tab?.url || details.initiator || null);
+        await refreshBadge(details.tabId);
+      });
+      return;
+    }
+
+    // The type decides, except when the server declined to give one.
+    if (!isMediaMime(mime) && !(VAGUE_MIME.test(mime) && MEDIA_PATH.test(url))) return;
+    // Stream segments are ordinary-looking media (fMP4 is video/mp4) and
+    // there are hundreds of them; the manifest already stands for the lot.
+    if (SEGMENT_MIME.test(mime) || SEGMENT_PATH.test(url)) return;
+
     const size = parseInt(headers["content-length"] || "0", 10) || 0;
     // Range replies of streaming players still reveal the full size here.
     const total = /\/(\d+)$/.exec(headers["content-range"] || "");
     const fullSize = total ? parseInt(total[1], 10) : size;
-    if (fullSize && fullSize < MEDIA_MIN_BYTES) return;
+    const floor = /^audio\//i.test(mime) ? AUDIO_MIN_BYTES : MEDIA_MIN_BYTES;
+    if (fullSize && fullSize < floor) return;
 
-    const url = details.url.split("#")[0];
-    const key = `media_${details.tabId}`;
-    const list = await tabMedia(details.tabId);
-    // Same resource re-requested with shifting Range offsets: keep one entry.
-    const bare = url.split("?")[0];
-    if (!list.some((m) => m.url.split("?")[0] === bare)) {
-      list.push({ url, mime, size: fullSize || null });
+    withTab(details.tabId, async () => {
+      const key = `media_${details.tabId}`;
+      const list = await tabMedia(details.tabId);
+      // Same resource re-requested with shifting Range offsets: keep one entry.
+      const bare = url.split("?")[0];
+      if (list.some((m) => m.url.split("?")[0] === bare)) return;
+      // Segments sit next to their playlist; anything under a detected
+      // manifest's directory belongs to that stream, whatever it is called.
+      const dirs = (await tabStreams(details.tabId)).map((s) =>
+        s.key.slice(0, s.key.lastIndexOf("/") + 1)
+      );
+      if (dirs.some((d) => d && streamKey(url).startsWith(d))) return;
+
+      // The label comes from the MIME here, where MIME_EXT already lives.
+      // Deriving it from the URL alone in the panel guesses "MP4" whenever a
+      // path carries no extension, which is most streaming endpoints — so an
+      // MP3 offered itself as "MP4 file".
+      const kind = MIME_EXT[mime.split(";")[0].trim().toLowerCase()] || null;
+      list.push({ url, mime, kind, size: fullSize || null });
       if (list.length > MEDIA_PER_TAB) list.shift();
       await sessionStore().set({ [key]: list });
-      setMediaBadge(details.tabId, list.length);
-    }
+      await refreshBadge(details.tabId);
+    });
   },
-  { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "other"] },
+  // `main_frame` and `sub_frame` matter as much as `media` here. An <audio>
+  // or <video> element loads as `media`, but a LINK to an .mp3 — the browser
+  // opening its built-in player, which is what "played in the browser" means
+  // most of the time — is a top-level navigation, and a player in an iframe
+  // is a sub-frame. Without these two, those responses never reached this
+  // listener at all, whatever their Content-Type said.
+  //
+  // The cost is a few regex tests on each navigation before returning; a
+  // manifest opened directly in a tab now gets sniffed too.
+  {
+    urls: ["<all_urls>"],
+    types: ["main_frame", "sub_frame", "media", "xmlhttprequest", "other"],
+  },
   ["responseHeaders"]
 );
 
 async function clearTab(tabId) {
-  await sessionStore().remove(`media_${tabId}`);
-  setMediaBadge(tabId, 0);
+  tabLocks.delete(tabId);
+  await sessionStore().remove([
+    `media_${tabId}`,
+    `streams_${tabId}`,
+    `streamkids_${tabId}`,
+  ]);
+  refreshBadge(tabId);
 }
 chrome.tabs.onRemoved.addListener((tabId) => clearTab(tabId));
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
@@ -504,6 +1094,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
+    // A content script speaks for the tab it runs in; the popup has no tab
+    // of its own and means the active one.
+    const senderTab = sender?.tab?.id ?? null;
+    const whichTab = async () => {
+      if (senderTab != null) return senderTab;
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      return tab?.id ?? null;
+    };
     switch (msg?.type) {
       case "alt-click":
         await sessionStore().set({ altTs: Date.now() });
@@ -513,9 +1111,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const state = await getState();
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         const media = tab?.id != null ? await tabMedia(tab.id) : [];
+        const streams = tab?.id != null ? await tabStreams(tab.id) : [];
         sendResponse({
           state,
           media,
+          streams,
           connected: wsReady,
           tabId: tab?.id ?? null,
           tabUrl: tab?.url ?? null,
@@ -526,16 +1126,63 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await chrome.storage.local.set({ enabled: !!msg.enabled });
         sendResponse({ ok: true });
         break;
+      case "set-video-panel":
+        await chrome.storage.local.set({ videoPanel: !!msg.on });
+        sendResponse({ ok: true });
+        break;
+      case "page-media": {
+        // What the in-page panel may offer, for the asking tab only.
+        const id = await whichTab();
+        const state = await getState();
+        sendResponse({
+          streams: id != null ? await tabStreams(id) : [],
+          media: id != null ? await tabMedia(id) : [],
+          videoPanel: state.enabled && state.videoPanel,
+        });
+        break;
+      }
       case "ping":
         // Probe only: never boots the app, so the popup can report status.
         sendResponse((await wsRequest({ type: "ping" }, 2500)) || { ok: false, unreachable: true });
         break;
+      case "status": {
+        // For the welcome page. Probe only: `wsRequest` cannot start
+        // anything, and `hydra-host` answers a "ping" WITHOUT launching the
+        // app — which is exactly what separates "host is not installed"
+        // (unreachable) from "host is fine, Hydra is simply closed".
+        const viaWs = wsReady || !!(await wsRequest({ type: "ping" }, 2500));
+        if (viaWs) {
+          sendResponse({ app: true, host: true });
+          break;
+        }
+        const host = await native({ type: "ping" });
+        sendResponse({ app: !!host?.ok, host: !host?.unreachable });
+        break;
+      }
       case "open-hydra":
         sendResponse(await request({ type: "open" }));
         break;
       case "download-url":
         sendResponse(await sendToHydra(msg.url, { referer: msg.referer || null }));
         break;
+      case "download-stream": {
+        const id = await whichTab();
+        const entry = (id != null ? await tabStreams(id) : []).find((s) => s.key === msg.key);
+        if (!entry) return sendResponse({ ok: false, error: "stream is gone" });
+        const variant =
+          entry.variants.find((v) => streamVariantId(v) === msg.variant) ||
+          entry.variants[0] ||
+          null;
+        // The popup sends no name; the page title is the best one there is.
+        const tab = await chrome.tabs.get(id).catch(() => null);
+        sendResponse(
+          await sendStreamToHydra(entry, variant, {
+            container: msg.container,
+            filename: msg.filename || titleName(tab?.title),
+          })
+        );
+        break;
+      }
       case "selection-links": {
         // The floating pill over highlighted links: one link behaves like a
         // click on it, several open the batch box.

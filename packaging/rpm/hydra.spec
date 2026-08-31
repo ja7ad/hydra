@@ -1,4 +1,13 @@
-%{!?_version: %global _version 0.3.13}
+# The version is rendered in by scripts/render-rpm-spec.sh, which takes it from
+# [workspace.package] in Cargo.toml (or from the release tag). It cannot be left
+# to `rpmbuild --define _version ...`: Copr imports this spec and the tarball
+# into dist-git and re-runs `rpmbuild -bs` in mock without our defines, so a spec
+# that carried no version of its own fell back to a stale built-in default and
+# looked for a tarball that was never built ("Bad file: hydra-<old>.tar.gz").
+#
+# Build from a rendered copy, not from this file directly:
+#   scripts/render-rpm-spec.sh > /tmp/rpmbuild/SPECS/hydra.spec
+%global _version @HYDRA_VERSION@
 
 Name:           hydra
 Version:        %{_version}
@@ -41,6 +50,10 @@ rm -rf %{buildroot}
 install -Dm755 target/release/hydra      %{buildroot}%{_bindir}/hydra
 install -Dm755 target/release/hydra-gui  %{buildroot}%{_bindir}/hydra-gui
 install -Dm755 target/release/hydra-host %{buildroot}%{_bindir}/hydra-host
+
+# Short second name for the CLI: `hydra` is also the THC login auditor, and
+# three letters types better for a command run as often as a download.
+ln -sf hydra %{buildroot}%{_bindir}/hya
 
 # Desktop / Menu
 install -d %{buildroot}%{_datadir}/applications
@@ -135,12 +148,14 @@ fi
 %license LICENSE LICENSING.md
 %doc README.md THIRD-PARTY-NOTICES.md
 %{_bindir}/hydra
+%{_bindir}/hya
 %{_bindir}/hydra-gui
 %{_bindir}/hydra-host
 %{_datadir}/applications/hydra.desktop
 %{_datadir}/icons/hicolor/*/apps/hydra.png
 %{_datadir}/%{name}/
 %{_mandir}/man1/hydra*.1*
+%{_mandir}/man1/hya.1*
 %config(noreplace) %{_sysconfdir}/xdg/autostart/hydra.desktop
 %config(noreplace) %{_sysconfdir}/opt/chrome/native-messaging-hosts/com.hydra.host.json
 %config(noreplace) %{_sysconfdir}/chromium/native-messaging-hosts/com.hydra.host.json

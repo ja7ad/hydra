@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Hydra Download Manager Integration",
-  "version": "0.2.2",
-  "description": "A browser integration for Hydra: automatic download capture, right-click downloads, and media sniffing.",
+  "version": "0.3.0",
+  "description": "A browser integration for Hydra: automatic download capture, right-click downloads, and media/HLS/DASH stream sniffing.",
   "browser_specific_settings": {
     "gecko": {
       "id": "hydra@ja7ad.github.io",

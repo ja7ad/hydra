@@ -32,6 +32,7 @@ fn kv<'a>(k: String, v: String) -> El<'a> {
 }
 
 fn status_tab<'a>(app: &'a App, d: &'a DownloadItem) -> El<'a> {
+    let recording = d.stream.as_ref().is_some_and(|s| s.live);
     let pct = d
         .size
         .map(|s| fmt::pct(d.downloaded, s))
@@ -60,10 +61,29 @@ fn status_tab<'a>(app: &'a App, d: &'a DownloadItem) -> El<'a> {
             }),
         ]
         .spacing(8),
-        kv(
-            tr("File size"),
-            d.size.map(fmt::size3).unwrap_or_else(|| "?".into())
-        ),
+        // A live recording has no size and never will: it ends when someone
+        // stops it. Reporting "?" against a label that expects a number says
+        // nothing, so the row becomes the one measure that IS knowable —
+        // how much media is on disk.
+        if recording {
+            let done = d
+                .recorded_secs
+                .map(|s| fmt::eta(s as u64))
+                .unwrap_or_else(|| "0:00".into());
+            kv(
+                tr("Recorded"),
+                match d.stream.as_ref().and_then(|s| s.max_seconds) {
+                    // Asked for a fixed length: say how much of it is done.
+                    Some(limit) => format!("{done} / {}", fmt::eta(limit)),
+                    None => done,
+                },
+            )
+        } else {
+            kv(
+                tr("File size"),
+                d.size.map(fmt::size3).unwrap_or_else(|| "?".into()),
+            )
+        },
         kv(
             tr("Downloaded"),
             format!(
@@ -512,6 +532,15 @@ pub fn view(app: &App, id: crate::model::DlId) -> El<'_> {
 pub fn title(app: &App, id: crate::model::DlId) -> String {
     match app.item(id) {
         Some(d) => {
+            // A recording has no total, so there is no percentage to show.
+            // The elapsed media is the number someone watching it wants.
+            if d.stream.as_ref().is_some_and(|s| s.live) && d.state != DlState::Complete {
+                let clock = d
+                    .recorded_secs
+                    .map(|s| crate::fmt::eta(s as u64))
+                    .unwrap_or_else(|| "0:00".into());
+                return format!("{clock} {}", d.file_name);
+            }
             let pct = d
                 .size
                 .filter(|s| *s > 0 && d.state != DlState::Complete)

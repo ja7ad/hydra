@@ -1,8 +1,9 @@
 name: Publish crates
 
-# The library crates (hya-core, hya-net) version and ship independently of the
-# product release: they are published when their own manifest version is bumped
-# past what crates.io serves, not when a vX.Y.Z tag is cut. Release tags —
+# The library crates (hya-core, hya-net, hya-stream) version and ship
+# independently of the product release: they are published when their own
+# manifest version is bumped past what crates.io serves, not when a vX.Y.Z tag
+# is cut. Release tags —
 # pre-release or not — only build the GitHub artifacts (.github/workflows/
 # release.yml).
 on:
@@ -11,14 +12,15 @@ on:
     paths:
       - "crates/hydra-core/Cargo.toml"
       - "crates/hydra-net/Cargo.toml"
+      - "crates/hydra-stream/Cargo.toml"
       - ".github/workflows/publish-crates.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Publishing is not reversible and hya-net waits on a freshly indexed
-# hya-core, so runs must not overlap.
+# Publishing is not reversible and hya-net / hya-stream wait on a freshly
+# indexed hya-core, so runs must not overlap.
 concurrency:
   group: publish-crates
   cancel-in-progress: false
@@ -42,7 +44,7 @@ jobs:
 
           PUBLISH=false
           PENDING=""
-          for crate in hya-core hya-net; do
+          for crate in hya-core hya-net hya-stream; do
             version=$(crate_version "$crate")
             latest=$(latest_indexed_version "$crate")
             if [ -z "$latest" ]; then
@@ -117,15 +119,17 @@ jobs:
           # crates.io; hya-cli / hya-gui / hya-host / hya-updater are
           # `publish = false` and ship as release binaries instead:
           # 1. hya-core (pure algorithmic foundation, no intra-workspace deps)
-          # 2. hya-net (depends on hya-core, so it needs hya-core indexed first)
+          # 2. hya-net and hya-stream (both depend on hya-core only, so they
+          #    need hya-core indexed first; they are independent of each other)
           publish_crate hya-core
 
-          # hya-net depends on hya-core through a path-only workspace
-          # dependency (intentional for local builds, see
+          # hya-net and hya-stream depend on hya-core through a path-only
+          # workspace dependency (intentional for local builds, see
           # pin_workspace_dependency_version's comment in
           # scripts/crates-io-index.sh) which `cargo publish` rejects for
           # lacking a version requirement. Stamp one into this checkout's
           # Cargo.toml, which leaves it uncommitted — nothing is pushed back —
-          # so only hya-net's publish needs --allow-dirty.
+          # so every publish after the stamp needs --allow-dirty.
           pin_workspace_dependency_version hya-core
           publish_crate hya-net --allow-dirty
+          publish_crate hya-stream --allow-dirty

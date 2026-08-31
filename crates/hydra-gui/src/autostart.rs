@@ -17,6 +17,12 @@
 use std::path::PathBuf;
 
 fn exe() -> Option<String> {
+    // From an AppImage, `current_exe()` is a path inside the runtime's mount
+    // — it exists only for this run, so a login entry pointing at it would
+    // be dead by the next boot. The image file is the launcher.
+    if let Some(img) = hya_updater::appimage_path() {
+        return Some(img.to_string_lossy().into_owned());
+    }
     std::env::current_exe()
         .ok()
         .map(|p| p.to_string_lossy().into_owned())

@@ -28,6 +28,8 @@
 # <prefix>/share/hydra. On Linux this uses the release tarball (no deb/rpm
 # needed). --cli installs only the hydra binary.
 #
+# Every mode also links <prefix>/bin/hya to the CLI — see link_cli_alias.
+#
 # Homebrew users on macOS/Linux can also run:
 #   brew install ja7ad/tap/hydra         # CLI
 #   brew install --cask ja7ad/tap/hydra  # macOS Desktop GUI bundle
@@ -240,6 +242,29 @@ link_bin() { # link_bin NAME TARGET — <prefix>/bin/NAME -> TARGET
   echo "linked $BIN_DIR/$1 -> $2"
 }
 
+link_cli_alias() { # <prefix>/bin/hya -> hydra
+  # `hydra` is also THC-Hydra, the login auditor Debian, Ubuntu, Kali, Arch
+  # and Homebrew all ship, so a machine can easily carry two of them on PATH
+  # — and three letters is a friendlier thing to type for a command run as
+  # often as a download. Hence the short name, as a RELATIVE symlink: it
+  # resolves through whatever `hydra` is at the time, so a self update (which
+  # replaces the CLI in place) moves both names at once, and it keeps
+  # pointing at the right file if the prefix is ever relocated.
+  local alias_path="$BIN_DIR/hya"
+  if [ -L "$alias_path" ]; then
+    # Only a link that is already ours may be rewritten.
+    case "$(readlink "$alias_path")" in
+      hydra|"$BIN_DIR/hydra") ;;
+      *) echo "note: $alias_path points somewhere else; left alone" >&2; return 0 ;;
+    esac
+  elif [ -e "$alias_path" ]; then
+    echo "note: $alias_path already exists; left alone (use hydra instead)" >&2
+    return 0
+  fi
+  $SUDO ln -sfn hydra "$alias_path"
+  echo "linked $alias_path -> hydra"
+}
+
 if [ -z "$VERSION" ]; then
   # Capture the JSON before parsing: grep -m1 on a live curl pipe closes it
   # early, which makes curl fail with exit 56 under pipefail.
@@ -341,6 +366,7 @@ if [ -n "$APP" ]; then
 else
   $SUDO install -m 755 "$SRC/hydra" "$BIN_DIR/hydra"
   echo "installed $BIN_DIR/hydra"
+  link_cli_alias
 fi
 
 # Man pages (releases >= 0.2.2 ship them in the tarball as man/*.1).
@@ -362,6 +388,7 @@ if [ "$MODE" = gui ]; then
     build_macos_app "$SRC" "$APP"
     HOST_BIN="$APP/Contents/MacOS/hydra-host"
     link_bin hydra "$APP/Contents/MacOS/hydra"
+    link_cli_alias
     link_bin hydra-gui "$APP/Contents/MacOS/$APP_NAME"
     link_bin hydra-host "$APP/Contents/MacOS/hydra-host"
   else

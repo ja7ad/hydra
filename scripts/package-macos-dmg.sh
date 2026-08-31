@@ -113,3 +113,4 @@ hdiutil create -volname "Hydra Download Manager" -srcfolder "$STAGE" \
 echo "Built: $DMG"
 echo "CLI ships inside the bundle; to put it on PATH after installing:"
 echo '  ln -s "/Applications/Hydra Download Manager.app/Contents/MacOS/hydra" /usr/local/bin/hydra'
+echo '  ln -s hydra /usr/local/bin/hya   # the short name, if you want it'

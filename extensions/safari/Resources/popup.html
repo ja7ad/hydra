@@ -16,10 +16,20 @@
       <span>Capture downloads</span>
     </label>
 
+    <label class="row toggle">
+      <input type="checkbox" id="video-panel" />
+      <span>Download button on videos</span>
+    </label>
+
     <div class="actions">
       <button id="open-hydra">Open Hydra</button>
       <button id="all-links">Download all links</button>
     </div>
+
+    <section id="stream-section" hidden>
+      <h2>Streams on this page</h2>
+      <ul id="stream-list"></ul>
+    </section>
 
     <section id="media-section" hidden>
       <h2>Media on this page</h2>

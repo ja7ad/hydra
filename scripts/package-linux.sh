@@ -136,6 +136,10 @@ stage() { # <root> <deb|rpm>
   install -Dm755 "$BIN/hydra"      "$ROOT/usr/bin/hydra"
   install -Dm755 "$BIN/hydra-gui"  "$ROOT/usr/bin/hydra-gui"
   install -Dm755 "$BIN/hydra-host" "$ROOT/usr/bin/hydra-host"
+  # Short second name for the CLI. The package already Conflicts with
+  # thc-hydra over /usr/bin/hydra; `hya` is the name that does not collide,
+  # and three letters types better for a command run as often as a download.
+  ln -sf hydra "$ROOT/usr/bin/hya"
 
   # Desktop/menu entry (the "desktop icon").
   install -d "$ROOT/usr/share/applications"
@@ -331,6 +335,7 @@ fi
 
 %files
 /usr/bin/hydra
+/usr/bin/hya
 /usr/bin/hydra-gui
 /usr/bin/hydra-host
 /usr/share/applications/hydra.desktop
@@ -338,6 +343,7 @@ fi
 /usr/share/$NAME/extensions/
 /usr/share/doc/$NAME/
 /usr/share/man/man1/hydra*.1.gz
+/usr/share/man/man1/hya.1.gz
 %config(noreplace) /etc/xdg/autostart/hydra.desktop
 %config(noreplace) /etc/opt/chrome/native-messaging-hosts/$HOST_NAME.json
 %config(noreplace) /etc/chromium/native-messaging-hosts/$HOST_NAME.json

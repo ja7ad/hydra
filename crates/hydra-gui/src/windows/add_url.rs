@@ -6,7 +6,7 @@
 use crate::app::{App, El, Message, WinKind};
 use crate::windows::{dlg_btn, dlg_btn_primary};
 use crate::{i18n::tr, icons, theme};
-use iced::widget::{checkbox, column, container, row, svg, text, text_input};
+use iced::widget::{checkbox, column, container, pick_list, row, svg, text, text_input};
 use iced::Length;
 
 pub fn view(app: &App) -> El<'_> {
@@ -70,6 +70,122 @@ pub fn view(app: &App) -> El<'_> {
             );
     }
 
+    // A manifest is not a file: which rendition, which container, and — for
+    // a live stream — how long to record all have to be settled BEFORE the
+    // first segment, because there is no changing your mind halfway through.
+    let stream: El<'_> = if st.stream_probing {
+        text(tr("Reading the stream's quality list..."))
+            .size(theme::FONT_SIZE)
+            .color(theme::dim_text(&iced::Theme::Light))
+            .into()
+    } else if let Some(p) = &st.stream {
+        if let Some(drm) = &p.drm {
+            // The same sentence the engine reports, so the dialog and the
+            // download list never explain this differently.
+            text(crate::engine::drm_refusal(drm))
+                .size(theme::FONT_SIZE)
+                .color(iced::Color::from_rgb8(0xC0, 0x2B, 0x2B))
+                .into()
+        } else {
+            let mut rows = column![].spacing(8);
+            let kind = if p.live {
+                format!("{} — {}", p.protocol.to_uppercase(), tr("live"))
+            } else {
+                match p.duration {
+                    Some(d) => format!(
+                        "{}  {}",
+                        p.protocol.to_uppercase(),
+                        crate::fmt::eta(d as u64)
+                    ),
+                    None => p.protocol.to_uppercase(),
+                }
+            };
+            rows = rows.push(
+                row![
+                    text(tr("Stream"))
+                        .size(theme::FONT_SIZE)
+                        .wrapping(iced::widget::text::Wrapping::None)
+                        .width(70.0),
+                    text(kind).size(theme::FONT_SIZE),
+                    text(if p.separate_audio {
+                        tr("video + audio")
+                    } else {
+                        String::new()
+                    })
+                    .size(theme::FONT_SIZE - 1.0)
+                    .color(theme::dim_text(&iced::Theme::Light)),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center),
+            );
+            rows = rows.push(
+                row![
+                    text(tr("Quality"))
+                        .size(theme::FONT_SIZE)
+                        .wrapping(iced::widget::text::Wrapping::None)
+                        .width(70.0),
+                    // Styled like every other picker in the app. Without
+                    // this it falls back to iced's default surface, which is
+                    // near-white and unreadable under the dark theme — this
+                    // was the one picker in the app that skipped it.
+                    pick_list(
+                        p.qualities.clone(),
+                        st.quality.clone(),
+                        Message::AddrQuality
+                    )
+                    .text_size(theme::FONT_SIZE)
+                    .style(theme::picker)
+                    .padding([5, 8])
+                    .width(250.0),
+                    text(tr("Save as")).size(theme::FONT_SIZE),
+                    pick_list(
+                        // Renaming fragmented MP4 to .ts would produce a file
+                        // that lies about itself, so TS is only offered when
+                        // the segments really are MPEG-TS.
+                        if p.is_ts {
+                            vec!["MP4".to_string(), "TS".to_string()]
+                        } else {
+                            vec!["MP4".to_string()]
+                        },
+                        Some(st.container.clone()),
+                        Message::AddrContainer
+                    )
+                    .text_size(theme::FONT_SIZE)
+                    .style(theme::picker)
+                    .padding([5, 8])
+                    .width(100.0),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center),
+            );
+            if p.live {
+                rows = rows.push(
+                    row![
+                        text(tr("Record"))
+                            .size(theme::FONT_SIZE)
+                            .wrapping(iced::widget::text::Wrapping::None)
+                            .width(70.0),
+                        text_input("", &st.record_minutes)
+                            .on_input(Message::AddrRecordMinutes)
+                            .size(theme::FONT_SIZE)
+                            .style(theme::input)
+                            .width(70.0),
+                        text(tr(
+                            "minutes, then finish the file. Leave empty to record until you press Stop."
+                        ))
+                        .size(theme::FONT_SIZE - 1.0)
+                        .color(theme::dim_text(&iced::Theme::Light)),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center),
+                );
+            }
+            rows.into()
+        }
+    } else {
+        iced::widget::space::horizontal().height(0.0).into()
+    };
+
     let error: El<'_> = match &st.error {
         Some(e) => text(e.clone())
             .size(theme::FONT_SIZE)
@@ -97,7 +213,7 @@ pub fn view(app: &App) -> El<'_> {
     ]
     .spacing(8);
 
-    let left = column![address, auth, creds, error]
+    let left = column![address, auth, creds, stream, error]
         .spacing(10)
         .width(Length::Fill);
 
