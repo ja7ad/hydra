@@ -31,11 +31,19 @@ static BUILTIN: &[(&str, &str, &str)] = &[
     ("ja", "日本語", include_str!("../assets/locale/ja.json")),
     ("ko", "한국어", include_str!("../assets/locale/ko.json")),
     ("nl", "Nederlands", include_str!("../assets/locale/nl.json")),
-    ("pt-BR", "Português (Brasil)", include_str!("../assets/locale/pt-BR.json")),
+    (
+        "pt-BR",
+        "Português (Brasil)",
+        include_str!("../assets/locale/pt-BR.json"),
+    ),
     ("ru", "Русский", include_str!("../assets/locale/ru.json")),
     ("tr", "Türkçe", include_str!("../assets/locale/tr.json")),
     ("zh", "简体中文", include_str!("../assets/locale/zh.json")),
-    ("zh-Hant", "繁體中文", include_str!("../assets/locale/zh-hant.json")),
+    (
+        "zh-Hant",
+        "繁體中文",
+        include_str!("../assets/locale/zh-hant.json"),
+    ),
 ];
 
 static CATALOGUE: RwLock<Option<HashMap<String, String>>> = RwLock::new(None);
