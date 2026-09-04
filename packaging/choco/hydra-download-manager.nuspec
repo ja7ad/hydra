@@ -3,7 +3,7 @@
   <metadata>
     <!-- Package Info -->
     <id>hydra-download-manager</id>
-    <version>0.4.0</version>
+    <version>0.4.1</version>
     <packageSourceUrl>https://github.com/ja7ad/hydra/tree/main/packaging/choco</packageSourceUrl>
     <owners>ja7ad</owners>
 
@@ -30,7 +30,7 @@ Hydra is a fast, resilient, multi-source download engine and accelerator written
 * **Browser Integration:** Native messaging support for Chrome and Firefox extensions.
 * **Cross-Platform & Lightweight:** Efficient resource consumption with zero bloat.
 ]]></description>
-    <releaseNotes>https://github.com/ja7ad/hydra/releases/tag/v0.4.0</releaseNotes>
+    <releaseNotes>https://github.com/ja7ad/hydra/releases/tag/v0.4.1</releaseNotes>
   </metadata>
   <files>
     <file src="tools\**" target="tools" />

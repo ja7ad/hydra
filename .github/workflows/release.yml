@@ -946,3 +946,80 @@ jobs:
             echo "note: AUR_SSH_PRIVATE_KEY not set; skipping automated AUR publish"
           fi
 
+
+  # ------------------------------------------------------------- Chocolatey
+  #
+  # Its own job, on a Windows runner, because `choco pack` and `choco push`
+  # need Chocolatey itself. scripts/update-choco.sh bumps packaging/choco to
+  # the release (version, x64 + ARM64 installer URLs and their SHA256s from
+  # the freshly built installers), packs it and pushes the .nupkg to the
+  # community repository. It then opens a pull request carrying that bump so
+  # packageSourceUrl on main matches what the moderators see: main cannot be
+  # pushed directly, its ruleset requires the CI status checks.
+  publish-choco:
+    name: Publish to Chocolatey
+    runs-on: windows-latest
+    needs: [verify-version, release]
+    if: github.ref_type == 'tag' && needs.verify-version.outputs.prerelease == 'false'
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      VERSION: ${{ needs.verify-version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: hydra-windows-*
+          path: dist
+          merge-multiple: true
+
+      - name: Bump, pack and push package
+        shell: bash
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CHOCO_API_KEY:-}" ]; then
+            echo "note: CHOCO_API_KEY not set; skipping Chocolatey publish"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ls -lh dist/
+          scripts/update-choco.sh "$VERSION" dist --push
+          echo "published=true" >> "$GITHUB_OUTPUT"
+        id: push
+
+      # The bump is re-applied on top of origin/main rather than carried
+      # over from the tag's tree, so the PR only ever touches the four
+      # values that changed. Force-push, since a re-run of the release
+      # recreates the same branch.
+      - name: Open pull request with the package bump
+        if: steps.push.outputs.published == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BRANCH="chore/choco-v${VERSION}"
+          git checkout -- packaging/choco
+          git fetch origin main
+          git checkout -B "$BRANCH" origin/main
+          scripts/update-choco.sh "$VERSION" dist
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packaging/choco
+          if git diff --staged --quiet; then
+            echo "main already carries the Chocolatey bump for v${VERSION}"
+            exit 0
+          fi
+          git commit -m "chore(choco): bump to v${VERSION}"
+          git push --force origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore(choco): bump to v${VERSION}" \
+              --body "Chocolatey package bumped to v${VERSION} by the release workflow: version, x64 + ARM64 installer URLs and SHA256 checksums in \`packaging/choco\`. The matching \`hydra-download-manager.${VERSION}.nupkg\` was pushed to the community repository."
+          fi
