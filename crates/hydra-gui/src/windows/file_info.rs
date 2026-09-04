@@ -116,12 +116,23 @@ pub fn view(app: &App) -> El<'_> {
                 .text_size(theme::FONT_SIZE)
                 .style(theme::check),
         );
+        // Name the folder the tick actually writes: General while
+        // category folders are switched off (see FiStartDownload).
+        let remember_cat = if app.cfg.settings.no_category_dirs {
+            app.cfg
+                .categories
+                .first()
+                .map(|c| c.name.as_str())
+                .unwrap_or(st.category.as_str())
+        } else {
+            st.category.as_str()
+        };
         form = form.push(
             checkbox(st.remember)
                 .label(format!(
                     "{} \"{}\" {}",
                     tr("Remember this path for"),
-                    st.category,
+                    remember_cat,
                     tr("category")
                 ))
                 .on_toggle(Message::FiRemember)
