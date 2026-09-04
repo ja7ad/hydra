@@ -13,13 +13,13 @@ $packageArgs = @{
   validExitCodes    = @(0)
 
   # x64 (AMD64 / Intel)
-  url64             = 'https://github.com/ja7ad/hydra/releases/download/v0.4.0/hydra-0.4.0-windows-x64-setup.exe'
-  checksum64        = '39568C446B54E403874F48F4D442187C3ED1252712D7D7E62C7B95E536CDD59E'
+  url64             = 'https://github.com/ja7ad/hydra/releases/download/v0.4.1/hydra-0.4.1-windows-x64-setup.exe'
+  checksum64        = 'F595A13FC771F4695368452C9A208FE32A7465B9C57502E602E745F5162BAF2B'
   checksumType64    = 'sha256'
 
   # ARM64
-  url64arm          = 'https://github.com/ja7ad/hydra/releases/download/v0.4.0/hydra-0.4.0-windows-arm64-setup.exe'
-  checksum64arm     = 'E50D06B875B825DE35F22BA40ACC84C878E812BB5617E70B23777457A0A56CB7'
+  url64arm          = 'https://github.com/ja7ad/hydra/releases/download/v0.4.1/hydra-0.4.1-windows-arm64-setup.exe'
+  checksum64arm     = '347E2F01774E3AEE16B2DF461F01E9DBF63925FFD51BB2307A2DF8B4A4542E91'
   checksumType64arm = 'sha256'
 }
 
