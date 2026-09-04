@@ -7,8 +7,15 @@
 use crate::app::{App, El, MenuAction, MenuBarKind, Message, SortKey};
 use crate::model::DlState;
 use crate::{i18n::tr, theme};
-use iced::widget::{button, column, container, mouse_area, row, space, text};
+use iced::widget::{button, column, container, mouse_area, row, scrollable, space, text};
 use iced::Length;
+
+/// Flyouts longer than this many rows scroll instead of growing past the
+/// window (the Language menu lists 30+ locales).
+const FLYOUT_MAX_ROWS: usize = 10;
+/// Height of one flyout row: the label's line height (iced's default is
+/// 1.3 × font size) plus the button's vertical padding.
+const FLYOUT_ROW_H: f32 = theme::FONT_SIZE * 1.3 + 10.0;
 
 pub struct Entry {
     pub action: Option<MenuAction>,
@@ -466,6 +473,14 @@ pub fn dropdown<'a>(items: &[Entry], open_submenu: Option<usize>) -> El<'a> {
         }
         sub = sub.push(cb);
     }
+    let sub: El<'a> = if parent.submenu.len() > FLYOUT_MAX_ROWS {
+        scrollable(sub)
+            .width(Length::Fill)
+            .height(FLYOUT_ROW_H * FLYOUT_MAX_ROWS as f32)
+            .into()
+    } else {
+        sub.into()
+    };
     let flyout = container(sub)
         .padding(4)
         .width(230.0)
