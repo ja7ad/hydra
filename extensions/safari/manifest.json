@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hydra Download Manager Integration",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A browser integration for Hydra: right-click downloads, link selection, and media/HLS/DASH stream sniffing.",
   "browser_specific_settings": {
     "safari": {

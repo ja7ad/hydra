@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Javad Rajabzadeh
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Two dialogs sharing one state, laid out like IDM's "Download File Info":
+//! Two dialogs sharing one state, laid out "Download File Info":
 //! a narrow label column, one Save As box holding the whole path with a
 //! "..." save dialog beside it, the folder the tick would remember shown
 //! greyed under the checkbox, the file-type icon and size in a side column,
@@ -20,7 +20,7 @@ use crate::{fmt, i18n::tr, theme};
 use iced::widget::{button, checkbox, column, container, pick_list, row, svg, text, text_input};
 use iced::Length;
 
-/// The label column: IDM's is about this wide at the same font size.
+/// The label column: is about this wide at the same font size.
 const LABEL_W: f32 = 84.0;
 const GAP: f32 = 8.0;
 
@@ -53,7 +53,7 @@ fn field<'a>(value: &str, on_input: fn(String) -> Message) -> text_input::TextIn
         .width(Length::Fill)
 }
 
-/// IDM's small square "..." button beside Save As.
+/// small square "..." button beside Save As.
 fn small_btn<'a>(label: &'a str, msg: Message) -> El<'a> {
     button(
         text(label)
@@ -153,7 +153,7 @@ pub fn view(app: &App) -> El<'_> {
                 .style(theme::check)
                 .into(),
         ));
-        // The folder that tick would store, greyed out like IDM's.
+        // The folder that tick would store, greyed out.
         form = form.push(indented(
             text_input("", &st.save_dir)
                 .size(theme::FONT_SIZE)
@@ -232,13 +232,22 @@ pub fn view(app: &App) -> El<'_> {
     }
 
     // Side column: file-type icon with the size under it, level with the
-    // Category/Save As rows.
+    // Category/Save As rows, and Preview button beneath — live for an
+    // archive whose index can be read off its tail (see `engine::peek_zip`),
+    // greyed for everything else so the column keeps one shape.
+    let previewable = hya_net::zipdir::is_zip_name(&st.file_name);
     let side = column![
         iced::widget::space::vertical().height(if st.is_new { 30.0 } else { 86.0 }),
         svg(crate::ui::categories::cat_icon(&st.category))
             .width(48.0)
             .height(48.0),
         text(size.map(fmt::size2).unwrap_or_else(|| "?".into())).size(theme::FONT_SIZE),
+        iced::widget::space::vertical().height(6.0),
+        button(crate::windows::centered(tr("Preview"), theme::FONT_SIZE))
+            .padding([4, 8])
+            .width(88.0)
+            .style(theme::btn)
+            .on_press_maybe(previewable.then_some(Message::FiPreview)),
     ]
     .spacing(6)
     .align_x(iced::Alignment::Center)

@@ -24,6 +24,8 @@ use std::sync::OnceLock;
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{ClientMessageEvent, ConnectionExt, EventMask};
 use x11rb::rust_connection::RustConnection;
+// `change_property32` lives on the wrapper trait, not the protocol one.
+use x11rb::wrapper::ConnectionExt as _;
 
 const _NET_WM_STATE_REMOVE: u32 = 0;
 const _NET_WM_STATE_ADD: u32 = 1;
@@ -104,6 +106,30 @@ pub fn apply(window: &dyn iced::window::Window, hide: bool) {
     })();
     if let Err(e) = sent {
         crate::log::warn(&format!("hide from taskbar failed: {e}"));
+    }
+}
+
+/// Mark `child` transient for the window `parent` (an X window id): the
+/// window manager keeps it above that window and minimizes it along with
+/// it. See `dialog_parent`.
+pub fn transient_for(child: &dyn iced::window::Window, parent: u32) {
+    let Some(id) = xid(child) else { return };
+    let Some(x) = x11() else { return };
+    let set = (|| -> Result<(), Box<dyn std::error::Error>> {
+        x.conn
+            .change_property32(
+                x11rb::protocol::xproto::PropMode::REPLACE,
+                id,
+                x11rb::protocol::xproto::AtomEnum::WM_TRANSIENT_FOR,
+                x11rb::protocol::xproto::AtomEnum::WINDOW,
+                &[parent],
+            )?
+            .check()?;
+        x.conn.flush()?;
+        Ok(())
+    })();
+    if let Err(e) = set {
+        crate::log::warn(&format!("dialog parent: WM_TRANSIENT_FOR failed: {e}"));
     }
 }
 

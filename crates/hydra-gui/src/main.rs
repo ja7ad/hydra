@@ -10,6 +10,7 @@
 
 mod app;
 mod autostart;
+mod dialog_parent;
 mod engine;
 mod ext_info;
 mod extbus;
@@ -123,6 +124,7 @@ fn boot() -> (App, Task<Message>) {
         sort: (app::SortKey::LastTry, false),
         add_url: app::AddUrlState::default(),
         file_info: app::FileInfoState::default(),
+        zip_preview: app::ZipPreviewState::default(),
         prog: std::collections::HashMap::new(),
         scans: std::collections::HashMap::new(),
         options: app::OptionsState::default(),
@@ -256,6 +258,7 @@ fn view(app: &App, id: window::Id) -> app::El<'_> {
         Some(WinKind::Permissions) => windows::permissions::view(app),
         Some(WinKind::Update) => windows::update::view(app),
         Some(WinKind::Power) => windows::power::view(app),
+        Some(WinKind::ZipPreview(_)) => windows::zip_preview::view(app),
         None => iced::widget::container(iced::widget::text(""))
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
@@ -282,6 +285,7 @@ fn title(app: &App, id: window::Id) -> String {
         Some(WinKind::Permissions) => tr("Permissions"),
         Some(WinKind::Update) => tr("Update Hydra"),
         Some(WinKind::Power) => tr("Hydra"),
+        Some(WinKind::ZipPreview(_)) => tr("Zip preview"),
         None => "Hydra".into(),
     }
 }

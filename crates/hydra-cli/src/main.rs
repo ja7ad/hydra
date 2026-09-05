@@ -37,6 +37,7 @@ mod compat_link;
 mod completions;
 mod download;
 mod metalink;
+mod preview;
 mod progress;
 mod prompt;
 mod queue;
@@ -697,9 +698,11 @@ async fn async_main() -> std::process::ExitCode {
     // Only flags the user TYPED are checked here. The manifest auto-detect
     // below falls back to a plain download on purpose: nobody asked it a
     // question, so it has nothing to refuse.
-    if args.inspect || args.list_streams {
+    if args.inspect || args.list_streams || args.preview {
         let flag = if args.inspect {
             "--inspect"
+        } else if args.preview {
+            "--preview"
         } else {
             "--list-streams"
         };
@@ -715,6 +718,22 @@ async fn async_main() -> std::process::ExitCode {
             );
             return std::process::ExitCode::from(2);
         }
+    }
+
+    // An archive listing asks one question about one object; like the two
+    // flags above it owes an answer and never a download.
+    if args.preview {
+        if urls.is_empty() {
+            eprintln!("hydra: --preview needs a URL");
+            return std::process::ExitCode::from(2);
+        }
+        return match preview::run(&urls[0], &args).await {
+            Ok(()) => std::process::ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("hydra: {e}");
+                std::process::ExitCode::FAILURE
+            }
+        };
     }
 
     // A manifest is not a file, so it cannot go through the range scheduler.

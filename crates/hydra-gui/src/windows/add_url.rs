@@ -5,24 +5,29 @@
 
 use crate::app::{App, El, Message, WinKind};
 use crate::windows::{dlg_btn, dlg_btn_primary};
-use crate::{i18n::tr, icons, theme};
-use iced::widget::{checkbox, column, container, pick_list, row, svg, text, text_input};
+use crate::{i18n::tr, theme};
+use iced::widget::{checkbox, column, container, pick_list, row, text, text_input};
 use iced::Length;
+
+/// The label column, matching the Download File Info dialog's.
+const LABEL_W: f32 = 70.0;
+const GAP: f32 = 8.0;
+
+fn label<'a>(s: String) -> El<'a> {
+    text(s)
+        .size(theme::FONT_SIZE)
+        .wrapping(iced::widget::text::Wrapping::None)
+        .width(LABEL_W)
+        .into()
+}
 
 pub fn view(app: &App) -> El<'_> {
     let st = &app.add_url;
-    let title = row![
-        svg(icons::add_url(true)).width(20.0).height(20.0),
-        text(tr("Enter new address to download")).size(theme::FONT_SIZE + 1.0),
-    ]
-    .spacing(6)
-    .align_y(iced::Alignment::Center);
 
+    // No in-window heading: the OS title bar already names the dialog, and
+    // puts the Address box on the very first line.
     let address = row![
-        text(tr("Address"))
-            .size(theme::FONT_SIZE)
-            .wrapping(iced::widget::text::Wrapping::None)
-            .width(70.0),
+        label(tr("Address")),
         crate::windows::ext_hint(
             text_input("http://", &st.address)
                 .on_input(Message::AddrChanged)
@@ -33,7 +38,7 @@ pub fn view(app: &App) -> El<'_> {
             &st.address,
         ),
     ]
-    .spacing(8)
+    .spacing(GAP)
     .align_y(iced::Alignment::Center);
 
     let auth = checkbox(st.use_auth)
@@ -43,32 +48,41 @@ pub fn view(app: &App) -> El<'_> {
         .text_size(theme::FONT_SIZE)
         .style(theme::check);
 
-    let mut creds = row![].spacing(12).align_y(iced::Alignment::Center);
-    if st.use_auth {
-        creds = creds
-            .push(
-                text(tr("Login"))
-                    .size(theme::FONT_SIZE)
-                    .wrapping(iced::widget::text::Wrapping::None)
-                    .width(70.0),
-            )
-            .push(
-                text_input("", &st.login)
-                    .on_input(Message::AddrLogin)
-                    .size(theme::FONT_SIZE)
-                    .style(theme::input)
-                    .width(220.0),
-            )
-            .push(text(tr("Password")).size(theme::FONT_SIZE))
-            .push(
-                text_input("", &st.password)
-                    .on_input(Message::AddrPass)
-                    .secure(true)
-                    .size(theme::FONT_SIZE)
-                    .style(theme::input)
-                    .width(220.0),
-            );
-    }
+    // Login and Password stay on screen and grey out until the box is
+    // ticked, the way draws them: the dialog keeps one shape instead of
+    // growing a row under the pointer.
+    let enabled = st.use_auth;
+    let cred_label = |s: String| {
+        text(s)
+            .size(theme::FONT_SIZE)
+            .wrapping(iced::widget::text::Wrapping::None)
+            .style(move |t: &iced::Theme| iced::widget::text::Style {
+                color: Some(if enabled {
+                    theme::text_color(t)
+                } else {
+                    theme::dim_text(t)
+                }),
+            })
+    };
+    let creds = row![
+        iced::widget::space::horizontal().width(LABEL_W),
+        cred_label(tr("Login")),
+        text_input("", &st.login)
+            .on_input_maybe(st.use_auth.then_some(Message::AddrLogin))
+            .size(theme::FONT_SIZE)
+            .style(theme::input)
+            .width(Length::Fill),
+        iced::widget::space::horizontal().width(16.0),
+        cred_label(tr("Password")),
+        text_input("", &st.password)
+            .on_input_maybe(st.use_auth.then_some(Message::AddrPass))
+            .secure(true)
+            .size(theme::FONT_SIZE)
+            .style(theme::input)
+            .width(Length::Fill),
+    ]
+    .spacing(GAP)
+    .align_y(iced::Alignment::Center);
 
     // A manifest is not a file: which rendition, which container, and — for
     // a live stream — how long to record all have to be settled BEFORE the
@@ -102,10 +116,7 @@ pub fn view(app: &App) -> El<'_> {
             };
             rows = rows.push(
                 row![
-                    text(tr("Stream"))
-                        .size(theme::FONT_SIZE)
-                        .wrapping(iced::widget::text::Wrapping::None)
-                        .width(70.0),
+                    label(tr("Stream")),
                     text(kind).size(theme::FONT_SIZE),
                     text(if p.separate_audio {
                         tr("video + audio")
@@ -120,10 +131,7 @@ pub fn view(app: &App) -> El<'_> {
             );
             rows = rows.push(
                 row![
-                    text(tr("Quality"))
-                        .size(theme::FONT_SIZE)
-                        .wrapping(iced::widget::text::Wrapping::None)
-                        .width(70.0),
+                    label(tr("Quality")),
                     // Styled like every other picker in the app. Without
                     // this it falls back to iced's default surface, which is
                     // near-white and unreadable under the dark theme — this
@@ -161,10 +169,7 @@ pub fn view(app: &App) -> El<'_> {
             if p.live {
                 rows = rows.push(
                     row![
-                        text(tr("Record"))
-                            .size(theme::FONT_SIZE)
-                            .wrapping(iced::widget::text::Wrapping::None)
-                            .width(70.0),
+                        label(tr("Record")),
                         text_input("", &st.record_minutes)
                             .on_input(Message::AddrRecordMinutes)
                             .size(theme::FONT_SIZE)
@@ -180,6 +185,9 @@ pub fn view(app: &App) -> El<'_> {
                     .align_y(iced::Alignment::Center),
                 );
             }
+            // A blank line under the block, so the mirror list or an error
+            // line below reads as its own section.
+            rows = rows.push(iced::widget::space::vertical().height(GAP));
             rows.into()
         }
     } else {
@@ -227,10 +235,7 @@ pub fn view(app: &App) -> El<'_> {
         let mut rows = column![].spacing(6);
         rows = rows.push(
             row![
-                text(tr("Metalink"))
-                    .size(theme::FONT_SIZE)
-                    .wrapping(iced::widget::text::Wrapping::None)
-                    .width(70.0),
+                label(tr("Metalink")),
                 text(format!(
                     "{}  —  {} {}",
                     m.version,
@@ -268,7 +273,7 @@ pub fn view(app: &App) -> El<'_> {
             }
             rows = rows.push(
                 row![
-                    iced::widget::space::horizontal().width(70.0),
+                    iced::widget::space::horizontal().width(LABEL_W),
                     text(f.name.clone()).size(theme::FONT_SIZE),
                     text(parts.join("  ·  "))
                         .size(theme::FONT_SIZE - 1.0)
@@ -281,7 +286,7 @@ pub fn view(app: &App) -> El<'_> {
         if m.files.len() > crate::app::METALINK_PANEL_ROWS {
             rows = rows.push(
                 row![
-                    iced::widget::space::horizontal().width(70.0),
+                    iced::widget::space::horizontal().width(LABEL_W),
                     text(format!(
                         "+{}",
                         m.files.len() - crate::app::METALINK_PANEL_ROWS
@@ -297,17 +302,24 @@ pub fn view(app: &App) -> El<'_> {
         iced::widget::space::horizontal().height(0.0).into()
     };
 
-    let left = column![address, auth, creds, stream, metalink, error]
-        .spacing(10)
-        .width(Length::Fill);
+    // A blank line under Login/Password separates the fixed part of the
+    // dialog from whatever a probed address adds beneath.
+    let left = column![
+        address,
+        auth,
+        creds,
+        iced::widget::space::vertical().height(GAP),
+        stream,
+        metalink,
+        error
+    ]
+    .spacing(GAP)
+    .width(Length::Fill);
 
-    container(
-        column![title, row![left, buttons].spacing(16).padding([8, 0]),]
-            .spacing(4)
-            .padding(12),
-    )
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .style(theme::window)
-    .into()
+    // OK over Cancel on the right, level with the Address box.
+    container(row![left, buttons].spacing(16).padding(12))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(theme::window)
+        .into()
 }

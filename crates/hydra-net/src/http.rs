@@ -1038,11 +1038,43 @@ pub async fn fetch_object<C: Connector>(
 }
 
 pub async fn fetch_small<C: Connector>(c: &C, t: &Target, cap: usize) -> io::Result<Vec<u8>> {
+    small_get(c, t, None, cap).await
+}
+
+/// Fetch bytes `lo..=hi` of an object into memory.
+///
+/// The ranged twin of [`fetch_small`], for reading a piece of a large object
+/// without the object: an archive's index from its tail, say. Insists on a
+/// `206`: a server that ignores `Range` and answers `200` would hand back the
+/// START of the object, which a caller asking for the tail would then parse
+/// as the tail. `cap` bounds what is read either way, so such a server costs
+/// one bounded read rather than the whole object.
+pub async fn fetch_small_range<C: Connector>(
+    c: &C,
+    t: &Target,
+    lo: u64,
+    hi: u64,
+    cap: usize,
+) -> io::Result<Vec<u8>> {
+    small_get(c, t, Some((lo, hi)), cap).await
+}
+
+async fn small_get<C: Connector>(
+    c: &C,
+    t: &Target,
+    range: Option<(u64, u64)>,
+    cap: usize,
+) -> io::Result<Vec<u8>> {
     let mut s = c.connect(t).await?;
-    let req = build_request_head("GET", t, None);
+    let req = build_request_head("GET", t, range);
     s.write_all(req.as_bytes()).await?;
     let mut buf = Vec::new();
     let mut chunk = vec![0u8; 16 * 1024];
+    // Stop at `Content-Length` rather than waiting for the server to close:
+    // `Connection: close` is a request, and an origin that keeps the socket
+    // open anyway would otherwise hold a complete response hostage to its
+    // idle timeout.
+    let mut body_end: Option<usize> = None;
     loop {
         let n = match s.read(&mut chunk).await {
             Ok(0) => break,
@@ -1053,6 +1085,30 @@ pub async fn fetch_small<C: Connector>(c: &C, t: &Target, cap: usize) -> io::Res
         buf.extend_from_slice(&chunk[..n]);
         if buf.len() > cap + 8192 {
             return Err(io::Error::other("response exceeds the small-fetch cap"));
+        }
+        if body_end.is_none() {
+            if let Some(start) = find_crlf2(&buf) {
+                let head = String::from_utf8_lossy(&buf[..start]);
+                // A `200` to a `Range` request is the WHOLE object on its way:
+                // refuse it here, before reading any of it, rather than after
+                // hitting the cap.
+                let status: u16 = head
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|c| c.parse().ok())
+                    .unwrap_or(0);
+                if range.is_some() && (200..300).contains(&status) && status != 206 {
+                    return Err(io::Error::other(format!(
+                        "server ignored the Range request and answered {status}"
+                    )));
+                }
+                body_end = header_value(&head, "content-length")
+                    .and_then(|v| v.trim().parse::<usize>().ok())
+                    .map(|len| start + len);
+            }
+        }
+        if body_end.is_some_and(|end| buf.len() >= end) {
+            break;
         }
     }
     let Some(start) = find_crlf2(&buf) else {
@@ -1079,6 +1135,11 @@ pub async fn fetch_small<C: Connector>(c: &C, t: &Target, cap: usize) -> io::Res
     }
     if !(200..300).contains(&status) {
         return Err(io::Error::other(format!("server returned {status}")));
+    }
+    if range.is_some() && status != 206 {
+        return Err(io::Error::other(format!(
+            "server ignored the Range request and answered {status}"
+        )));
     }
     let body = buf[start..].to_vec();
     if header_value(&head, "transfer-encoding")
@@ -2445,6 +2506,67 @@ mod tests {
             "each object opened its own connection; the pool was not used"
         );
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The ranged small fetch returns exactly the span asked for on a `206`,
+    /// and refuses a `200` — the start of the object is not its tail.
+    #[tokio::test]
+    async fn fetch_small_range_takes_206_and_refuses_200() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let object: Vec<u8> = (0..=255u8).cycle().take(1000).collect();
+            for conn in listener.incoming() {
+                let Ok(mut sock) = conn else { continue };
+                let Ok(peek) = sock.try_clone() else { continue };
+                let mut r = BufReader::new(peek);
+                let mut line = String::new();
+                let _ = r.read_line(&mut line);
+                let mut range = None;
+                loop {
+                    let mut h = String::new();
+                    if r.read_line(&mut h).unwrap_or(0) == 0 || h == "\r\n" {
+                        break;
+                    }
+                    if let Some(v) = h.strip_prefix("Range: bytes=") {
+                        let (lo, hi) = v.trim().split_once('-').unwrap();
+                        range = Some((lo.parse::<usize>().unwrap(), hi.parse::<usize>().unwrap()));
+                    }
+                }
+                // `/deaf` ignores Range and answers 200 with the whole object.
+                let resp = match range {
+                    Some((lo, hi)) if !line.starts_with("GET /deaf") => format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {lo}-{hi}/{}\r\nContent-Length: {}\r\n\r\n",
+                        object.len(),
+                        hi - lo + 1
+                    ) + std::str::from_utf8(&[]).unwrap(),
+                    _ => format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", object.len()),
+                };
+                let body: &[u8] = match range {
+                    Some((lo, hi)) if !line.starts_with("GET /deaf") => &object[lo..=hi],
+                    _ => &object,
+                };
+                let _ = sock.write_all(resp.as_bytes());
+                let _ = sock.write_all(body);
+                let _ = sock.flush();
+            }
+        });
+
+        let c = crate::TcpConnector;
+        let t = Target::direct("127.0.0.1", port, "/obj");
+        let tail = fetch_small_range(&c, &t, 900, 999, 100).await.expect("206");
+        assert_eq!(tail.len(), 100);
+        assert_eq!(tail[0], (900 % 256) as u8);
+        assert_eq!(tail[99], (999 % 256) as u8);
+
+        let deaf = Target::direct("127.0.0.1", port, "/deaf");
+        let err = fetch_small_range(&c, &deaf, 900, 999, 100)
+            .await
+            .expect_err("a 200 is not the tail");
+        assert!(err.to_string().contains("ignored the Range"), "{err}");
     }
 
     /// A pooled socket the origin has since closed must not surface as a

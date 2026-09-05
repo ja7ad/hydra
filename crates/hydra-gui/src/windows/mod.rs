@@ -15,6 +15,7 @@ pub mod progress;
 pub mod scheduler;
 pub mod shortcuts;
 pub mod update;
+pub mod zip_preview;
 
 use crate::app::{El, Message};
 use crate::theme;

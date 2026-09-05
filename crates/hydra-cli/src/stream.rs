@@ -477,7 +477,7 @@ fn fetcher(
     }
 }
 
-fn human(n: u64) -> String {
+pub(crate) fn human(n: u64) -> String {
     const U: [&str; 4] = ["B", "KB", "MB", "GB"];
     let mut v = n as f64;
     let mut i = 0;

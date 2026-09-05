@@ -1,6 +1,6 @@
 [package]
 name = "hya-net"
-version = "0.4.1"
+version = "0.4.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -29,6 +29,9 @@ serde_json = { workspace = true }
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "fs", "sync"] }
 criterion = { workspace = true }
+# Writes the fixture archives the `zipdir` tests read back: a real archiver's
+# output, ZIP64 included, rather than bytes laid out by the code under test.
+zip = { version = "8", default-features = false, features = ["deflate"] }
 
 [[bench]]
 name = "hot_paths"

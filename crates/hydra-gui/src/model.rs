@@ -692,6 +692,12 @@ pub struct QueueDef {
     /// The two stock queues cannot be renamed or deleted.
     #[serde(default)]
     pub builtin: bool,
+    /// Folder-icon colour, packed `0xRRGGBB`, chosen when the queue is
+    /// created so each user queue is told apart at a glance. `None` is the
+    /// stock yellow folder of the two built-in queues (and of queues saved
+    /// before the field existed).
+    #[serde(default)]
+    pub color: Option<u32>,
     #[serde(skip)]
     pub running: bool,
     /// Whether this run of the queue actually started at least one member.
@@ -709,10 +715,47 @@ pub fn default_queues() -> Vec<QueueDef> {
             files_at_once: 4,
             schedule: Schedule::default(),
             builtin: true,
+            color: None,
             running: false,
             did_work: false,
         })
         .collect()
+}
+
+/// Folder colours handed to new queues: distinct hues that read on both the
+/// light and the dark window, none of them the stock yellow.
+pub const QUEUE_COLORS: [u32; 8] = [
+    0x4C8DFF, // blue
+    0x3DB56A, // green
+    0xE05D5D, // red
+    0xA66CFF, // violet
+    0xFF8A3D, // orange
+    0x2BB5C9, // teal
+    0xE64FA0, // pink
+    0x8C7A5B, // brown
+];
+
+/// A colour for a queue about to be created: random among the palette
+/// entries no existing queue uses, so two new queues never come out alike
+/// until the palette is exhausted; then random over the whole palette.
+pub fn pick_queue_color(existing: &[QueueDef]) -> u32 {
+    let free: Vec<u32> = QUEUE_COLORS
+        .iter()
+        .copied()
+        .filter(|c| !existing.iter().any(|q| q.color == Some(*c)))
+        .collect();
+    let pool: &[u32] = if free.is_empty() {
+        &QUEUE_COLORS
+    } else {
+        &free
+    };
+    // Enough randomness for a colour: the nanosecond clock, not a crypto
+    // source, and no dependency for it.
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as usize)
+        .unwrap_or(0);
+    pool[seed % pool.len()]
 }
 
 /// The application directory holding `config.toml`, `gui-state.json`,
@@ -1012,6 +1055,28 @@ pub fn save_quota(q: &DlQuota) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_queue_gets_a_colour_no_other_queue_has() {
+        let mut queues = default_queues();
+        assert!(
+            queues.iter().all(|q| q.color.is_none()),
+            "stock queues stay yellow"
+        );
+        for _ in 0..QUEUE_COLORS.len() {
+            let c = pick_queue_color(&queues);
+            assert!(QUEUE_COLORS.contains(&c));
+            assert!(
+                !queues.iter().any(|q| q.color == Some(c)),
+                "{c:06X} handed out twice"
+            );
+            let mut q = queues[0].clone();
+            q.color = Some(c);
+            queues.push(q);
+        }
+        // Palette exhausted: still a palette colour, never a crash.
+        assert!(QUEUE_COLORS.contains(&pick_queue_color(&queues)));
+    }
 
     fn cats() -> Vec<CategoryDef> {
         vec![

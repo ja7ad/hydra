@@ -519,22 +519,39 @@ pub async fn probe_link(url: String, user_agent: String) -> Option<LinkMeta> {
         .clone();
     let _permit = gate.acquire_owned().await.ok()?;
     let connector = shared_connector().ok()?;
-    let mut url = url;
+    let (url, p) = resolve_link(connector.as_ref(), url, &user_agent, &[]).await?;
+    if p.status >= 300 {
+        return None;
+    }
+    Some(LinkMeta {
+        size: (p.size > 0).then_some(p.size),
+        file_name: p
+            .suggested_filename()
+            .unwrap_or_else(|| file_name_from_url(&url)),
+        is_metalink: p.serves_metalink(),
+    })
+}
+
+/// Follow a link to the object it names: HTTP redirects and the HTML kind
+/// alike (see [`hya_net::redirect`]), up to ten hops. Returns the final URL
+/// with its probe, so the caller sees the object's own headers rather than
+/// the redirector's. `None` when a hop cannot be parsed or answered.
+async fn resolve_link(
+    connector: &TlsCapableConnector,
+    mut url: String,
+    user_agent: &str,
+    headers: &[String],
+) -> Option<(String, Probe)> {
     for _ in 0..10 {
         let u = parse_url(&url).ok()?;
-        let base = if u.tls {
-            Target::direct_tls(&u.host, u.port, &u.path)
-        } else {
-            Target::direct(&u.host, u.port, &u.path)
-        };
-        let t = base.with_headers(vec![], Some(user_agent.clone()));
-        let p = probe_resilient(connector.as_ref(), &t).await.ok()?;
+        let t = target_of(&u, headers.to_vec(), user_agent);
+        let p = probe_resilient(connector, &t).await.ok()?;
         if p.is_redirect() {
             url = join_url(&u, p.location.as_deref().unwrap_or(""))?;
             continue;
         }
         if p.maybe_redirector() {
-            if let Some(next) = hya_net::html_redirect(connector.as_ref(), &t)
+            if let Some(next) = hya_net::html_redirect(connector, &t)
                 .await
                 .and_then(|loc| join_url(&u, &loc))
             {
@@ -542,18 +559,97 @@ pub async fn probe_link(url: String, user_agent: String) -> Option<LinkMeta> {
                 continue;
             }
         }
-        if p.status >= 300 {
-            return None;
-        }
-        return Some(LinkMeta {
-            size: (p.size > 0).then_some(p.size),
-            file_name: p
-                .suggested_filename()
-                .unwrap_or_else(|| file_name_from_url(&url)),
-            is_metalink: p.serves_metalink(),
-        });
+        return Some((url, p));
     }
     None
+}
+
+/// A direct target for `u` carrying the request headers and user agent.
+fn target_of(u: &ParsedUrl, headers: Vec<String>, user_agent: &str) -> Target {
+    let base = if u.tls {
+        Target::direct_tls(&u.host, u.port, &u.path)
+    } else {
+        Target::direct(&u.host, u.port, &u.path)
+    };
+    base.with_headers(headers, Some(user_agent.to_string()))
+}
+
+// ---------------------------------------------------------------- zip peek
+
+/// List what is inside a remote ZIP archive without downloading it.
+///
+/// ZIP's index lives at the end of the file, so one ranged GET for the tail
+/// (and, for an archive with thousands of entries, one more for the index
+/// itself) is the whole cost — see [`hya_net::zipdir`]. `headers` are the
+/// download's own login and cookies, so the peek sees the same object the
+/// transfer would.
+///
+/// `known_size` is the size the dialog already has from its probe or from
+/// the transfer running behind it. With it, no probe is made at all: the
+/// ranged GET goes straight out and follows redirects itself. That is two
+/// fewer round trips — two fewer TLS handshakes to a CDN — and on a slow
+/// path the difference between the list appearing in one second or five.
+///
+/// Errors are sentences for the dialog, already translated.
+pub async fn peek_zip(
+    url: String,
+    user_agent: String,
+    headers: Vec<String>,
+    known_size: Option<u64>,
+) -> Result<Vec<hya_net::zipdir::Entry>, String> {
+    use crate::i18n::tr;
+    use hya_net::zipdir;
+
+    let connector = shared_connector()?;
+    let c = connector.as_ref();
+    let (mut url, total) = match known_size {
+        Some(n) if n > 0 => (url, n),
+        _ => {
+            let (url, p) = resolve_link(c, url, &user_agent, &headers)
+                .await
+                .ok_or_else(|| tr("The server did not answer."))?;
+            if p.status >= 300 {
+                return Err(hya_net::describe_status(p.status));
+            }
+            if p.size == 0 {
+                return Err(tr("The server did not state the file's size."));
+            }
+            (url, p.size)
+        }
+    };
+
+    // The listing itself is hya-net's. With a size in hand the first request
+    // is the ranged GET, so a redirect surfaces there: follow it and retry.
+    for _ in 0..10 {
+        let u = parse_url(&url)?;
+        let t = target_of(&u, headers.clone(), &user_agent);
+        return match zipdir::fetch_listing(c, &t, total).await {
+            Ok(entries) => Ok(entries),
+            Err(zipdir::PeekError::Net(e)) => match hya_net::Redirect::of(&e) {
+                Some(r) => match join_url(&u, &r.location) {
+                    Some(next) => {
+                        url = next;
+                        continue;
+                    }
+                    None => Err(e.to_string()),
+                },
+                None => Err(e.to_string()),
+            },
+            Err(zipdir::PeekError::NoRanges) => Err(tr(
+                "The server does not support partial downloads, so the archive cannot be previewed without downloading it.",
+            )),
+            Err(zipdir::PeekError::Zip(zipdir::Error::NotZip)) => {
+                Err(tr("This file is not a ZIP archive."))
+            }
+            Err(zipdir::PeekError::Zip(zipdir::Error::Corrupt(_))) => {
+                Err(tr("The archive's index is damaged."))
+            }
+            Err(zipdir::PeekError::IndexTooLarge) => {
+                Err(tr("The archive's index is too large to preview."))
+            }
+        };
+    }
+    Err(tr("The server did not answer."))
 }
 
 // ------------------------------------------------------------------ metalink
@@ -973,23 +1069,29 @@ fn base64(data: &[u8]) -> String {
     out
 }
 
-fn target_for(u: &ParsedUrl, spec: &StartSpec) -> Target {
+/// The request headers a download's credentials turn into: HTTP Basic for a
+/// login, `Cookie:` for a cookie string. Shared by the transfer and by the
+/// probes that must see the same object it will.
+pub fn request_headers(auth: Option<(&str, &str)>, cookies: Option<&str>) -> Vec<String> {
     let mut headers = Vec::new();
-    if let Some((user, pass)) = &spec.auth {
+    if let Some((user, pass)) = auth {
         headers.push(format!(
             "Authorization: Basic {}",
             base64(format!("{user}:{pass}").as_bytes())
         ));
     }
-    if let Some(c) = spec.cookies.as_deref().filter(|c| !c.trim().is_empty()) {
-        headers.push(format!("Cookie: {}", c.trim()));
+    if let Some(c) = cookies.map(str::trim).filter(|c| !c.is_empty()) {
+        headers.push(format!("Cookie: {c}"));
     }
-    let base = if u.tls {
-        Target::direct_tls(&u.host, u.port, &u.path)
-    } else {
-        Target::direct(&u.host, u.port, &u.path)
-    };
-    base.with_headers(headers, Some(spec.user_agent.clone()))
+    headers
+}
+
+fn target_for(u: &ParsedUrl, spec: &StartSpec) -> Target {
+    let headers = request_headers(
+        spec.auth.as_ref().map(|(u, p)| (u.as_str(), p.as_str())),
+        spec.cookies.as_deref(),
+    );
+    target_of(u, headers, &spec.user_agent)
 }
 
 /// Probe the mirror list and decide who fetches, who waits, and with how many
@@ -6024,5 +6126,217 @@ fn quality_label(height: Option<u32>, bandwidth: Option<u64>) -> String {
     match bandwidth {
         Some(b) if b > 0 => format!("{q}  ({} kbps)", b / 1000),
         _ => q,
+    }
+}
+
+#[cfg(test)]
+mod peek_zip_tests {
+    use super::*;
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    /// An origin that answers HEAD with the size and `Accept-Ranges`, and a
+    /// ranged GET with exactly that span — the two requests a peek makes.
+    /// Counts the body bytes it sends, which is the number the feature is
+    /// about: the archive must not be downloaded to be listed.
+    fn serve(object: Vec<u8>) -> (u16, Arc<AtomicU64>) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        let sent = Arc::new(AtomicU64::new(0));
+        let counter = sent.clone();
+        std::thread::spawn(move || {
+            for conn in listener.incoming() {
+                let Ok(mut sock) = conn else { continue };
+                let Ok(peek) = sock.try_clone() else { continue };
+                let mut r = BufReader::new(peek);
+                let mut line = String::new();
+                if r.read_line(&mut line).unwrap_or(0) == 0 {
+                    continue;
+                }
+                let mut range = None;
+                loop {
+                    let mut h = String::new();
+                    if r.read_line(&mut h).unwrap_or(0) == 0 || h == "\r\n" {
+                        break;
+                    }
+                    if let Some(v) = h.strip_prefix("Range: bytes=") {
+                        let (lo, hi) = v.trim().split_once('-').unwrap();
+                        range = Some((lo.parse::<usize>().unwrap(), hi.parse::<usize>().unwrap()));
+                    }
+                }
+                let total = object.len();
+                let (head, body): (String, &[u8]) = if line.starts_with("HEAD") {
+                    (
+                        format!("HTTP/1.1 200 OK\r\nContent-Length: {total}\r\nAccept-Ranges: bytes\r\nContent-Type: application/zip\r\nConnection: close\r\n\r\n"),
+                        &[],
+                    )
+                } else if let Some((lo, hi)) = range {
+                    let hi = hi.min(total - 1);
+                    (
+                        format!("HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {lo}-{hi}/{total}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", hi - lo + 1),
+                        &object[lo..=hi],
+                    )
+                } else {
+                    (
+                        format!("HTTP/1.1 200 OK\r\nContent-Length: {total}\r\nConnection: close\r\n\r\n"),
+                        &object[..],
+                    )
+                };
+                let _ = sock.write_all(head.as_bytes());
+                let _ = sock.write_all(body);
+                counter.fetch_add(body.len() as u64, Ordering::SeqCst);
+                let _ = sock.flush();
+            }
+        });
+        (port, sent)
+    }
+
+    fn block_on<F: std::future::Future>(f: F) -> F::Output {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(f)
+    }
+
+    #[test]
+    fn a_small_archive_is_read_whole() {
+        use zip::write::SimpleFileOptions;
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.start_file("a.txt", SimpleFileOptions::default()).unwrap();
+        w.write_all(b"hello").unwrap();
+        let file = w.finish().unwrap().into_inner();
+        let (port, _) = serve(file);
+        let url = format!("http://127.0.0.1:{port}/small.zip");
+        let entries = block_on(peek_zip(url, "test".into(), vec![], None)).expect("peek");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "a.txt");
+        assert_eq!(entries[0].size, 5);
+    }
+
+    /// With the size in hand the peek makes no HEAD at all, and a redirect
+    /// on the ranged GET is followed rather than reported.
+    #[test]
+    fn a_known_size_skips_the_probe_and_follows_redirects() {
+        use zip::write::SimpleFileOptions;
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.start_file("b.txt", SimpleFileOptions::default()).unwrap();
+        w.write_all(b"world").unwrap();
+        let file = w.finish().unwrap().into_inner();
+        let total = file.len() as u64;
+        let (port, _) = serve(file);
+        // A redirector in front, answering everything with a 302 to the origin.
+        let hop = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        let hop_port = hop.local_addr().unwrap().port();
+        let heads = Arc::new(AtomicU64::new(0));
+        let counted = heads.clone();
+        std::thread::spawn(move || {
+            for conn in hop.incoming() {
+                let Ok(mut sock) = conn else { continue };
+                let Ok(peek) = sock.try_clone() else { continue };
+                let mut r = BufReader::new(peek);
+                let mut line = String::new();
+                let _ = r.read_line(&mut line);
+                if line.starts_with("HEAD") {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                }
+                loop {
+                    let mut h = String::new();
+                    if r.read_line(&mut h).unwrap_or(0) == 0 || h == "\r\n" {
+                        break;
+                    }
+                }
+                let _ = sock.write_all(
+                    format!("HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{port}/b.zip\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes(),
+                );
+                let _ = sock.flush();
+            }
+        });
+        let url = format!("http://127.0.0.1:{hop_port}/go");
+        let entries = block_on(peek_zip(url, "test".into(), vec![], Some(total))).expect("peek");
+        assert_eq!(entries[0].name, "b.txt");
+        assert_eq!(heads.load(Ordering::SeqCst), 0, "no probe was made");
+    }
+
+    #[test]
+    fn a_non_archive_is_named_as_such() {
+        let junk = vec![b'x'; 200_000];
+        let (port, _) = serve(junk);
+        let url = format!("http://127.0.0.1:{port}/not.zip");
+        let err = block_on(peek_zip(url, "test".into(), vec![], None)).expect_err("not a zip");
+        assert_eq!(err, crate::i18n::tr("This file is not a ZIP archive."));
+    }
+
+    /// Manual timing run: `HYDRA_PEEK_URL=<zip url> cargo test -p hya-gui \
+    /// peek_phases -- --ignored --nocapture`. Prints how long each of the
+    /// peek's network phases takes against a real origin.
+    #[test]
+    #[ignore]
+    fn peek_phases_timing() {
+        let Ok(url) = std::env::var("HYDRA_PEEK_URL") else {
+            return;
+        };
+        let original = url.clone();
+        block_on(async {
+            let t0 = std::time::Instant::now();
+            let connector = shared_connector().unwrap();
+            let c = connector.as_ref();
+            let (url, p) = resolve_link(c, url, "hydra-test", &[])
+                .await
+                .expect("resolve");
+            eprintln!(
+                "resolve: {:?}  size={} status={} ranges={}",
+                t0.elapsed(),
+                p.size,
+                p.status,
+                p.ranges
+            );
+            let u = parse_url(&url).unwrap();
+            let t = target_of(&u, vec![], "hydra-test");
+            let t1 = std::time::Instant::now();
+            let total = p.size;
+            let tail = hya_net::fetch_small_range(
+                c,
+                &t,
+                total - hya_net::zipdir::TAIL_LEN,
+                total - 1,
+                hya_net::zipdir::TAIL_LEN as usize,
+            )
+            .await
+            .expect("tail");
+            eprintln!("tail: {:?}  {} bytes", t1.elapsed(), tail.len());
+            let dir = hya_net::zipdir::locate(&tail, total).unwrap();
+            eprintln!(
+                "dir: offset={} len={} in_tail={}",
+                dir.offset,
+                dir.len,
+                dir.offset >= total - tail.len() as u64
+            );
+            let t2 = std::time::Instant::now();
+            let all = peek_zip(url, "hydra-test".into(), vec![], None)
+                .await
+                .expect("peek");
+            eprintln!(
+                "peek_zip, probing: {:?}  {} entries",
+                t2.elapsed(),
+                all.len()
+            );
+            let t3 = std::time::Instant::now();
+            let all = peek_zip(original, "hydra-test".into(), vec![], Some(total))
+                .await
+                .expect("peek");
+            eprintln!(
+                "peek_zip, size known, from the original url: {:?}  {} entries",
+                t3.elapsed(),
+                all.len()
+            );
+        });
+    }
+
+    #[test]
+    fn credentials_become_headers() {
+        let h = request_headers(Some(("me", "pw")), Some("  sid=1  "));
+        assert_eq!(h, ["Authorization: Basic bWU6cHc=", "Cookie: sid=1"]);
+        assert!(request_headers(None, Some("   ")).is_empty());
     }
 }

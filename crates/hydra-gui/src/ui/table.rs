@@ -205,16 +205,25 @@ fn file_icon(app: &App, d: &DownloadItem) -> iced::widget::svg::Handle {
     }
 }
 
-/// The Q cell: shows the yellow queues icon while the item belongs to a
-/// queue and drops it once the download completes — no queue-name text.
-fn queue_glyph<'a>(d: &DownloadItem) -> El<'a> {
-    if d.queue.is_some() && !matches!(d.state, crate::model::DlState::Complete) {
-        container(svg(icons::queues()).width(14.0).height(14.0))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .align_x(iced::Alignment::Center)
-            .align_y(iced::Alignment::Center)
-            .into()
+/// The Q cell: shows the queue's folder icon (in the queue's own colour)
+/// while the item belongs to a queue and drops it once the download
+/// completes — no queue-name text.
+fn queue_glyph<'a>(app: &App, d: &DownloadItem) -> El<'a> {
+    if let Some(q) = d
+        .queue
+        .as_deref()
+        .filter(|_| d.state != crate::model::DlState::Complete)
+    {
+        container(
+            svg(icons::queue_folder(app.queue_color(q)))
+                .width(14.0)
+                .height(14.0),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_x(iced::Alignment::Center)
+        .align_y(iced::Alignment::Center)
+        .into()
     } else {
         text("").size(theme::FONT_SIZE).into()
     }
@@ -246,7 +255,7 @@ fn data_row<'a>(app: &App, d: &'a DownloadItem, w: &[f32], tw: f32, selected: bo
             w[0],
         ),
         grip(),
-        cell(queue_glyph(d), w[1]),
+        cell(queue_glyph(app, d), w[1]),
         grip(),
         cell(text(size_txt).size(theme::FONT_SIZE).into(), w[2]),
         grip(),

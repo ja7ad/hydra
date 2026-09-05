@@ -36,6 +36,8 @@ pub enum WinKind {
     Update,
     /// The cancellable countdown shown before a "when done" power action.
     Power,
+    /// What is inside a ZIP archive, read from its tail before the download.
+    ZipPreview(DlId),
 }
 
 // ---------------------------------------------------------------- selections
@@ -365,7 +367,7 @@ pub struct FileInfoState {
 }
 
 impl FileInfoState {
-    /// The Save As box shows folder and file name as one path, as IDM does.
+    /// The Save As box shows folder and file name as one path, as  does.
     pub fn save_as(&self) -> String {
         if self.save_dir.is_empty() {
             self.file_name.clone()
@@ -523,6 +525,27 @@ impl Default for OptionsState {
     }
 }
 
+/// State of the "Zip preview" window (`WinKind::ZipPreview`): the archive's
+/// listing, or why there is none. One slot, like the File Info dialog it is
+/// opened from, and it belongs to that dialog's download.
+#[derive(Clone, Debug, Default)]
+pub struct ZipPreviewState {
+    pub dl: DlId,
+    /// The archive's name, for the heading.
+    pub file_name: String,
+    pub result: ZipPeek,
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum ZipPeek {
+    /// The tail is being fetched.
+    #[default]
+    Loading,
+    Listed(Vec<hya_net::zipdir::Entry>),
+    /// A translated sentence.
+    Failed(String),
+}
+
 /// State of the update dialog (`WinKind::Update`).
 #[derive(Debug, Default)]
 pub struct UpdateUiState {
@@ -648,7 +671,7 @@ impl Default for BatchState {
             sort: None,
             hide_html: false,
             // A duplicate never adds a second download, so hiding it is the
-            // sensible default — the same one IDM ships with.
+            // sensible default — the same one  ships with.
             hide_dups: true,
         }
     }
@@ -853,7 +876,7 @@ pub enum Message {
     // main window chrome
     MenuOpen(MenuBarKind),
     /// Moving the pointer over a menu-bar title while another menu is already
-    /// open: switches to that menu without closing the bar (IDM/Windows menu
+    /// open: switches to that menu without closing the bar (Windows menu
     /// tracking). Unlike [`Message::MenuOpen`] it never toggles a menu shut.
     MenuHover(MenuBarKind),
     MenuClose,
@@ -909,7 +932,7 @@ pub enum Message {
     Ext(crate::extbus::ExtEvent),
     // file info
     FiCategory(String),
-    /// The IDM-style Save As box: one full path, folder and file name.
+    /// TheSave As box: one full path, folder and file name.
     FiSaveAs(String),
     FiBgToggle(bool),
     FiBrowse,
@@ -923,6 +946,9 @@ pub enum Message {
     FiDownloadLater,
     FiStartDownload,
     FiCancel,
+    /// Preview: list the archive's contents without downloading it.
+    FiPreview,
+    ZipPeeked(DlId, Result<Vec<hya_net::zipdir::Entry>, String>),
     // progress dialog
     ProgTabSet(DlId, ProgTab),
     ProgToggleDetails(DlId),
@@ -1153,6 +1179,7 @@ pub struct App {
     pub sort: (SortKey, bool),
     pub add_url: AddUrlState,
     pub file_info: FileInfoState,
+    pub zip_preview: ZipPreviewState,
     pub prog: HashMap<DlId, ProgState>,
     /// Virus scans in flight (and verdicts still on screen), by download.
     pub scans: HashMap<DlId, ScanState>,
@@ -1397,6 +1424,47 @@ impl App {
             .map(|(id, _)| *id)
     }
 
+    /// Keep the dialog `id` above the main window (see `dialog_parent`).
+    ///
+    /// Not every window is the main window's: a progress box and a Download
+    /// File Info dialog belong to their download, are opened by browser
+    /// capture with no main window at all, and have to keep working after
+    /// the main window closes to the tray — an owned window would be hidden
+    /// with its owner. Those, the main window itself, and any dialog opened
+    /// while the main window is closed stay top-level.
+    fn attach_to_main(&self, id: window::Id) -> Task<Message> {
+        let main = self.win_of(WinKind::Main);
+        let parent = match self.windows.get(&id) {
+            None | Some(WinKind::Main | WinKind::Progress(_) | WinKind::FileInfo(_)) => None,
+            // The archive listing is the File Info dialog's own sub-dialog:
+            // owned by it, it stays above it and hands focus back to it when
+            // it closes. Owned by the main window instead, closing the
+            // listing raised the main window over the dialog, which then
+            // looked closed while its transfer carried on behind.
+            Some(WinKind::ZipPreview(dl)) => self.win_of(WinKind::FileInfo(*dl)).or(main),
+            Some(_) => main,
+        };
+        let Some(parent) = parent else {
+            return Task::none();
+        };
+        window::run(parent, crate::dialog_parent::token).then(move |token| match token {
+            Some(t) => {
+                window::run(id, move |w| crate::dialog_parent::attach(w, t)).map(|()| Message::Noop)
+            }
+            None => Task::none(),
+        })
+    }
+
+    /// The folder colour of the queue called `name`; `None` for the stock
+    /// yellow, and for a name no queue carries any more.
+    pub fn queue_color(&self, name: &str) -> Option<u32> {
+        self.cfg
+            .queues
+            .iter()
+            .find(|q| q.name == name)
+            .and_then(|q| q.color)
+    }
+
     /// Re-fits a dialog already open at `kind` to whatever [`Self::window_size`]
     /// now answers for it — a row that only shows up in some states (an
     /// error, a credentials row) otherwise has nowhere to go until the
@@ -1598,10 +1666,10 @@ impl App {
             // both add a real row that the fixed base height has no room
             // for, so the message otherwise runs past the window's bottom.
             WinKind::AddUrl => {
-                let mut h = 168.0;
-                if self.add_url.use_auth {
-                    h += 40.0;
-                }
+                // Address row, the authorization tick and its (always drawn)
+                // Login/Password row, the blank line under them, inside the
+                // dialog padding.
+                let mut h = 130.0;
                 let warn = self.add_url.error.is_some()
                     || (!self.add_url.address.trim().is_empty()
                         && site_blocked(
@@ -1622,8 +1690,9 @@ impl App {
                     // A refusal offers nothing to choose, but the sentence
                     // explaining it wraps to two or three lines.
                     Some(p) if p.drm.is_some() => 64.0,
-                    Some(p) if p.live => 108.0,
-                    Some(_) => 68.0,
+                    // Each block ends in a blank line of its own.
+                    Some(p) if p.live => 104.0,
+                    Some(_) => 72.0,
                     None => 0.0,
                 };
                 h += metalink_panel_height(
@@ -1648,16 +1717,17 @@ impl App {
                 let details = self.prog.get(&id).map(|p| p.details).unwrap_or(true);
                 (680.0, if details { 582.0 } else { 352.0 })
             }
-            WinKind::Complete(_) => (600.0, 230.0),
+            WinKind::Complete(_) => (600.0, 180.0),
             WinKind::Options => (760.0, 700.0),
             WinKind::Scheduler => (950.0, 660.0),
             WinKind::Batch => (950.0, 700.0),
-            WinKind::About => (460.0, 300.0),
+            WinKind::About => (460.0, 225.0),
             WinKind::Shortcuts => (520.0, 460.0),
             WinKind::Confirm => (500.0, 200.0),
-            WinKind::Permissions => (640.0, 580.0),
+            WinKind::Permissions => (640.0, 410.0),
             WinKind::Update => (560.0, 520.0),
-            WinKind::Power => (500.0, 240.0),
+            WinKind::Power => (500.0, 200.0),
+            WinKind::ZipPreview(_) => (640.0, 420.0),
         };
         let s = self.ui_scale();
         (w * s, h * s)
@@ -1777,7 +1847,8 @@ impl App {
     }
 
     /// Close every Download File Info window, whichever download each one
-    /// was opened for.
+    /// was opened for — and any Zip preview, which is a File Info dialog's
+    /// sub-dialog and has nothing to show once its dialog is gone.
     ///
     /// The dialog's state is a single slot (`self.file_info`) while the
     /// window identity carries a `DlId`, so two of them can never be
@@ -1790,7 +1861,7 @@ impl App {
         let ids: Vec<window::Id> = self
             .windows
             .iter()
-            .filter(|(_, k)| matches!(k, WinKind::FileInfo(_)))
+            .filter(|(_, k)| matches!(k, WinKind::FileInfo(_) | WinKind::ZipPreview(_)))
             .map(|(id, _)| *id)
             .collect();
         let mut tasks = Vec::with_capacity(ids.len());
@@ -3105,6 +3176,7 @@ impl App {
                 // Windows; on X11 it is a hint the window manager only takes
                 // once the window exists, so it is applied here instead.
                 let skip_taskbar = self.skip_taskbar_task(id);
+                let parent = self.attach_to_main(id);
                 // Browser-capture dialogs float above everything: at that
                 // moment this app is in the background and a normal-level
                 // window would open behind the browser.
@@ -3118,11 +3190,12 @@ impl App {
                     return Task::batch([
                         pin_surface,
                         skip_taskbar,
+                        parent,
                         window::set_level(id, window::Level::AlwaysOnTop),
                         window::gain_focus(id),
                     ]);
                 }
-                Task::batch([pin_surface, skip_taskbar, window::gain_focus(id)])
+                Task::batch([pin_surface, skip_taskbar, parent, window::gain_focus(id)])
             }
             Message::WindowClosed(id) => {
                 let kind = self.windows.remove(&id);
@@ -3172,6 +3245,11 @@ impl App {
                         self.complete_dismissed(dl);
                         Task::none()
                     }
+                    // OS close button on the listing: back to its dialog.
+                    Some(WinKind::ZipPreview(dl)) => self
+                        .win_of(WinKind::FileInfo(dl))
+                        .map(window::gain_focus)
+                        .unwrap_or_else(Task::none),
                     // OS close button on the countdown is Cancel. The window
                     // is already gone, so this only settles the state (and
                     // any pending "Exit Hydra when done").
@@ -3877,7 +3955,7 @@ impl App {
             }
             Message::AddrAuthToggled(b) => {
                 self.add_url.use_auth = b;
-                self.resize_open(WinKind::AddUrl)
+                Task::none()
             }
             Message::AddrLogin(s) => {
                 self.add_url.login = s;
@@ -4344,6 +4422,40 @@ impl App {
             }
 
             // ----------------------------------------------------- progress
+            Message::FiPreview => {
+                let fi = &self.file_info;
+                let dl = fi.dl;
+                self.zip_preview = ZipPreviewState {
+                    dl,
+                    file_name: fi.file_name.clone(),
+                    result: ZipPeek::Loading,
+                };
+                // The dialog's credentials, not the item's: an edited login
+                // or cookie must reach the peek before it reaches the item.
+                let auth =
+                    (!fi.login.is_empty()).then_some((fi.login.as_str(), fi.password.as_str()));
+                let headers = engine::request_headers(auth, Some(&fi.cookies));
+                let url = fi.url.clone();
+                let ua = self.cfg.settings.user_agent.clone();
+                // The size the probe (or the transfer running behind the
+                // dialog) already found saves the peek two round trips.
+                let size = self.item(dl).and_then(|d| d.size);
+                let peek = Task::perform(engine::peek_zip(url, ua, headers, size), move |r| {
+                    Message::ZipPeeked(dl, r)
+                });
+                Task::batch([self.open_window(WinKind::ZipPreview(dl)), peek])
+            }
+            Message::ZipPeeked(dl, result) => {
+                // A listing for a window since closed, or superseded by
+                // another archive's, has nowhere to go.
+                if self.zip_preview.dl == dl && self.win_of(WinKind::ZipPreview(dl)).is_some() {
+                    self.zip_preview.result = match result {
+                        Ok(entries) => ZipPeek::Listed(entries),
+                        Err(why) => ZipPeek::Failed(why),
+                    };
+                }
+                Task::none()
+            }
             Message::ProgTabSet(id, tab) => {
                 self.prog.entry(id).or_default().tab = tab;
                 Task::none()
@@ -4792,11 +4904,13 @@ impl App {
             Message::SchNewQueue => {
                 let n = self.cfg.queues.len() + 1;
                 let name = format!("{} {n}", i18n::tr("Queue"));
+                let color = Some(crate::model::pick_queue_color(&self.cfg.queues));
                 self.cfg.queues.push(crate::model::QueueDef {
                     name: name.clone(),
                     files_at_once: 4,
                     schedule: crate::model::Schedule::default(),
                     builtin: false,
+                    color,
                     running: false,
                     did_work: false,
                 });
@@ -5373,6 +5487,12 @@ impl App {
                     Some(WinKind::Power) => {
                         let cancelled = self.cancel_power_action();
                         return Task::batch([cancelled, window::close(id)]);
+                    }
+                    // Back to the dialog the listing was opened from.
+                    Some(WinKind::ZipPreview(dl)) => {
+                        if let Some(fi) = self.win_of(WinKind::FileInfo(dl)) {
+                            return Task::batch([window::close(id), window::gain_focus(fi)]);
+                        }
                     }
                     _ => {}
                 }
