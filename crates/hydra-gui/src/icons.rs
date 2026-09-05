@@ -458,14 +458,6 @@ pub fn logo() -> svg::Handle {
 
 /// Download glyph (arrow into tray) used in the "Download File Info" dialog
 /// corner instead of the app logo.
-pub fn download() -> svg::Handle {
-    static C: OnceLock<svg::Handle> = OnceLock::new();
-    C.get_or_init(|| flat_icon(
-        r##"<circle cx="8" cy="8" r="6.5" fill="#2FA84F"/><circle cx="8" cy="8" r="6.5" fill="none" stroke="#1E7A38" stroke-width="0.8"/><path d="M8 4 v4.6 M5.7 6.9 L8 9.2 L10.3 6.9" stroke="#FFFFFF" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.2 11.4 h5.6" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round"/>"##,
-    ))
-    .clone()
-}
-
 pub fn warning() -> svg::Handle {
     static C: OnceLock<svg::Handle> = OnceLock::new();
     C.get_or_init(|| flat_icon(

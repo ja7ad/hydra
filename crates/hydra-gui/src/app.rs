@@ -364,6 +364,46 @@ pub struct FileInfoState {
     pub dir_touched: bool,
 }
 
+impl FileInfoState {
+    /// The Save As box shows folder and file name as one path, as IDM does.
+    pub fn save_as(&self) -> String {
+        if self.save_dir.is_empty() {
+            self.file_name.clone()
+        } else {
+            std::path::Path::new(&self.save_dir)
+                .join(&self.file_name)
+                .to_string_lossy()
+                .into_owned()
+        }
+    }
+
+    /// Split an edited Save As path back into folder and file name, marking
+    /// only the part that actually changed as user-edited so the background
+    /// probe keeps filling the other one.
+    pub fn set_save_as(&mut self, path: &str) {
+        let (dir, name) = split_save_as(path);
+        if dir != self.save_dir {
+            self.save_dir = dir;
+            self.dir_touched = true;
+        }
+        if name != self.file_name {
+            self.file_name = name;
+            self.name_touched = true;
+        }
+    }
+}
+
+/// `(folder, file name)` of a typed path. No separator means the user
+/// typed a bare file name: the folder is empty and the start handler falls
+/// back to the category folder.
+fn split_save_as(path: &str) -> (String, String) {
+    match path.rfind(['/', '\\']) {
+        Some(0) => (path[..1].to_string(), path[1..].to_string()),
+        Some(i) => (path[..i].to_string(), path[i + 1..].to_string()),
+        None => (String::new(), path.to_string()),
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum ProgTab {
     #[default]
@@ -869,11 +909,11 @@ pub enum Message {
     Ext(crate::extbus::ExtEvent),
     // file info
     FiCategory(String),
-    FiFileName(String),
-    FiSaveDir(String),
+    /// The IDM-style Save As box: one full path, folder and file name.
+    FiSaveAs(String),
     FiBgToggle(bool),
-    FiBrowseDir,
-    FiDirPicked(Option<String>),
+    FiBrowse,
+    FiPathPicked(Option<String>),
     FiDescription(String),
     FiRemember(bool),
     FiUrl(String),
@@ -1597,9 +1637,9 @@ impl App {
             // neither shows dead space.
             WinKind::FileInfo(_) => {
                 if self.file_info.is_new {
-                    (720.0, 356.0)
+                    (680.0, 300.0)
                 } else {
-                    (720.0, 560.0)
+                    (680.0, 410.0)
                 }
             }
             // Matches ProgToggleDetails: a box whose details are hidden
@@ -4098,14 +4138,8 @@ impl App {
                 self.file_info.cat_touched = true;
                 Task::none()
             }
-            Message::FiFileName(s) => {
-                self.file_info.file_name = s;
-                self.file_info.name_touched = true;
-                Task::none()
-            }
-            Message::FiSaveDir(s) => {
-                self.file_info.save_dir = s;
-                self.file_info.dir_touched = true;
+            Message::FiSaveAs(s) => {
+                self.file_info.set_save_as(&s);
                 Task::none()
             }
             Message::FiBgToggle(b) => {
@@ -4126,18 +4160,19 @@ impl App {
                 }
                 Task::none()
             }
-            Message::FiBrowseDir => {
-                let dir = rfd::FileDialog::new()
-                    .pick_folder()
-                    .map(|p| p.to_string_lossy().into_owned());
-                self.update(Message::FiDirPicked(dir))
+            Message::FiBrowse => {
+                let mut dlg = rfd::FileDialog::new().set_file_name(&self.file_info.file_name);
+                if !self.file_info.save_dir.is_empty() {
+                    dlg = dlg.set_directory(&self.file_info.save_dir);
+                }
+                let path = dlg.save_file().map(|p| p.to_string_lossy().into_owned());
+                self.update(Message::FiPathPicked(path))
             }
-            Message::FiDirPicked(Some(dir)) => {
-                self.file_info.save_dir = dir;
-                self.file_info.dir_touched = true;
+            Message::FiPathPicked(Some(path)) => {
+                self.file_info.set_save_as(&path);
                 Task::none()
             }
-            Message::FiDirPicked(None) => Task::none(),
+            Message::FiPathPicked(None) => Task::none(),
             Message::FiDescription(s) => {
                 self.file_info.description = s;
                 Task::none()
@@ -4164,8 +4199,18 @@ impl App {
             }
             Message::FiDownloadLater | Message::FiStartDownload => {
                 let start = matches!(message, Message::FiStartDownload);
-                let fi = self.file_info.clone();
-                if fi.remember {
+                let mut fi = self.file_info.clone();
+                if fi.save_dir.trim().is_empty() {
+                    // A bare file name in Save As: keep the folder the item
+                    // already has, else the category's.
+                    fi.save_dir = self
+                        .item(fi.dl)
+                        .map(|d| d.save_dir.clone())
+                        .filter(|d| !d.is_empty())
+                        .or_else(|| self.cat_dir(Some(&fi.category)))
+                        .unwrap_or_default();
+                }
+                if fi.remember && !fi.save_dir.is_empty() {
                     // "Remember this folder" writes where the folder is
                     // actually read from: the named category normally, and
                     // the General one while category folders are switched
@@ -6582,6 +6627,34 @@ pub fn combo_string(key: &iced::keyboard::Key, mods: iced::keyboard::Modifiers) 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn save_as_splits_folder_and_name() {
+        use super::split_save_as as split;
+        assert_eq!(split("/tmp/dl/a.zip"), ("/tmp/dl".into(), "a.zip".into()));
+        assert_eq!(
+            split("C:\\Users\\me\\a.zip"),
+            ("C:\\Users\\me".into(), "a.zip".into())
+        );
+        assert_eq!(split("/a.zip"), ("/".into(), "a.zip".into()));
+        assert_eq!(split("a.zip"), (String::new(), "a.zip".into()));
+        assert_eq!(split("/tmp/dl/"), ("/tmp/dl".into(), String::new()));
+    }
+
+    #[test]
+    fn save_as_edit_marks_only_changed_part() {
+        let mut fi = super::FileInfoState {
+            save_dir: "/tmp/dl".into(),
+            file_name: "a.zip".into(),
+            ..Default::default()
+        };
+        assert_eq!(fi.save_as(), "/tmp/dl/a.zip");
+        fi.set_save_as("/tmp/dl/b.zip");
+        assert!(fi.name_touched && !fi.dir_touched);
+        fi.set_save_as("/var/x/b.zip");
+        assert!(fi.dir_touched);
+        assert_eq!(fi.save_dir, "/var/x");
+    }
+
     use super::*;
     use crate::model::Schedule;
 
