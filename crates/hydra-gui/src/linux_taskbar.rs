@@ -24,6 +24,8 @@ use std::sync::OnceLock;
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{ClientMessageEvent, ConnectionExt, EventMask};
 use x11rb::rust_connection::RustConnection;
+// `change_property32` lives on the wrapper trait, not the protocol one.
+use x11rb::wrapper::ConnectionExt as _;
 
 const _NET_WM_STATE_REMOVE: u32 = 0;
 const _NET_WM_STATE_ADD: u32 = 1;
