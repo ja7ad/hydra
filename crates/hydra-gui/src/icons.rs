@@ -9,7 +9,8 @@
 //! disabled state is just a grey re-stroke of the same geometry.
 
 use iced::widget::svg;
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 // ------------------------------------------------------------------ app logo
 
@@ -428,6 +429,36 @@ pub fn queues() -> svg::Handle {
     .clone()
 }
 
+/// The queues folder in a queue's own colour; `None` is the stock yellow
+/// [`queues`] icon. One handle per colour is kept, for the same reason the
+/// toolbar icons are: a rebuilt SVG re-hashes every frame for the same
+/// pixels.
+pub fn queue_folder(color: Option<u32>) -> svg::Handle {
+    let Some(rgb) = color else {
+        return queues();
+    };
+    static C: OnceLock<Mutex<HashMap<u32, svg::Handle>>> = OnceLock::new();
+    let cache = C.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+    cache
+        .entry(rgb)
+        .or_insert_with(|| {
+            let (r, g, b) = ((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8);
+            // The back flap in the colour itself, the front a lighter tint,
+            // the outline a darker shade — the same three-tone folder the
+            // stock icon draws in yellow.
+            let tint = |v: u8| v as u32 + (255 - v as u32) * 45 / 100;
+            let shade = |v: u8| v as u32 * 65 / 100;
+            flat_icon(&format!(
+                r##"<path d="M2 5 A1 1 0 0 1 3 4 h2.8 l1.2 1.3 h5 A1 1 0 0 1 13 6.3 v1 h-11 z" fill="#{r:02X}{g:02X}{b:02X}" stroke="#{:02X}{:02X}{:02X}" stroke-width="0.7"/><path d="M2 8 h11 v4.5 a1 1 0 0 1 -1 1 h-9 a1 1 0 0 1 -1 -1 z" fill="#{:02X}{:02X}{:02X}" stroke="#{:02X}{:02X}{:02X}" stroke-width="0.7"/>"##,
+                shade(r), shade(g), shade(b),
+                tint(r), tint(g), tint(b),
+                shade(r), shade(g), shade(b),
+            ))
+        })
+        .clone()
+}
+
 pub fn file_generic() -> svg::Handle {
     static C: OnceLock<svg::Handle> = OnceLock::new();
     C.get_or_init(|| flat_icon(
@@ -445,15 +476,6 @@ pub fn expander(open: bool) -> svg::Handle {
     flat_icon(&format!(
         r##"<rect x="2.5" y="2.5" width="11" height="11" fill="#FFFFFF" stroke="#9AA8B8" stroke-width="0.9"/>{glyph}"##
     ))
-}
-
-/// The hydra app glyph used in dialog corners.
-pub fn logo() -> svg::Handle {
-    static C: OnceLock<svg::Handle> = OnceLock::new();
-    C.get_or_init(|| flat_icon(
-        r##"<circle cx="8" cy="8" r="6.5" fill="#2FA84F"/><circle cx="8" cy="8" r="6.5" fill="none" stroke="#1E7A38" stroke-width="0.8"/><path d="M5 10.5 V5.2 M5 7.8 h6 M11 10.5 V5.2" stroke="#FFFFFF" stroke-width="1.5" fill="none"/>"##,
-    ))
-    .clone()
 }
 
 /// Download glyph (arrow into tray) used in the "Download File Info" dialog

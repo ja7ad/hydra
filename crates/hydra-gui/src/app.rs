@@ -1425,6 +1425,16 @@ impl App {
         })
     }
 
+    /// The folder colour of the queue called `name`; `None` for the stock
+    /// yellow, and for a name no queue carries any more.
+    pub fn queue_color(&self, name: &str) -> Option<u32> {
+        self.cfg
+            .queues
+            .iter()
+            .find(|q| q.name == name)
+            .and_then(|q| q.color)
+    }
+
     /// Re-fits a dialog already open at `kind` to whatever [`Self::window_size`]
     /// now answers for it — a row that only shows up in some states (an
     /// error, a credentials row) otherwise has nowhere to go until the
@@ -1626,10 +1636,10 @@ impl App {
             // both add a real row that the fixed base height has no room
             // for, so the message otherwise runs past the window's bottom.
             WinKind::AddUrl => {
-                let mut h = 168.0;
-                if self.add_url.use_auth {
-                    h += 40.0;
-                }
+                // Address row, the authorization tick and its (always drawn)
+                // Login/Password row, the blank line under them, inside the
+                // dialog padding.
+                let mut h = 130.0;
                 let warn = self.add_url.error.is_some()
                     || (!self.add_url.address.trim().is_empty()
                         && site_blocked(
@@ -1650,8 +1660,9 @@ impl App {
                     // A refusal offers nothing to choose, but the sentence
                     // explaining it wraps to two or three lines.
                     Some(p) if p.drm.is_some() => 64.0,
-                    Some(p) if p.live => 108.0,
-                    Some(_) => 68.0,
+                    // Each block ends in a blank line of its own.
+                    Some(p) if p.live => 104.0,
+                    Some(_) => 72.0,
                     None => 0.0,
                 };
                 h += metalink_panel_height(
@@ -1676,16 +1687,16 @@ impl App {
                 let details = self.prog.get(&id).map(|p| p.details).unwrap_or(true);
                 (680.0, if details { 582.0 } else { 352.0 })
             }
-            WinKind::Complete(_) => (600.0, 230.0),
+            WinKind::Complete(_) => (600.0, 180.0),
             WinKind::Options => (760.0, 700.0),
             WinKind::Scheduler => (950.0, 660.0),
             WinKind::Batch => (950.0, 700.0),
-            WinKind::About => (460.0, 300.0),
+            WinKind::About => (460.0, 225.0),
             WinKind::Shortcuts => (520.0, 460.0),
             WinKind::Confirm => (500.0, 200.0),
-            WinKind::Permissions => (640.0, 580.0),
+            WinKind::Permissions => (640.0, 410.0),
             WinKind::Update => (560.0, 520.0),
-            WinKind::Power => (500.0, 240.0),
+            WinKind::Power => (500.0, 200.0),
         };
         let s = self.ui_scale();
         (w * s, h * s)
@@ -3907,7 +3918,7 @@ impl App {
             }
             Message::AddrAuthToggled(b) => {
                 self.add_url.use_auth = b;
-                self.resize_open(WinKind::AddUrl)
+                Task::none()
             }
             Message::AddrLogin(s) => {
                 self.add_url.login = s;
@@ -4822,11 +4833,13 @@ impl App {
             Message::SchNewQueue => {
                 let n = self.cfg.queues.len() + 1;
                 let name = format!("{} {n}", i18n::tr("Queue"));
+                let color = Some(crate::model::pick_queue_color(&self.cfg.queues));
                 self.cfg.queues.push(crate::model::QueueDef {
                     name: name.clone(),
                     files_at_once: 4,
                     schedule: crate::model::Schedule::default(),
                     builtin: false,
+                    color,
                     running: false,
                     did_work: false,
                 });

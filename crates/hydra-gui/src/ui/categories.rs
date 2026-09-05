@@ -72,7 +72,9 @@ fn queue_node<'a>(app: &App, name: &str) -> El<'a> {
         return container(
             row![
                 iced::widget::space::horizontal().width(14.0),
-                svg(icons::queues()).width(17.0).height(17.0),
+                svg(icons::queue_folder(app.queue_color(name)))
+                    .width(17.0)
+                    .height(17.0),
                 text_input("", &app.queue_rename_draft)
                     .id("tree-queue-rename")
                     .on_input(Message::TreeQueueRenameDraft)
@@ -91,7 +93,9 @@ fn queue_node<'a>(app: &App, name: &str) -> El<'a> {
     }
     let r = row![
         iced::widget::space::horizontal().width(14.0),
-        svg(icons::queues()).width(17.0).height(17.0),
+        svg(icons::queue_folder(app.queue_color(name)))
+            .width(17.0)
+            .height(17.0),
         text(tr(name)).size(theme::FONT_SIZE),
     ]
     .spacing(4)

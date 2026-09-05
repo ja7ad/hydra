@@ -8,9 +8,9 @@
 //! design — but the guide turns "os error 13" mysteries into a checklist.
 
 use crate::app::{App, El, Message, WinKind};
-use crate::windows::{dlg_btn, dlg_btn_primary};
-use crate::{i18n::tr, icons, theme};
-use iced::widget::{column, container, row, scrollable, svg, text};
+use crate::windows::{dlg_btn, dlg_btn_auto, dlg_btn_primary};
+use crate::{i18n::tr, theme};
+use iced::widget::{column, container, row, scrollable, text};
 use iced::Length;
 
 /// Live probe results shown as status dots.
@@ -67,29 +67,39 @@ fn status_dot<'a>(ok: Option<bool>) -> El<'a> {
     text(glyph).size(theme::FONT_SIZE + 2.0).color(color).into()
 }
 
+/// One access item: status dot and title on the left, the settings-pane
+/// button on the same line at the right, the explanation under them.
 fn entry<'a>(
     status: Option<bool>,
     title: String,
     body: String,
     action: Option<(String, Message)>,
 ) -> El<'a> {
-    let mut col = column![
-        row![status_dot(status), text(title).size(theme::FONT_SIZE + 1.0),]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-        text(body)
-            .size(theme::FONT_SIZE)
-            .color(theme::dim_text(&iced::Theme::Light)),
+    let mut head = row![
+        status_dot(status),
+        text(title).size(theme::FONT_SIZE + 1.0),
+        iced::widget::space::horizontal(),
     ]
-    .spacing(6);
+    .spacing(8)
+    .align_y(iced::Alignment::Center);
     if let Some((label, msg)) = action {
-        col = col.push(row![dlg_btn(label, Some(msg))]);
+        // Label-sized: "Open Files & Folders settings" wrapped to two lines
+        // in the fixed-width dialog button.
+        head = head.push(dlg_btn_auto(label, Some(msg)));
     }
-    container(col)
-        .padding(12)
-        .width(Length::Fill)
-        .style(theme::panel)
-        .into()
+    container(
+        column![
+            head,
+            text(body)
+                .size(theme::FONT_SIZE)
+                .color(theme::dim_text(&iced::Theme::Light)),
+        ]
+        .spacing(6),
+    )
+    .padding(10)
+    .width(Length::Fill)
+    .style(theme::panel)
+    .into()
 }
 
 pub fn view(app: &App) -> El<'_> {
@@ -159,26 +169,23 @@ pub fn view(app: &App) -> El<'_> {
         ));
     }
 
+    // No in-window heading: the OS title bar already says "Permissions".
+    // Refresh sits with OK in the button row, where IDM keeps every
+    // dialog-level action.
     container(
         column![
-            row![
-                svg(icons::logo()).width(20.0).height(20.0),
-                text(tr("Permissions")).size(theme::FONT_SIZE + 3.0),
-                iced::widget::space::horizontal(),
-                dlg_btn(tr("Refresh"), Some(Message::PermRefresh)),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
             text(tr("Green means Hydra verified the access just now; red means the OS is currently refusing it."))
                 .size(theme::FONT_SIZE - 1.0)
                 .color(theme::dim_text(&iced::Theme::Light)),
             scrollable(items).height(Length::Fill),
             row![
                 iced::widget::space::horizontal(),
+                dlg_btn(tr("Refresh"), Some(Message::PermRefresh)),
                 dlg_btn_primary(tr("OK"), app.win_of(WinKind::Permissions).map(Message::CloseThis)),
-            ],
+            ]
+            .spacing(10),
         ]
-        .spacing(12)
+        .spacing(10)
         .padding(14),
     )
     .width(Length::Fill)

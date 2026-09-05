@@ -18,6 +18,26 @@ fn s(f: SchField) -> Message {
     Message::SchField(f)
 }
 
+/// Width of the queue list box; the New queue / Delete pair shares it.
+const LIST_W: f32 = 240.0;
+
+/// Vertical gap between the schedule tab's rows: a checkbox row is only
+/// 18 px, and at the ordinary dialog gap the ticks read as one dense block.
+const ROW_GAP: f32 = 16.0;
+
+/// A dialog button that takes the width it is given rather than the fixed
+/// dialog-button width, for a row sized to something else.
+fn wide_btn<'a>(label: String, msg: Option<Message>) -> El<'a> {
+    let mut b = button(crate::windows::centered(label, theme::FONT_SIZE))
+        .padding([5, 8])
+        .width(Length::Fill)
+        .style(theme::btn);
+    if let Some(m) = msg {
+        b = b.on_press(m);
+    }
+    b.into()
+}
+
 fn queue_list(app: &App) -> El<'_> {
     let mut list = column![].spacing(2);
     for q in &app.cfg.queues {
@@ -26,7 +46,7 @@ fn queue_list(app: &App) -> El<'_> {
         if selected && app.sch.renaming {
             list = list.push(
                 row![
-                    svg(icons::queues()).width(16.0).height(16.0),
+                    svg(icons::queue_folder(q.color)).width(16.0).height(16.0),
                     text_input("", &app.sch.rename_draft)
                         .id("sch-rename")
                         .on_input(Message::SchNameDraft)
@@ -48,7 +68,7 @@ fn queue_list(app: &App) -> El<'_> {
         list = list.push(
             button(
                 row![
-                    svg(icons::queues()).width(16.0).height(16.0),
+                    svg(icons::queue_folder(q.color)).width(16.0).height(16.0),
                     text(tr(&q.name)).size(theme::FONT_SIZE),
                     iced::widget::space::horizontal(),
                     text(if q.running { "▶" } else { "" }).size(theme::FONT_SIZE - 2.0),
@@ -71,14 +91,16 @@ fn queue_list(app: &App) -> El<'_> {
         .align_y(iced::Alignment::Center),
         container(scrollable(list).height(Length::Fill))
             .padding(4)
-            .width(240.0)
+            .width(LIST_W)
             .height(Length::Fill)
             .style(theme::panel),
+        // The pair spans exactly the list box above it, half each.
         row![
-            dlg_btn(tr("New queue"), Some(Message::SchNewQueue)),
-            dlg_btn(tr("Delete"), Some(Message::SchDeleteQueue)),
+            wide_btn(tr("New queue"), Some(Message::SchNewQueue)),
+            wide_btn(tr("Delete"), Some(Message::SchDeleteQueue)),
         ]
-        .spacing(8),
+        .spacing(8)
+        .width(LIST_W),
     ]
     .spacing(8)
     .into()
@@ -97,7 +119,7 @@ fn schedule_tab<'a>(q: &'a QueueDef) -> El<'a> {
     ];
     let mut day_cols = row![].spacing(14);
     for chunk in days.chunks(3) {
-        let mut c = column![].spacing(4);
+        let mut c = column![].spacing(8);
         for (name, i) in chunk {
             let i = *i;
             c = c.push(
@@ -221,7 +243,7 @@ fn schedule_tab<'a>(q: &'a QueueDef) -> El<'a> {
             .text_size(theme::FONT_SIZE)
             .style(theme::check),
     ]
-    .spacing(10);
+    .spacing(ROW_GAP);
 
     if sc.shutdown_when_done {
         col = col.push(
@@ -401,10 +423,12 @@ pub fn view(app: &App) -> El<'_> {
             .width(Length::Fill)
             .height(Length::Fill)
             .style(theme::panel),
+        // One run of buttons at the right, as IDM lays its row out: the
+        // queue's actions first, Close last.
         row![
+            iced::widget::space::horizontal(),
             dlg_btn_primary(tr("Start now"), Some(Message::SchStartNow)),
             dlg_btn(tr("Stop"), Some(Message::SchStop)),
-            iced::widget::space::horizontal(),
             dlg_btn(
                 tr("Close"),
                 app.win_of(WinKind::Scheduler).map(Message::CloseThis)

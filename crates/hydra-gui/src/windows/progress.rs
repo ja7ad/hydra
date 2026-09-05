@@ -451,7 +451,17 @@ pub fn view(app: &App, id: crate::model::DlId) -> El<'_> {
     };
 
     let active = d.state.is_active();
-    let pause_label = if active { tr("Pause") } else { tr("Start") };
+    // A segment stream is not paused, it is stopped: the segments already
+    // fetched are kept and a live recording is finished into its file, so
+    // the button says what it does. Pause stays for a byte-range download,
+    // which really does pick up where it left off.
+    let pause_label = if !active {
+        tr("Start")
+    } else if d.stream.is_some() {
+        tr("Stop")
+    } else {
+        tr("Pause")
+    };
     let scan = app.scans.get(&id);
     let scanning = scan.map(ScanState::running).unwrap_or(false);
     // A verdict still on screen: the scanner found something (or could not
