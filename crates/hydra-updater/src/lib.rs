@@ -479,18 +479,23 @@ pub fn update_method(dir: &Path) -> UpdateMethod {
     }
 }
 
+/// True when running inside a Flatpak sandbox (`FLATPAK_ID` set or `/.flatpak-info` exists).
+pub fn is_flatpak() -> bool {
+    std::env::var_os("FLATPAK_ID").is_some() || Path::new("/.flatpak-info").exists()
+}
+
 /// Whether a package manager owns the install in `dir`.
 ///
 /// Linux: the deb and rpm both install into `/usr/bin` (scripts/package-linux.sh),
-/// while `/usr/local` is by convention exactly the part of the filesystem no
-/// package manager touches. macOS: the `.pkg` records a receipt per package
-/// identifier and lands in `/Applications`; a dragged `.dmg` leaves no
-/// receipt, which is what separates the two installs that otherwise look
-/// identical. Windows: the setup installer owns whatever it wrote, and there
+/// Flatpak runs from an immutable `/app` mount, while `/usr/local` is by convention
+/// exactly the part of the filesystem no package manager touches. macOS: the `.pkg`
+/// records a receipt per package identifier and lands in `/Applications`; a dragged
+/// `.dmg` leaves no receipt, which is what separates the two installs that otherwise
+/// look identical. Windows: the setup installer owns whatever it wrote, and there
 /// is no unprivileged way to rewrite `Program Files`.
 fn package_managed(dir: &Path) -> bool {
     if cfg!(target_os = "linux") {
-        dir.starts_with("/usr") && !dir.starts_with("/usr/local")
+        is_flatpak() || (dir.starts_with("/usr") && !dir.starts_with("/usr/local"))
     } else if cfg!(target_os = "macos") {
         dir.starts_with("/Applications")
             && Path::new("/var/db/receipts/io.github.ja7ad.hydra.plist").exists()

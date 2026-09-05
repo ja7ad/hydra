@@ -155,6 +155,20 @@ paru -S hydra-download-manager-bin
 
 > AUR Packages: [hydra-download-manager](https://aur.archlinux.org/packages/hydra-download-manager) | [hydra-download-manager-bin](https://aur.archlinux.org/packages/hydra-download-manager-bin)
 
+### Flatpak (Flathub)
+
+Install from Flathub:
+
+```bash
+flatpak install flathub io.github.ja7ad.hydra
+```
+
+Run Hydra:
+
+```bash
+flatpak run io.github.ja7ad.hydra
+```
+
 ### AppImage (portable, self-updating)
 
 One file, no installation, no root. Download it from the

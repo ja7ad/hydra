@@ -80,7 +80,11 @@ fn entry_path() -> Option<PathBuf> {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn entry_path() -> Option<PathBuf> {
-    Some(dirs::home_dir()?.join(".config/autostart/hydra.desktop"))
+    if let Ok(id) = std::env::var("FLATPAK_ID") {
+        Some(dirs::home_dir()?.join(format!(".config/autostart/{id}.desktop")))
+    } else {
+        Some(dirs::home_dir()?.join(".config/autostart/hydra.desktop"))
+    }
 }
 
 /// Sync the login item with the settings. Safe to call every save.
@@ -193,9 +197,16 @@ pub fn apply(enabled: bool, minimized: bool) {
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        content = format!(
-            "[Desktop Entry]\nType=Application\nName=Hydra Download Manager\nExec=\"{exe}\" {arg}\nX-GNOME-Autostart-enabled=true\n"
-        );
+        if let Ok(id) = std::env::var("FLATPAK_ID") {
+            let space_arg = if minimized { " --minimized" } else { "" };
+            content = format!(
+                "[Desktop Entry]\nType=Application\nName=Hydra Download Manager\nExec=flatpak run {id}{space_arg}\nIcon={id}\nX-GNOME-Autostart-enabled=true\n"
+            );
+        } else {
+            content = format!(
+                "[Desktop Entry]\nType=Application\nName=Hydra Download Manager\nExec=\"{exe}\" {arg}\nIcon=hydra\nX-GNOME-Autostart-enabled=true\n"
+            );
+        }
     }
     // Already correct: leave it alone (a rewrite would only bump the
     // Background Task Management generation on macOS for no change).
