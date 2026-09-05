@@ -10,6 +10,7 @@
 
 mod app;
 mod autostart;
+mod dialog_parent;
 mod engine;
 mod ext_info;
 mod extbus;

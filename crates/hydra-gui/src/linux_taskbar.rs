@@ -107,6 +107,30 @@ pub fn apply(window: &dyn iced::window::Window, hide: bool) {
     }
 }
 
+/// Mark `child` transient for the window `parent` (an X window id): the
+/// window manager keeps it above that window and minimizes it along with
+/// it. See `dialog_parent`.
+pub fn transient_for(child: &dyn iced::window::Window, parent: u32) {
+    let Some(id) = xid(child) else { return };
+    let Some(x) = x11() else { return };
+    let set = (|| -> Result<(), Box<dyn std::error::Error>> {
+        x.conn
+            .change_property32(
+                x11rb::protocol::xproto::PropMode::REPLACE,
+                id,
+                x11rb::protocol::xproto::AtomEnum::WM_TRANSIENT_FOR,
+                x11rb::protocol::xproto::AtomEnum::WINDOW,
+                &[parent],
+            )?
+            .check()?;
+        x.conn.flush()?;
+        Ok(())
+    })();
+    if let Err(e) = set {
+        crate::log::warn(&format!("dialog parent: WM_TRANSIENT_FOR failed: {e}"));
+    }
+}
+
 fn xid(window: &dyn iced::window::Window) -> Option<u32> {
     match window.window_handle().ok()?.as_raw() {
         RawWindowHandle::Xlib(h) => u32::try_from(h.window).ok(),

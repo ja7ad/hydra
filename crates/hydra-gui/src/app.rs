@@ -1397,6 +1397,34 @@ impl App {
             .map(|(id, _)| *id)
     }
 
+    /// Keep the dialog `id` above the main window (see `dialog_parent`).
+    ///
+    /// Not every window is the main window's: a progress box and a Download
+    /// File Info dialog belong to their download, are opened by browser
+    /// capture with no main window at all, and have to keep working after
+    /// the main window closes to the tray — an owned window would be hidden
+    /// with its owner. Those, the main window itself, and any dialog opened
+    /// while the main window is closed stay top-level.
+    fn attach_to_main(&self, id: window::Id) -> Task<Message> {
+        let Some(main) = self.win_of(WinKind::Main) else {
+            return Task::none();
+        };
+        if main == id
+            || matches!(
+                self.windows.get(&id),
+                None | Some(WinKind::Progress(_) | WinKind::FileInfo(_))
+            )
+        {
+            return Task::none();
+        }
+        window::run(main, crate::dialog_parent::token).then(move |token| match token {
+            Some(t) => {
+                window::run(id, move |w| crate::dialog_parent::attach(w, t)).map(|()| Message::Noop)
+            }
+            None => Task::none(),
+        })
+    }
+
     /// Re-fits a dialog already open at `kind` to whatever [`Self::window_size`]
     /// now answers for it — a row that only shows up in some states (an
     /// error, a credentials row) otherwise has nowhere to go until the
@@ -3105,6 +3133,7 @@ impl App {
                 // Windows; on X11 it is a hint the window manager only takes
                 // once the window exists, so it is applied here instead.
                 let skip_taskbar = self.skip_taskbar_task(id);
+                let parent = self.attach_to_main(id);
                 // Browser-capture dialogs float above everything: at that
                 // moment this app is in the background and a normal-level
                 // window would open behind the browser.
@@ -3118,11 +3147,12 @@ impl App {
                     return Task::batch([
                         pin_surface,
                         skip_taskbar,
+                        parent,
                         window::set_level(id, window::Level::AlwaysOnTop),
                         window::gain_focus(id),
                     ]);
                 }
-                Task::batch([pin_surface, skip_taskbar, window::gain_focus(id)])
+                Task::batch([pin_surface, skip_taskbar, parent, window::gain_focus(id)])
             }
             Message::WindowClosed(id) => {
                 let kind = self.windows.remove(&id);

@@ -2101,6 +2101,7 @@ dependencies = [
  "tokio",
  "toml",
  "tray-icon",
+ "windows-sys 0.52.0",
  "winreg 0.56.0",
  "x11rb",
 ]
