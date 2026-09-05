@@ -46,7 +46,7 @@
 - [Benchmark](#benchmark)
   - [A fair 100 ms path](#a-fair-100-ms-path)
   - [Four public mirrors](#four-public-mirrors)
-  - [Desktop download managers](#desktop-download-managers)
+  - [Desktop download managers](#desktop-download-manager)
 - [Embedding HYDRA — `libhydra`](#embedding-hydra--libhydra)
   - [Platform guides](#platform-guides)
 - [Contributing](#contributing)
