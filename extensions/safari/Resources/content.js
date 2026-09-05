@@ -613,6 +613,10 @@ function buildPanel() {
   // possible to push it aside without dismissing it and losing the download.
   bar.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
+    // Not from the ✕. Capturing the pointer here would make the browser
+    // deliver the following `click` to the bar instead of the button — the
+    // press would toggle the menu and the bar could never be dismissed.
+    if (e.target === close) return;
     panelDrag = {
       id: e.pointerId,
       // The GRAB point, not the bar's corner: anything else makes the bar
