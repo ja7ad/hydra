@@ -43,6 +43,24 @@ jobs:
           rpmbuild -bs --define "_topdir $RPM_TOP" "$RPM_TOP/SPECS/hydra.spec"
           ls "$RPM_TOP"/SRPMS/hydra-${VERSION}-*.src.rpm
 
+  flatpak-validate:
+    name: Flatpak Metadata Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends appstream desktop-file-utils
+
+      - name: Validate Flatpak desktop and metainfo files
+        run: |
+          set -euo pipefail
+          desktop-file-validate packaging/flatpak/io.github.ja7ad.hydra.desktop
+          appstreamcli validate --no-net packaging/flatpak/io.github.ja7ad.hydra.metainfo.xml
+
   fmt:
     name: Code Formatting
     runs-on: ubuntu-latest

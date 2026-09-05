@@ -1786,7 +1786,7 @@ impl App {
         // hydra.desktop (scripts/package-linux.sh, install.sh).
         #[cfg(target_os = "linux")]
         let platform_specific = window::settings::PlatformSpecific {
-            application_id: "hydra".to_string(),
+            application_id: std::env::var("FLATPAK_ID").unwrap_or_else(|_| "hydra".to_string()),
             ..Default::default()
         };
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]
