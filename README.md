@@ -556,20 +556,20 @@ is fair and the only variable is the client. Mean of three runs.
   <img src="docs/img/benchmark-bed-100ms.png" alt="1 GB over a 100 ms path: speed, duration, memory and CPU for every client" width="900">
 </p>
 
-| Application | Config | Avg speed | Time to complete | Peak memory | CPU time |
-| --- | --- | --- | --- | --- | --- |
-| hydra | `-x 8` | **414 MB/s** | 2.6 s | 6.9 MiB | 1.48 s |
-| aria2c | `-x 8` | **298 MB/s** | 3.6 s | 25.3 MiB | 2.52 s |
-| hydra | `default` | **298 MB/s** | 3.6 s | 6.9 MiB | 1.79 s |
-| hydra | `-x 4` | **294 MB/s** | 3.7 s | 6.9 MiB | 1.89 s |
-| aria2c | `-x 4` | **285 MB/s** | 3.8 s | 21.1 MiB | 2.54 s |
-| hydra | `-x 2` | **184 MB/s** | 5.9 s | 6.8 MiB | 2.35 s |
-| aria2c | `-x 2` | **180 MB/s** | 6.0 s | 19.2 MiB | 3.15 s |
-| hydra | `adaptive` | **141 MB/s** | 7.6 s | 7.0 MiB | 2.46 s |
-| wget | `1 conn` | **106 MB/s** | 10.1 s | 4.8 MiB | 2.39 s |
-| hydra | `-x 1` | **105 MB/s** | 10.3 s | 6.6 MiB | 2.45 s |
-| curl | `1 conn` | **104 MB/s** | 10.3 s | 10.9 MiB | 3.21 s |
-| aria2c | `-x 1` | **104 MB/s** | 10.4 s | 17.9 MiB | 4.14 s |
+| Application | Config     | Avg speed    | Time to complete | Peak memory | CPU time |
+|-------------|------------|--------------|------------------|-------------|----------|
+| hydra       | `-x 8`     | **414 MB/s** | 2.6 s            | 6.9 MiB     | 1.48 s   |
+| aria2c      | `-x 8`     | **298 MB/s** | 3.6 s            | 25.3 MiB    | 2.52 s   |
+| hydra       | `default`  | **298 MB/s** | 3.6 s            | 6.9 MiB     | 1.79 s   |
+| hydra       | `-x 4`     | **294 MB/s** | 3.7 s            | 6.9 MiB     | 1.89 s   |
+| aria2c      | `-x 4`     | **285 MB/s** | 3.8 s            | 21.1 MiB    | 2.54 s   |
+| hydra       | `-x 2`     | **184 MB/s** | 5.9 s            | 6.8 MiB     | 2.35 s   |
+| aria2c      | `-x 2`     | **180 MB/s** | 6.0 s            | 19.2 MiB    | 3.15 s   |
+| hydra       | `adaptive` | **141 MB/s** | 7.6 s            | 7.0 MiB     | 2.46 s   |
+| wget        | `1 conn`   | **106 MB/s** | 10.1 s           | 4.8 MiB     | 2.39 s   |
+| hydra       | `-x 1`     | **105 MB/s** | 10.3 s           | 6.6 MiB     | 2.45 s   |
+| curl        | `1 conn`   | **104 MB/s** | 10.3 s           | 10.9 MiB    | 3.21 s   |
+| aria2c      | `-x 1`     | **104 MB/s** | 10.4 s           | 17.9 MiB    | 4.14 s   |
 
 At every matched concurrency HYDRA is ahead of `aria2c`, issues exactly one request per
 connection with no repairs, and does it at a third of the memory and two thirds of the
@@ -583,24 +583,37 @@ A bare `hydra <url>` against `aria2c -x 4` and `curl`, two runs each on the same
 The Hetzner origin caps concurrency per client and refuses the surplus with `429`; the
 other three reward it.
 
-| Origin | Client | Time | Avg speed | Peak memory | CPU time |
-| --- | --- | --- | --- | --- | --- |
-| ash-speed.hetzner.com, 1 GB | **hydra** | **15.3 s** | **70.3 MB/s** | **8.0 MiB** | **3.8 s** |
-| | aria2c -x 4 | 15.7 s | 68.3 MB/s | 20.4 MiB | 5.0 s |
-| | curl | 28.2 s | 38.1 MB/s | 13.1 MiB | 4.5 s |
-| speedtest.bitel.io, 1000 MB | **hydra** | **2.4 s** | **432 MB/s** | **7.8 MiB** | **2.3 s** |
-| | aria2c -x 4 | 5.0 s | 208 MB/s | 21.5 MiB | 5.0 s |
-| | curl | 6.4 s | 164 MB/s | 20.2 MiB | 4.5 s |
-| speedtest.bitel.io, 512 MB | **hydra** | **1.3 s** | **413 MB/s** | **7.9 MiB** | **1.1 s** |
-| | aria2c -x 4 | 2.9 s | 188 MB/s | 21.5 MiB | 2.8 s |
-| | curl | 2.9 s | 187 MB/s | 22.9 MiB | 2.5 s |
-| mmatechnical.com, 500 MB | **hydra** | **1.0 s** | **546 MB/s** | **7.8 MiB** | **0.9 s** |
-| | aria2c -x 4 | 1.9 s | 282 MB/s | 21.9 MiB | 1.6 s |
-| | curl | 2.7 s | 196 MB/s | 23.1 MiB | 2.3 s |
+| Origin                      | Client      | Time       | Avg speed     | Peak memory | CPU time  |
+|-----------------------------|-------------|------------|---------------|-------------|-----------|
+| ash-speed.hetzner.com, 1 GB | **hydra**   | **15.3 s** | **70.3 MB/s** | **8.0 MiB** | **3.8 s** |
+|                             | aria2c -x 4 | 15.7 s     | 68.3 MB/s     | 20.4 MiB    | 5.0 s     |
+|                             | curl        | 28.2 s     | 38.1 MB/s     | 13.1 MiB    | 4.5 s     |
+| speedtest.bitel.io, 1000 MB | **hydra**   | **2.4 s**  | **432 MB/s**  | **7.8 MiB** | **2.3 s** |
+|                             | aria2c -x 4 | 5.0 s      | 208 MB/s      | 21.5 MiB    | 5.0 s     |
+|                             | curl        | 6.4 s      | 164 MB/s      | 20.2 MiB    | 4.5 s     |
+| speedtest.bitel.io, 512 MB  | **hydra**   | **1.3 s**  | **413 MB/s**  | **7.9 MiB** | **1.1 s** |
+|                             | aria2c -x 4 | 2.9 s      | 188 MB/s      | 21.5 MiB    | 2.8 s     |
+|                             | curl        | 2.9 s      | 187 MB/s      | 22.9 MiB    | 2.5 s     |
+| mmatechnical.com, 500 MB    | **hydra**   | **1.0 s**  | **546 MB/s**  | **7.8 MiB** | **0.9 s** |
+|                             | aria2c -x 4 | 1.9 s      | 282 MB/s      | 21.9 MiB    | 1.6 s     |
+|                             | curl        | 2.7 s      | 196 MB/s      | 23.1 MiB    | 2.3 s     |
 
 The second runs agree with the first to within a few percent on every row except
 mmatechnical, where the CDN warmed between them (hydra 392 MB/s, aria2c 420 MB/s on the
 second run).
+
+### Desktop Download Manager
+
+Measured on a desktop PC with windows os (Windows 11, 16 GB RAM, and 8-core CPU) for download.
+100MB.bin file from https://ash-speed.hetzner.com/100MB.bin with the same network.
+
+| Application                 | Config | Avg speed    | Time to complete | Peak memory | CPU time |
+|-----------------------------|--------|--------------|------------------|-------------|----------|
+| **Hydra GUI**               | 8 conn | **8.2 MB/s** | 13.0 s           | 39 MiB      | 3.5 s    |
+| Free Download Manager       | 8 conn | **7.3 MB/s** | 15.8 s           | 352 MiB     | 9.89 s   |
+| Internet Download Manager   | 8 conn | **5.7 MB/s** | 18.3 s           | 14 MiB      | 5.79 s   |
+| ABDownload Manager (aria2c) | 8 conn | **4.9 MB/s** | 26.7 s           | 501 MiB     | 12.89 s  |
+| FluxDown                    | 8 conn | **4.5 MB/s** | 29.6 s           | 298 MiB     | 8.52 s   |
 
 ## Embedding HYDRA — `libhydra`
 
