@@ -42,7 +42,7 @@ extension ──────────┤                                     
   Options > General propagate to the extension automatically. Each request
   names the browser it came from, so the rows in that list govern their own
   browser rather than sharing one flag.
-- **The in-page bar** (`content.js`) mirrors IDM's: hovering a player shows
+- **The in-page bar** (`content.js`) mirrors: hovering a player shows
   "Download this video", and hovering that drops a numbered list of every
   variant in every container Hydra can actually produce — TS *and* MP4 for
   MPEG-TS segments, MP4 only for fragmented MP4 and DASH — named after the

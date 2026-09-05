@@ -5,6 +5,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.4.2] - 2026-09-05
+
+### Added
+
+- **Remote ZIP Archive Inspection & Central Directory Preview (`hya-net`, `hydra-cli`, `hydra-gui`, `docs/man/hydra.1`)**: Added instant inspection and previewing of remote ZIP archives without downloading the archive body:
+  - **Tail-Byte Central Directory Parser (`hya-net::zipdir`)**: Implemented `fetch_small_range` and `fetch_listing` in `hydra-net` to safely fetch bounded byte ranges from the tail of remote archives using HTTP range requests (`Range: bytes=...`). Parses End of Central Directory (EOCD) records, ZIP64 EOCD locators and records, and central directory headers with support for archives larger than 4 GB (ZIP64), UTF-8 / CP437 character encodings, variable-length archive comments, and self-extracting (SFX) executables in 1 or 2 small requests.
+  - **CLI Archive Preview (`hydra-cli`)**: Added `--preview <url>` flag to probe and display remote ZIP contents directly in the terminal, rendering formatted tables with uncompressed file sizes, compressed packed sizes, modification timestamps, and relative file paths. Added documentation and command-line examples to the `hydra.1` man page.
+  - **GUI ZIP Preview Dialog (`hydra-gui`)**: Added an interactive *Preview* action button to the *Download File Info* dialog when adding ZIP files. Opens an inspection modal (`WinKind::ZipPreview`) listing archive files with dedicated type icons, uncompressed and packed sizes, and modification dates, parented to the active file info window.
+- **Queue Folder Color Badges (`hydra-gui`)**: Added colored folder badges across the scheduler queue list, categories sidebar, and download table to visually distinguish queues and categories at a glance.
+
+### Fixed
+
+- **Dialog Window Parenting & Window Layering (`hydra-gui`)**: Fixed secondary dialogs (Add URL, Options, Download File Info, ZIP Preview, Permissions) slipping behind the main window or opening in duplicate:
+  - Implemented platform-native window parenting via raw window tokens: child `NSWindow` on macOS (`addChildWindow_ordered`), `GWLP_HWNDPARENT` on Windows (`SetWindowLongPtrW`), and `WM_TRANSIENT_FOR` via `x11rb` on Linux/X11.
+  - Fixed Linux/X11 build compilation by importing `x11rb::wrapper::ConnectionExt` for `change_property32`.
+- **GUI Dialog Layout, Styling & Sizing Enhancements (`hydra-gui`)**:
+  - **Download File Info Dialog**: Overhauled layout with unified "Save As" path input and browse button, indented category path labels and greyed-out default directory display, cleaner spacing, and centered dialog action buttons. Removed redundant in-window header banner in favor of the OS title bar.
+  - **Save As Path Retention Guard**: Disabled automatic global path retention by default (`remember: false`) in Download File Info dialogs; user-modified paths now apply only to the specific download unless explicitly checked. Correctly labels the destination category as General when category subdirectories are disabled.
+  - **Add URL Dialog**: Removed redundant duplicate header, aligned form labels, and kept authentication credential inputs rendered and dimmed until toggled to avoid disruptive dialog layout shifts.
+  - **Permissions & Scheduler Dialogs**: Moved Permissions *Refresh* action to the bottom button bar and compacted permission entries. Balanced queue button widths, refined row and day column spacing, and aligned action buttons in the Scheduler dialog.
+  - **Segment Stream Progress State**: Displayed *Stop* instead of *Pause* for segment and media stream downloads in the progress window.
+  - **Dialog Dimensions**: Adjusted default window dimensions across Add URL, Complete, About, Permissions, and Power dialogs.
+- **Sub-Menu Overflow Scrolling (`hydra-gui`)**: Wrapped GUI sub-menus containing more than 10 items (notably the *Language* menu with 30+ locales) in a scrollable container (`scrollable`), preventing long flyouts from extending past window boundaries.
+- **Browser Extension Floating Panel Dismissal & Scoping (`extensions/`, Chrome, Firefox, Safari)**:
+  - Fixed floating download panel close button clicks being intercepted as pointer drag events, allowing single clicks to reliably dismiss the panel.
+  - Scoped video player dismissal tracking to individual DOM elements using a `WeakSet` instead of a page-wide boolean, preventing closing a download bar on one video from hiding download bars on subsequent videos in infinite-scroll feeds (e.g., X/Twitter).
+  - Updated close button tooltip to *"Hide for this player"* and bumped extension manifest versions to `0.3.1`.
+
+### Changed & Refactored
+
+- **Multi-Language Localization Synchronization (`hydra-gui`)**: Synchronized new translation catalogs for remote ZIP archive previewing (column headers, entry counts, preview buttons, and status verdicts) across all 30 supported locales (`ar`, `cs`, `da`, `de`, `el`, `en`, `es`, `fa`, `fi`, `fr`, `he`, `hi`, `hu`, `id`, `it`, `ja`, `ko`, `nl`, `pl`, `pt-BR`, `pt`, `ro`, `ru`, `sv`, `th`, `tr`, `uk`, `vi`, `zh-hant`, `zh`).
+
+---
+
 ## [0.4.1] - 2026-09-04
 
 ### Added

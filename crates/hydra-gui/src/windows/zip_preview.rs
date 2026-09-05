@@ -3,7 +3,7 @@
 
 //! "Zip preview": what is inside an archive, before it is downloaded.
 //!
-//! Laid out like IDM's: the archive's name and entry count on one line, a
+//! Laid out: the archive's name and entry count on one line, a
 //! four-column list (name with a type icon, size, packed size, modified),
 //! and an OK button. The listing comes from the archive's tail — see
 //! `engine::peek_zip` — so it appears in the time one small request takes,

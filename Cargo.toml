@@ -8,7 +8,7 @@ resolver = "2"
 # Manager" release. The library crates (hya-core, hya-net) do NOT inherit
 # it — each carries its own version in its manifest and bumps independently
 # on its own semver cadence.
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ja7ad/hydra"

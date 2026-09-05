@@ -50,7 +50,7 @@ pub async fn run(url: &str, args: &crate::cli::Cli) -> Result<(), String> {
     Ok(())
 }
 
-/// IDM's four columns, with the variable-width name last so the numbers
+/// four columns, with the variable-width name last so the numbers
 /// line up. Files only: a directory entry says nothing the paths of the
 /// files inside it do not already say.
 fn print_table(name: &str, total: u64, entries: &[Entry]) {
