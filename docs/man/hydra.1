@@ -175,7 +175,7 @@ Overwrite an existing output file without asking.
 .BR \-y ", " \-\-sort\-by\-type
 File the finished object into a per-category subdirectory
 .RB ( Video ", " Music ", " Compressed ", " Documents ", " Programs ", ...),"
-the way IDM does.
+the way does.
 The category comes from the payload's magic bytes, not from the extension or
 the server's
 .BR Content\-Type ,
@@ -389,6 +389,20 @@ time, and any
 A URL that is not a manifest is an ordinary answer here, which is the whole
 difference from
 .BR \-\-list\-streams .
+.TP
+.B \-\-preview
+List the files inside a ZIP archive, then exit.
+Nothing is downloaded: ZIP keeps its index at the end of the file, so the
+listing costs one probe and one small ranged
+.B GET
+whatever the archive's size.
+Each file is printed with its size, its packed size, its modification stamp
+as the archiver recorded it, and its path; an encrypted entry's name ends in
+.BR * .
+ZIP archives only (including the formats that are ZIP inside: jar, apk,
+epub); a server that ignores
+.B Range
+is reported rather than downloaded from.
 .TP
 .BI \-\-record\-seconds " SECONDS"
 Record a live stream for this much media, then finish the file.
@@ -1417,6 +1431,14 @@ Ask what a URL is, whatever it turns out to be:
 .RS 4
 .nf
 hydra \-\-inspect https://example.com/f
+.fi
+.RE
+.PP
+See what a ZIP archive holds before fetching it:
+.PP
+.RS 4
+.nf
+hydra \-\-preview https://example.com/release.zip
 .fi
 .RE
 .PP

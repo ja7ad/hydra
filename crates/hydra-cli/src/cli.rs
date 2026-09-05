@@ -404,6 +404,15 @@ pub struct Cli {
     #[arg(long = "list-streams")]
     pub list_streams: bool,
 
+    /// List the files inside a ZIP archive, then exit. Nothing is downloaded.
+    ///
+    /// ZIP keeps its index at the end of the file, so the listing costs one
+    /// probe and one small ranged GET whatever the archive's size — the
+    /// same peek the GUI's Preview button makes. ZIP only: RAR and 7z lay
+    /// their indexes out differently.
+    #[arg(long = "preview")]
+    pub preview: bool,
+
     /// Record a LIVE stream for this many seconds, then finish the file.
     ///
     /// A live stream has no end of its own, so without this the only way to
