@@ -113,7 +113,7 @@ fn split_args(args: &str) -> Vec<String> {
     out
 }
 
-/// The full argument list for one scan. `%1` (IDM's placeholder) is replaced
+/// The full argument list for one scan. `%1` is replaced
 /// by the file path wherever it appears; without it the path is appended
 /// last, which is what `clamscan <file>` and friends expect.
 pub fn argv(args: &str, path: &str) -> Vec<String> {

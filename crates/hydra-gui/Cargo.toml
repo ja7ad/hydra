@@ -165,6 +165,9 @@ blake3 = { version = "1", features = ["pure"] }
 # the library's, so the test has to be able to produce real ciphertext.
 aes = { workspace = true }
 cbc = { workspace = true }
+# Writes the archive the Zip-preview end-to-end test serves back over a local
+# socket: real archiver output rather than bytes laid out by the code under test.
+zip = { version = "8", default-features = false, features = ["deflate"] }
 
 [lints]
 workspace = true

@@ -25,7 +25,7 @@ pub fn view(app: &App) -> El<'_> {
     let st = &app.add_url;
 
     // No in-window heading: the OS title bar already names the dialog, and
-    // IDM's puts the Address box on the very first line.
+    // puts the Address box on the very first line.
     let address = row![
         label(tr("Address")),
         crate::windows::ext_hint(
@@ -49,7 +49,7 @@ pub fn view(app: &App) -> El<'_> {
         .style(theme::check);
 
     // Login and Password stay on screen and grey out until the box is
-    // ticked, the way IDM draws them: the dialog keeps one shape instead of
+    // ticked, the way draws them: the dialog keeps one shape instead of
     // growing a row under the pointer.
     let enabled = st.use_auth;
     let cred_label = |s: String| {
@@ -316,7 +316,7 @@ pub fn view(app: &App) -> El<'_> {
     .spacing(GAP)
     .width(Length::Fill);
 
-    // OK over Cancel on the right, level with the Address box, as IDM's.
+    // OK over Cancel on the right, level with the Address box.
     container(row![left, buttons].spacing(16).padding(12))
         .width(Length::Fill)
         .height(Length::Fill)
