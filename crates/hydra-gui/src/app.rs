@@ -3967,7 +3967,10 @@ impl App {
                         save_dir: d.save_dir.clone(),
                         file_name: d.file_name.clone(),
                         description: String::new(),
-                        remember: true,
+                        // Off by default: an edited Save As folder applies
+                        // to this one download. Only an explicit tick
+                        // writes it back to the category.
+                        remember: false,
                         is_new: true,
                         url: d.url.clone(),
                         login: d.auth.clone().map(|a| a.0).unwrap_or_default(),
@@ -5295,7 +5298,10 @@ impl App {
                         save_dir: d.save_dir.clone(),
                         file_name: d.file_name.clone(),
                         description: String::new(),
-                        remember: true,
+                        // Off by default: an edited Save As folder applies
+                        // to this one download. Only an explicit tick
+                        // writes it back to the category.
+                        remember: false,
                         is_new: true,
                         url: d.url.clone(),
                         name_touched: true,
