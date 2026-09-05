@@ -1,7 +1,11 @@
 // Copyright (C) 2026 Javad Rajabzadeh
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Two dialogs sharing one state:
+//! Two dialogs sharing one state, laid out like IDM's "Download File Info":
+//! a narrow label column, one Save As box holding the whole path with a
+//! "..." save dialog beside it, the folder the tick would remember shown
+//! greyed under the checkbox, the file-type icon and size in a side column,
+//! and the buttons left-aligned under the fields.
 //!
 //! * New download — "Download File Info": category/save-as/description while
 //!   the transfer already runs in the background.
@@ -12,34 +16,64 @@
 use crate::app::{App, El, Message};
 use crate::model::DlState;
 use crate::windows::{dlg_btn, dlg_btn_primary};
-use crate::{fmt, i18n::tr, icons, theme};
-use iced::widget::{checkbox, column, container, pick_list, row, svg, text, text_input};
+use crate::{fmt, i18n::tr, theme};
+use iced::widget::{button, checkbox, column, container, pick_list, row, svg, text, text_input};
 use iced::Length;
+
+/// The label column: IDM's is about this wide at the same font size.
+const LABEL_W: f32 = 84.0;
+const GAP: f32 = 8.0;
 
 fn labeled<'a>(label: String, content: El<'a>) -> El<'a> {
     row![
         text(label)
             .size(theme::FONT_SIZE)
             .wrapping(iced::widget::text::Wrapping::None)
-            .width(125.0),
+            .width(LABEL_W),
         content,
     ]
-    .spacing(8)
+    .spacing(GAP)
     .align_y(iced::Alignment::Center)
+    .into()
+}
+
+/// A row that starts at the field column (no label).
+fn indented(content: El) -> El {
+    row![iced::widget::space::horizontal().width(LABEL_W), content]
+        .spacing(GAP)
+        .align_y(iced::Alignment::Center)
+        .into()
+}
+
+fn field<'a>(value: &str, on_input: fn(String) -> Message) -> text_input::TextInput<'a, Message> {
+    text_input("", value)
+        .on_input(on_input)
+        .size(theme::FONT_SIZE)
+        .style(theme::input)
+        .width(Length::Fill)
+}
+
+/// IDM's small square "..." button beside Save As.
+fn small_btn<'a>(label: &'a str, msg: Message) -> El<'a> {
+    button(
+        text(label)
+            .size(theme::FONT_SIZE)
+            .wrapping(iced::widget::text::Wrapping::None),
+    )
+    .padding([3, 9])
+    .style(theme::btn)
+    .on_press(msg)
     .into()
 }
 
 pub fn view(app: &App) -> El<'_> {
     let st = &app.file_info;
     let item = app.item(st.dl);
-    let size_txt = item
-        .and_then(|d| d.size)
-        .map(|s| format!("{} ({s} Bytes)", fmt::size2(s)))
-        .unwrap_or_else(|| "?".into());
+    let size = item.and_then(|d| d.size);
     let cats: Vec<String> = app.cfg.categories.iter().map(|c| c.name.clone()).collect();
     let complete = item.map(|d| d.state == DlState::Complete).unwrap_or(false);
 
-    let mut form = column![].spacing(10).width(Length::Fill);
+    let mut form = column![].spacing(GAP).width(Length::Fill);
 
     if !st.is_new {
         form = form.push(labeled(
@@ -50,7 +84,12 @@ pub fn view(app: &App) -> El<'_> {
         ));
         form = form.push(labeled(
             tr("Size:"),
-            text(size_txt.clone()).size(theme::FONT_SIZE).into(),
+            text(
+                size.map(|s| format!("{} ({s} Bytes)", fmt::size2(s)))
+                    .unwrap_or_else(|| "?".into()),
+            )
+            .size(theme::FONT_SIZE)
+            .into(),
         ));
     }
 
@@ -63,12 +102,7 @@ pub fn view(app: &App) -> El<'_> {
             .width(Length::Fill)
             .into()
     } else {
-        text_input("", &st.url)
-            .on_input(Message::FiUrl)
-            .size(theme::FONT_SIZE)
-            .style(theme::input)
-            .width(Length::Fill)
-            .into()
+        field(&st.url, Message::FiUrl).into()
     };
     form = form.push(labeled(
         tr("Address:"),
@@ -80,42 +114,20 @@ pub fn view(app: &App) -> El<'_> {
         pick_list(cats, Some(st.category.clone()), Message::FiCategory)
             .text_size(theme::FONT_SIZE)
             .style(theme::picker)
-            .width(280.0)
+            .width(200.0)
             .into(),
     ));
     form = form.push(labeled(
         tr("Save As"),
         row![
-            text_input("", &st.save_dir)
-                .on_input(Message::FiSaveDir)
-                .size(theme::FONT_SIZE)
-                .style(theme::input)
-                .width(Length::Fill),
-            dlg_btn(tr("Browse"), Some(Message::FiBrowseDir)),
+            field(&st.save_as(), Message::FiSaveAs),
+            small_btn("...", Message::FiBrowse),
         ]
-        .spacing(8)
+        .spacing(GAP)
+        .align_y(iced::Alignment::Center)
         .into(),
     ));
-    form = form.push(labeled(
-        tr("File name"),
-        text_input("", &st.file_name)
-            .on_input(Message::FiFileName)
-            .size(theme::FONT_SIZE)
-            .style(theme::input)
-            .width(Length::Fill)
-            .into(),
-    ));
     if st.is_new {
-        form = form.push(
-            // Off — and honestly so — for a file type that is not in
-            // Options > File types: nothing is running behind this dialog.
-            checkbox(app.cfg.settings.bg_download && !st.bg_blocked)
-                .label(tr("Download in background while choosing options"))
-                .on_toggle(Message::FiBgToggle)
-                .size(15.0)
-                .text_size(theme::FONT_SIZE)
-                .style(theme::check),
-        );
         // Name the folder the tick actually writes: General while
         // category folders are switched off (see FiStartDownload).
         let remember_cat = if app.cfg.settings.no_category_dirs {
@@ -127,7 +139,7 @@ pub fn view(app: &App) -> El<'_> {
         } else {
             st.category.as_str()
         };
-        form = form.push(
+        form = form.push(indented(
             checkbox(st.remember)
                 .label(format!(
                     "{} \"{}\" {}",
@@ -138,17 +150,36 @@ pub fn view(app: &App) -> El<'_> {
                 .on_toggle(Message::FiRemember)
                 .size(15.0)
                 .text_size(theme::FONT_SIZE)
-                .style(theme::check),
-        );
+                .style(theme::check)
+                .into(),
+        ));
+        // The folder that tick would store, greyed out like IDM's.
+        form = form.push(indented(
+            text_input("", &st.save_dir)
+                .size(theme::FONT_SIZE)
+                .style(|t, s| {
+                    let mut style = theme::input(t, s);
+                    style.value = theme::dim_text(t);
+                    style
+                })
+                .width(Length::Fill)
+                .into(),
+        ));
+        form = form.push(indented(
+            // Off — and honestly so — for a file type that is not in
+            // Options > File types: nothing is running behind this dialog.
+            checkbox(app.cfg.settings.bg_download && !st.bg_blocked)
+                .label(tr("Download in background while choosing options"))
+                .on_toggle(Message::FiBgToggle)
+                .size(15.0)
+                .text_size(theme::FONT_SIZE)
+                .style(theme::check)
+                .into(),
+        ));
     }
     form = form.push(labeled(
         tr("Description"),
-        text_input("", &st.description)
-            .on_input(Message::FiDescription)
-            .size(theme::FONT_SIZE)
-            .style(theme::input)
-            .width(Length::Fill)
-            .into(),
+        field(&st.description, Message::FiDescription).into(),
     ));
 
     if !st.is_new {
@@ -159,16 +190,16 @@ pub fn view(app: &App) -> El<'_> {
                     .on_input(Message::FiLogin)
                     .size(theme::FONT_SIZE)
                     .style(theme::input)
-                    .width(180.0),
+                    .width(Length::Fill),
                 text(tr("Password")).size(theme::FONT_SIZE),
                 text_input("", &st.password)
                     .on_input(Message::FiPass)
                     .secure(true)
                     .size(theme::FONT_SIZE)
                     .style(theme::input)
-                    .width(180.0),
+                    .width(Length::Fill),
             ]
-            .spacing(8)
+            .spacing(GAP)
             .align_y(iced::Alignment::Center)
             .into(),
         ));
@@ -200,23 +231,18 @@ pub fn view(app: &App) -> El<'_> {
         }
     }
 
-    // Preview box: big file-type icon with the size under it.
+    // Side column: file-type icon with the size under it, level with the
+    // Category/Save As rows.
     let side = column![
-        iced::widget::space::vertical().height(26.0),
+        iced::widget::space::vertical().height(if st.is_new { 30.0 } else { 86.0 }),
         svg(crate::ui::categories::cat_icon(&st.category))
-            .width(64.0)
-            .height(64.0),
-        iced::widget::space::vertical().height(6.0),
-        text(
-            item.and_then(|d| d.size)
-                .map(fmt::size2)
-                .unwrap_or_else(|| "?".into())
-        )
-        .size(theme::FONT_SIZE),
+            .width(48.0)
+            .height(48.0),
+        text(size.map(fmt::size2).unwrap_or_else(|| "?".into())).size(theme::FONT_SIZE),
     ]
-    .spacing(0)
+    .spacing(6)
     .align_x(iced::Alignment::Center)
-    .width(110.0);
+    .width(96.0);
 
     let buttons: El<'_> = if st.is_new {
         row![
@@ -224,7 +250,7 @@ pub fn view(app: &App) -> El<'_> {
             dlg_btn_primary(tr("Start Download"), Some(Message::FiStartDownload)),
             dlg_btn(tr("Cancel"), Some(Message::FiCancel)),
         ]
-        .spacing(10)
+        .spacing(GAP)
         .into()
     } else {
         row![
@@ -232,36 +258,29 @@ pub fn view(app: &App) -> El<'_> {
             dlg_btn(tr("Start Download"), Some(Message::FiStartDownload)),
             dlg_btn_primary(tr("OK"), Some(Message::FiDownloadLater)),
         ]
-        .spacing(10)
+        .spacing(GAP)
         .into()
     };
 
-    let title = if st.is_new {
-        tr("Download File Info")
-    } else {
-        tr("File Properties")
-    };
-    container(
+    // Buttons centred under the fields, inside the form so the side column
+    // does not pull them off-centre.
+    form = form.push(
         column![
+            iced::widget::space::vertical().height(4.0),
             row![
-                svg(icons::download()).width(20.0).height(20.0),
-                text(title).size(theme::FONT_SIZE + 1.0),
-            ]
-            .spacing(6)
-            .align_y(iced::Alignment::Center),
-            row![form, side].spacing(14),
-            row![
+                iced::widget::space::horizontal().width(LABEL_W + GAP),
                 iced::widget::space::horizontal(),
                 buttons,
-                iced::widget::space::horizontal()
-            ]
-            .width(Length::Fill),
+                iced::widget::space::horizontal(),
+            ],
         ]
-        .spacing(14)
-        .padding(14),
-    )
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .style(theme::window)
-    .into()
+        .width(Length::Fill),
+    );
+
+    // No in-window heading: the OS title bar already names the dialog.
+    container(row![form, side].spacing(GAP).padding(14))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(theme::window)
+        .into()
 }
