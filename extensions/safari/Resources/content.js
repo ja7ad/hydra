@@ -265,7 +265,11 @@ let panelRows = [];
 let panelTimer = null;
 let panelRaf = 0;
 let panelEnabled = true;
-let panelDismissed = false; // closed by hand: gone until the page reloads
+// Players closed by hand. Per player, not per page: a feed like x.com keeps
+// scrolling new videos in, and a ✕ on one of them must not silence the rest
+// until the tab is reloaded. Weak, so a player torn out of the page goes
+// with it.
+const panelDismissed = new WeakSet();
 // Where the bar sits relative to the player's top-left corner. The default
 // inset puts it over the transport controls of a SMALL player — an <audio>
 // element is barely taller than the bar itself — so it has to be movable,
@@ -581,7 +585,7 @@ function buildPanel() {
   const close = document.createElement("span");
   close.className = "btn";
   close.textContent = "✕";
-  close.title = "Hide until this page reloads";
+  close.title = "Hide for this player";
 
   bar.append(svg, title, caret, close);
   panelList = document.createElement("div");
@@ -684,7 +688,8 @@ function buildPanel() {
   });
   close.addEventListener("click", (e) => {
     e.stopPropagation();
-    panelDismissed = true;
+    // Before hidePanel, which forgets the target.
+    if (panelTarget) panelDismissed.add(panelTarget);
     hidePanel();
   });
 
@@ -786,7 +791,7 @@ function placePanel() {
 }
 
 function showPanel(video) {
-  if (!panelEnabled || panelDismissed || !video) return;
+  if (!panelEnabled || !video || panelDismissed.has(video)) return;
   if (!panelHost) buildPanel();
   if (!renderRows(video)) return hidePanel();
   clearTimeout(panelTimer);
