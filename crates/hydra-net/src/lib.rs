@@ -59,6 +59,7 @@ pub mod socks;
 pub mod stream_digest;
 pub mod tls;
 pub mod xml;
+pub mod zipdir;
 
 /// The identity sent when the user supplies no `--user-agent`.
 ///
@@ -328,9 +329,9 @@ pub mod sink;
 pub mod transfer;
 
 pub use http::{
-    describe_status, fetch_object, fetch_range_retry, fetch_small, fetch_streaming,
-    fetch_streaming_observed, header_lookup, probe, probe_resilient, probe_size_via_range,
-    probe_via_get, Probe, Redirect,
+    describe_status, fetch_object, fetch_range_retry, fetch_small, fetch_small_range,
+    fetch_streaming, fetch_streaming_observed, header_lookup, probe, probe_resilient,
+    probe_size_via_range, probe_via_get, Probe, Redirect,
 };
 pub use redirect::{html_redirect, html_redirect_target};
 pub use sink::SparseSink;
