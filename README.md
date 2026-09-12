@@ -132,6 +132,13 @@ CLI only:
 
 The scripts detect your OS and architecture (amd64/arm64), fetch the matching archive from the [latest GitHub release](https://github.com/ja7ad/hydra/releases/latest), and install it — on Linux and macOS to `/usr/local` (falling back to `~/.local`; override with `--prefix DIR`), on Windows to `%LOCALAPPDATA%\Programs\Hydra`. The CLI lands under both `hydra` and the short `hya`; an existing `hya` on the same prefix is never overwritten. GUI installs also register the browser native-messaging host. Pin a release with `--version vX.Y.Z` / `-Version vX.Y.Z`, or download the archives yourself from the [releases page](https://github.com/ja7ad/hydra/releases).
 
+**Linux compatibility.** The CLI archive is a static musl build with no shared
+library of any kind, so `--cli` works on any distribution — old LTS releases,
+minimal containers, Alpine — regardless of its glibc. The desktop artifacts
+(GUI archive, `.deb`, `.rpm`, AppImage) link the system's GTK, X11 and ALSA and
+are built on Ubuntu 22.04, which puts their floor at glibc 2.35: Ubuntu 22.04,
+Debian 12, RHEL 9 and newer.
+
 A GUI install is a real desktop app, not a loose binary:
 
 - **Windows** — a start-menu shortcut (`-Desktop` adds a desktop one) and an **Apps & features** entry, so Hydra is listed and uninstallable from Settings like any other app.
