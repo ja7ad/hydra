@@ -1,0 +1,84 @@
+app-id: io.github.ja7ad.hydra
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: hydra-gui
+
+finish-args:
+  # Display & Windowing
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  # Network & Hardware
+  - --share=network
+  - --socket=pulseaudio
+  - --device=dri
+  # Filesystem permissions for download directories
+  - --filesystem=xdg-download
+  - --filesystem=home
+  # StatusNotifierItem system tray integration
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.StatusNotifierItem-*
+  # Desktop notifications
+  - --talk-name=org.freedesktop.Notifications
+  # XDG Portals (File dialogs, settings, dark theme detection, URI open)
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.portal.FileChooser
+  - --talk-name=org.freedesktop.portal.OpenURI
+  - --talk-name=org.freedesktop.portal.Settings
+  - --talk-name=org.freedesktop.portal.Background
+  - --talk-name=org.freedesktop.portal.FdoStyle
+  - --system-talk-name=org.freedesktop.login1
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/hydra/cargo
+
+modules:
+  - name: hydra
+    buildsystem: simple
+    build-commands:
+      # Build GUI, CLI, and Native Host
+      - cargo build --release --locked -p hya-cli -p hya-gui -p hya-host
+      # Binaries
+      - install -Dm755 target/release/hydra-gui /app/bin/hydra-gui
+      - install -Dm755 target/release/hydra /app/bin/hydra
+      - install -Dm755 target/release/hydra-host /app/bin/hydra-host
+      - ln -sf hydra /app/bin/hya
+      # Desktop launcher & AppStream metadata
+      - install -Dm644 packaging/flatpak/io.github.ja7ad.hydra.desktop /app/share/applications/io.github.ja7ad.hydra.desktop
+      - install -Dm644 packaging/flatpak/io.github.ja7ad.hydra.metainfo.xml /app/share/metainfo/io.github.ja7ad.hydra.metainfo.xml
+      # Application icons (docs/logo.png -> hicolor)
+      - install -Dm644 docs/logo.png /app/share/icons/hicolor/512x512/apps/io.github.ja7ad.hydra.png
+      - |
+        for s in 16 32 48 64 128 256; do
+          if command -v magick >/dev/null 2>&1; then
+            install -d "/app/share/icons/hicolor/${s}x${s}/apps"
+            magick docs/logo.png -resize "${s}x${s}" "/app/share/icons/hicolor/${s}x${s}/apps/io.github.ja7ad.hydra.png"
+          elif command -v convert >/dev/null 2>&1; then
+            install -d "/app/share/icons/hicolor/${s}x${s}/apps"
+            convert docs/logo.png -resize "${s}x${s}" "/app/share/icons/hicolor/${s}x${s}/apps/io.github.ja7ad.hydra.png"
+          fi
+        done
+      # Shell completions
+      - install -d /app/share/bash-completion/completions /app/share/zsh/site-functions /app/share/fish/vendor_completions.d
+      - target/release/hydra completions bash > /app/share/bash-completion/completions/hydra
+      - target/release/hydra completions zsh > /app/share/zsh/site-functions/_hydra
+      - target/release/hydra completions fish > /app/share/fish/vendor_completions.d/hydra.fish
+      - target/release/hydra completions bash --bin-name hya > /app/share/bash-completion/completions/hya
+      - target/release/hydra completions zsh --bin-name hya > /app/share/zsh/site-functions/_hya
+      - target/release/hydra completions fish --bin-name hya > /app/share/fish/vendor_completions.d/hya.fish
+      # Man pages
+      - install -d /app/share/man/man1
+      - for page in docs/man/*.1; do install -Dm644 "$page" "/app/share/man/man1/$(basename "$page")"; done
+      # Documentation & Licenses
+      - install -Dm644 LICENSE /app/share/licenses/io.github.ja7ad.hydra/LICENSE
+      - install -Dm644 LICENSING.md /app/share/licenses/io.github.ja7ad.hydra/LICENSING.md
+      - install -Dm644 README.md /app/share/doc/io.github.ja7ad.hydra/README.md
+      - install -Dm644 CHANGELOG.md /app/share/doc/io.github.ja7ad.hydra/CHANGELOG.md
+    sources:
+      - type: dir
+        path: ../..

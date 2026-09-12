@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ja7ad.hydra</id>
+  <name>Hydra Download Manager</name>
+  <summary>Multi-connection download accelerator and manager</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="io.github.ja7ad">
+    <name>Javad Rajabzadeh</name>
+  </developer>
+  <description>
+    <p>
+      Hydra is an advanced, high-performance download accelerator and manager written in Rust.
+      It splits downloads across multiple parallel HTTP/HTTPS connections with dynamic chunk sizing,
+      automatic resume capability, and end-to-end cryptographic checksum verification (SHA-256, BLAKE3, MD5, SHA-1).
+    </p>
+    <p>Key features include:</p>
+    <ul>
+      <li>High-speed multi-connection HTTP/HTTPS and streaming download engine</li>
+      <li>Adaptive stream assembly for HLS and MPEG-DASH audio/video streams</li>
+      <li>Metalink 3.0 and 4.0 XML parser and mirror failover handling</li>
+      <li>Remote zip preview and selective single-file extraction without full archive download</li>
+      <li>Reed-Solomon forward error correction (PAR2 parity) verification and repair</li>
+      <li>Full-featured graphical user interface, lightweight CLI (hydra / hya), and browser native messaging host</li>
+      <li>Browser integration for Firefox, Chrome, Edge, and Chromium derivatives</li>
+      <li>System tray integration (StatusNotifierItem) and dark/light system theme support</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.ja7ad.hydra.desktop</launchable>
+  <url type="homepage">https://github.com/ja7ad/hydra</url>
+  <url type="bugtracker">https://github.com/ja7ad/hydra/issues</url>
+  <url type="vcs-browser">https://github.com/ja7ad/hydra</url>
+  <url type="help">https://github.com/ja7ad/hydra/blob/main/README.md</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/ja7ad/hydra/main/docs/img/screenshot1.jpg</image>
+      <caption>Hydra Download Manager main window</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ja7ad/hydra/main/docs/img/screenshot2.png</image>
+      <caption>Queue scheduling and download progress</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ja7ad/hydra/main/docs/img/screenshot3.png</image>
+      <caption>Stream sniffer and media stream capture</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ja7ad/hydra/main/docs/img/screenshot4.png</image>
+      <caption>Zip directory preview and selective archive download</caption>
+    </screenshot>
+  </screenshots>
+  <provides>
+    <binary>hydra</binary>
+    <binary>hya</binary>
+    <binary>hydra-gui</binary>
+    <binary>hydra-host</binary>
+  </provides>
+  <releases>
+    <release version="0.4.2" date="2026-09-01">
+      <description>
+        <p>Features and improvements in release 0.4.2:</p>
+        <ul>
+          <li>Enhanced streaming parser and parallel segment fetcher</li>
+          <li>Optimized memory consumption and UI responsiveness</li>
+          <li>Flatpak packaging and Flathub distribution support</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

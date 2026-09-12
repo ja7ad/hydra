@@ -7,6 +7,7 @@
 #   make rpm        Fedora/RHEL/openSUSE package          -> target/dist/*.rpm
 #   make linux      both deb and rpm
 #   make appimage   portable, self-updating AppImage    -> target/dist/*.AppImage
+#   make flatpak    Flatpak package and metadata        -> target/dist/*.flatpak
 #   make package    the right artifact(s) for the OS make runs on
 #
 #   make extensions  browser extensions: packed .xpi + .zip (+ .crx with a
@@ -32,7 +33,7 @@ VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 PROFILE ?= release
 CARGO   ?= cargo
 
-.PHONY: all build cli gui host app dmg deb rpm linux appimage windows package clean \
+.PHONY: all build cli gui host app dmg deb rpm linux appimage flatpak windows package clean \
         extensions \
         require-macos require-linux ffi header header-check ffi-compat \
         ffi-test ffi-dist ffi-android ffi-apple
@@ -146,6 +147,14 @@ linux: require-linux
 #   make appimage ARGS=--no-build   package binaries that are already built
 appimage: require-linux
 	scripts/package-appimage.sh $(ARGS)
+
+# Flatpak build, metadata validation, or bundle generation:
+#
+#   make flatpak ARGS=--bundle          export a standalone .flatpak file
+#   make flatpak ARGS=--install         build and install into user Flatpak repo
+#   make flatpak ARGS=--validate-only   validate metadata only
+flatpak:
+	scripts/package-flatpak.sh $(ARGS)
 
 windows:
 	scripts/build-windows-installer.sh x64
