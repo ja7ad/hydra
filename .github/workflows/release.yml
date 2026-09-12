@@ -82,14 +82,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # A Linux binary will not start on a system whose glibc is older than
+          # the one it was built against, so the runner choice *is* the
+          # compatibility floor. `ubuntu-latest` follows GitHub's image
+          # rotation, which silently raised that floor to 24.04's glibc 2.39
+          # and left the artifacts unable to start on any older distribution.
+          # Pin to the same oldest-supported release the AppImage is built on
+          # (22.04, glibc 2.35) so the whole Linux line has one floor.
           - os: linux
             arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            # The CLI has no desktop dependencies, so it does not have to
+            # accept a floor at all: it ships as a static musl binary that
+            # runs on every Linux, old LTS and container images included.
+            cli_target: x86_64-unknown-linux-musl
           - os: linux
             arch: arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
+            cli_target: aarch64-unknown-linux-musl
           - os: macos
             arch: amd64
             runner: macos-latest
@@ -111,17 +123,21 @@ jobs:
       VERSION: ${{ needs.verify-version.outputs.version }}
       PLATFORM: ${{ matrix.os }}-${{ matrix.arch }}
       TARGET: ${{ matrix.target }}
+      CLI_TARGET: ${{ matrix.cli_target }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # musl-tools is for the static CLI below: `ring` and `blake3` compile C
+      # and assembly, so the musl target needs a C compiler that knows the musl
+      # headers, not just a Rust target.
       - name: Install Linux build dependencies (ALSA, X11)
         if: matrix.os == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             pkg-config libasound2-dev libx11-dev libxrandr-dev \
-            libxcb1-dev libxkbcommon-dev rpm imagemagick
+            libxcb1-dev libxkbcommon-dev rpm imagemagick musl-tools
 
       - name: Install NSIS (Windows installer)
         if: matrix.os == 'windows'
@@ -135,7 +151,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.cli_target && format('{0},{1}', matrix.target, matrix.cli_target) || matrix.target }}
 
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
@@ -145,11 +161,40 @@ jobs:
       - name: Build CLI, GUI, native-messaging host, and update finisher
         run: cargo build --release --locked --target ${{ matrix.target }} -p hya-cli -p hya-gui -p hya-host -p hya-updater
 
+      # A second build of the CLI, not a replacement for the first: the GUI
+      # archive, the deb and the rpm keep the glibc `hydra` they are packaged
+      # with, and only the standalone CLI archive — the one people install on
+      # servers, which may be several LTS releases behind — gets this one.
+      - name: Build the distributable CLI against musl (Linux)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # musl-gcc compiles the C and assembly in `ring` and `blake3` against
+          # the musl headers. It must NOT also be set as the Rust linker: that
+          # takes the target out of self-contained mode and yields a binary
+          # that asks for /lib/ld-musl-*.so.1 at startup — dynamic again, just
+          # against a loader even fewer systems have. cc-rs reads this under
+          # the raw triple; `env` because it is not a shell identifier.
+          env "CC_${CLI_TARGET}=musl-gcc" \
+            cargo build --release --locked --target "$CLI_TARGET" -p hya-cli
+          # The whole point of this leg is a binary that needs nothing from the
+          # host, so assert it rather than trust it. A PT_INTERP entry names a
+          # dynamic loader and a NEEDED entry names a shared library; a
+          # static-pie has neither.
+          BIN="target/${CLI_TARGET}/release/hydra"
+          if readelf -l -d "$BIN" | grep -E 'INTERP|NEEDED'; then
+            echo "error: $BIN is dynamically linked; the CLI archive must be static" >&2
+            exit 1
+          fi
+
       - name: Package artifacts
         shell: bash
         run: |
           set -euo pipefail
           BIN="target/${TARGET}/release"
+          # Everywhere but Linux the two builds are the same build.
+          CLI_BIN="target/${CLI_TARGET:-$TARGET}/release"
           EXT=""
           [ "${{ matrix.os }}" = windows ] && EXT=".exe"
 
@@ -158,7 +203,7 @@ jobs:
           mkdir -p dist "stage/${CLI_NAME}" "stage/${GUI_NAME}/extensions"
 
           # CLI archive: the standalone `hydra` binary only.
-          cp "${BIN}/hydra${EXT}" "stage/${CLI_NAME}/"
+          cp "${CLI_BIN}/hydra${EXT}" "stage/${CLI_NAME}/"
           cp LICENSE LICENSING.md THIRD-PARTY-NOTICES.md README.md "stage/${CLI_NAME}/"
 
           # Man pages travel with both archives on Unix; install.sh puts them
@@ -491,12 +536,17 @@ jobs:
       matrix:
         include:
           # ---- Linux, glibc -------------------------------------------------
+          # Pinned, not `ubuntu-latest`: a glibc build cannot start on a system
+          # whose glibc is older than the build machine's, so the runner sets
+          # the floor for everyone who links libhydra. 22.04 (glibc 2.35) is
+          # the same floor the rest of the Linux artifacts are built to; the
+          # musl legs below are for anything older.
           - target: x86_64-unknown-linux-gnu
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
           - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-22.04-arm
           - target: armv7-unknown-linux-gnueabihf
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
             # `ring` and `blake3` compile C and assembly, so a Rust target is
             # not enough — cross-compiling needs a cross C toolchain. The
             # armhf libc headers are only a *recommendation* of the cross gcc
