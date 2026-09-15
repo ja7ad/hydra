@@ -1,0 +1,142 @@
+﻿# Validate Safari extension packaging in CI.
+#
+# Full Xcode `safari-web-extension-converter` builds only run on macOS.
+# Linux/Windows contributors still get a resource-sync + manifest check via
+# the shared sync script (no Xcode required).
+
+name: Safari Extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extensions/**"
+      - "scripts/sync-extension-resources.sh"
+      - "scripts/build-safari-extension.sh"
+      - ".github/workflows/safari-extension.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "extensions/**"
+      - "scripts/sync-extension-resources.sh"
+      - "scripts/build-safari-extension.sh"
+      - ".github/workflows/safari-extension.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Always-on check: regenerate Safari Resources from Chrome sources and
+  # confirm the tree is committed/clean + manifest is valid JSON MV3.
+  sync-and-validate:
+    name: Sync resources & validate manifest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Python (manifest validation)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync Safari extension resources
+        run: bash scripts/sync-extension-resources.sh safari
+
+      - name: Ensure Resources match committed tree
+        run: |
+          if ! git diff --exit-code -- extensions/safari/Resources; then
+            echo "::error::extensions/safari/Resources is out of date."
+            echo "Run: scripts/sync-extension-resources.sh safari"
+            echo "Then commit the updated Resources/ tree."
+            exit 1
+          fi
+
+      - name: Validate Safari manifest (MV3 basics)
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path("extensions/safari/Resources/manifest.json")
+          if not path.is_file():
+              path = Path("extensions/safari/manifest.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          errors = []
+          if data.get("manifest_version") != 3:
+              errors.append(f"manifest_version must be 3, got {data.get('manifest_version')!r}")
+          for key in ("name", "version", "background"):
+              if key not in data:
+                  errors.append(f"missing required key: {key}")
+          # Shared scripts must exist next to the manifest after sync
+          root = path.parent
+          for f in ("background.js", "content.js", "popup.html", "popup.js", "popup.css"):
+              if not (root / f).is_file():
+                  errors.append(f"missing resource after sync: {f}")
+          icons = root / "icons"
+          if not icons.is_dir():
+              errors.append("missing icons/ directory")
+          if errors:
+              print("Safari manifest validation failed:")
+              for e in errors:
+                  print(f"  - {e}")
+              sys.exit(1)
+          print(f"OK: {path} name={data.get('name')!r} version={data.get('version')!r}")
+          PY
+
+      - name: Confirm native handler is present
+        run: |
+          test -f extensions/safari/SafariWebExtensionHandler.swift
+          echo "OK: SafariWebExtensionHandler.swift present"
+
+  # Full wrapper-app build (requires Xcode on the runner).
+  build-macos:
+    name: Build Safari wrapper (macOS / Xcode)
+    needs: [sync-and-validate]
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build Safari extension wrapper app
+        run: bash scripts/build-safari-extension.sh
+
+      - name: Locate built app
+        run: |
+          set -euo pipefail
+          # build-safari-extension.sh runs xcodebuild without -derivedDataPath, so
+          # the Release .app lands under ~/Library/Developer/Xcode/DerivedData.
+          APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 6 \
+            -name "Hydra Safari Extension.app" -path "*Release*" 2>/dev/null | head -1 || true)
+          if [ -z "${APP:-}" ]; then
+            APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" extensions/safari \
+              -name "*.app" -type d 2>/dev/null | head -1 || true)
+          fi
+          echo "Built app: ${APP:-<none>}"
+          if [ -z "${APP:-}" ]; then
+            echo "::error::No .app bundle found after Safari extension build"
+            exit 1
+          fi
+          # Stage a stable path for the artifact upload step
+          mkdir -p artifacts/safari
+          cp -R "$APP" "artifacts/safari/"
+          # Confirm the native handler was installed into the generated project
+          if ! find extensions/safari/generated -name "SafariWebExtensionHandler.swift" 2>/dev/null | grep -q .; then
+            echo "::warning::Could not re-find installed SafariWebExtensionHandler.swift under generated/"
+          else
+            echo "OK: SafariWebExtensionHandler.swift present in generated project"
+          fi
+
+      - name: Upload Safari extension app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydra-safari-extension
+          path: artifacts/safari/
+          if-no-files-found: warn
+          retention-days: 14
