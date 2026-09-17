@@ -55,6 +55,12 @@ xcrun safari-web-extension-converter "$OUT/Resources" \
 
 PROJ_DIR="$GEN/$APP_NAME"
 
+# Ensure parent app bundle identifier matches extension prefix (io.github.ja7ad.hydra.safari)
+# so Xcode ValidateEmbeddedBinary passes.
+find "$PROJ_DIR" -name "project.pbxproj" -exec sed -i '' \
+  -e 's/io\.github\.ja7ad\.hydra\.Hydra-Safari-Extension/io.github.ja7ad.hydra.safari/g' \
+  {} + 2>/dev/null || true
+
 # Our handler instead of the generated echo stub.
 HANDLER=$(find "$PROJ_DIR" -name "SafariWebExtensionHandler.swift" | head -1)
 [ -n "$HANDLER" ] || { echo "handler not found in generated project" >&2; exit 1; }
@@ -78,10 +84,15 @@ find "$PROJ_DIR" -name "Info.plist" -print0 | while IFS= read -r -d '' plist; do
   echo "local networking allowed: $plist"
 done
 
+# Safari WebExtensions require Safari 14+ (macOS 11.0 Big Sur or later).
+# Ensure deployment target in generated project is at least 11.0.
+find "$PROJ_DIR" -name "project.pbxproj" -exec sed -i '' -e 's/MACOSX_DEPLOYMENT_TARGET = 10\.[0-9]*/MACOSX_DEPLOYMENT_TARGET = 11.0/g' {} + 2>/dev/null || true
+
 echo "building..."
 xcodebuild -project "$PROJ_DIR/$APP_NAME.xcodeproj" \
   -scheme "$APP_NAME" \
   -configuration Release \
+  MACOSX_DEPLOYMENT_TARGET=11.0 \
   CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO \
   build
 

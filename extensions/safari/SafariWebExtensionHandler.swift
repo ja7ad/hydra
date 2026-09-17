@@ -19,13 +19,19 @@ import SafariServices
 
 let extensionMessageKey = "message"
 
+@available(macOS 11.0, *)
 class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
     func beginRequest(with context: NSExtensionContext) {
         let item = context.inputItems.first as? NSExtensionItem
-        let message =
-            item?.userInfo?[SFExtensionMessageKey]
-            ?? item?.userInfo?[extensionMessageKey]
+        let message: Any?
+        if #available(macOS 11.0, *) {
+            message =
+                item?.userInfo?[SFExtensionMessageKey]
+                ?? item?.userInfo?[extensionMessageKey]
+        } else {
+            message = item?.userInfo?[extensionMessageKey]
+        }
 
         var request = (message as? [String: Any]) ?? [:]
         let type = request["type"] as? String ?? ""
@@ -36,7 +42,11 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         if reply["ok"] == nil { reply["ok"] = false }
 
         let response = NSExtensionItem()
-        response.userInfo = [SFExtensionMessageKey: reply]
+        if #available(macOS 11.0, *) {
+            response.userInfo = [SFExtensionMessageKey: reply]
+        } else {
+            response.userInfo = [extensionMessageKey: reply]
+        }
         context.completeRequest(returningItems: [response])
     }
 
