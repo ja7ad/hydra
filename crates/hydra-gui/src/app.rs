@@ -520,6 +520,9 @@ impl FileInfoState {
 fn split_save_as(path: &str) -> (String, String) {
     match path.rfind(['/', '\\']) {
         Some(0) => (path[..1].to_string(), path[1..].to_string()),
+        Some(2) if path.as_bytes()[0].is_ascii_alphabetic() && path.as_bytes()[1] == b':' => {
+            (path[..3].to_string(), path[3..].to_string())
+        }
         Some(i) => (path[..i].to_string(), path[i + 1..].to_string()),
         None => (String::new(), path.to_string()),
     }
@@ -9820,6 +9823,21 @@ mod tests {
     }
 
     #[test]
+    fn save_as_preserves_windows_drive_roots() {
+        for (path, dir, name) in [
+            (r"Q:\a.zip", r"Q:\", "a.zip"),
+            ("Q:/a.zip", "Q:/", "a.zip"),
+            (r"q:\a.zip", r"q:\", "a.zip"),
+            (r"Q:\", r"Q:\", ""),
+            ("Q:/", "Q:/", ""),
+            ("ab/a.zip", "ab", "a.zip"),
+            ("é/a.zip", "é", "a.zip"),
+        ] {
+            assert_eq!(split_save_as(path), (dir.into(), name.into()), "{path}");
+        }
+    }
+
+    #[test]
     fn save_as_edit_marks_only_changed_part() {
         let mut fi = super::FileInfoState {
             save_dir: "/tmp/dl".into(),
@@ -12257,6 +12275,38 @@ mod tests {
             url: d.url.clone(),
             is_new: false,
             ..FileInfoState::default()
+        }
+    }
+
+    #[test]
+    fn properties_edits_keep_windows_paths_out_of_display_names() {
+        let name = "Identity.2003.720p Dubbed فارسی.mkv";
+        for (path, dir) in [
+            (format!(r"Q:\{name}"), r"Q:\"),
+            (format!(r"Q:\Downloads\{name}"), r"Q:\Downloads"),
+            (format!("Q:/{name}"), "Q:/"),
+            (format!(r"\\server\share\{name}"), r"\\server\share"),
+        ] {
+            let mut app = App::default();
+            let id = app.add_item("https://a.b/original.mkv".into(), None, None);
+            let d = app.item_mut(id).unwrap();
+            d.save_dir = dir.into();
+            d.state = DlState::Receiving;
+            app.file_info = properties_for(&app, id);
+
+            let _ = app.update(Message::FiSaveAs(path.clone()));
+            assert!(!app.file_info.dir_touched);
+            assert!(app.file_info.name_touched);
+            let _ = app.update(Message::FiOk);
+
+            let d = app.item(id).unwrap();
+            assert_eq!(d.file_name, name);
+            assert_eq!(d.save_dir, dir);
+            assert!(d.name_locked);
+            assert_eq!(d.state, DlState::Receiving);
+            assert_eq!(crate::windows::progress::title(&app, id), name);
+            #[cfg(windows)]
+            assert_eq!(d.full_path(), std::path::PathBuf::from(path));
         }
     }
 
