@@ -5161,6 +5161,19 @@ impl App {
                 self.save_state();
                 self.queue_tick()
             }
+            engine::Event::Discarded { id } => {
+                if let Some(d) = self.item_mut(id) {
+                    d.held.clear();
+                    d.downloaded = 0;
+                    d.disp_progress = 0.0;
+                    d.size = None;
+                    d.resume = None;
+                    d.rate = 0.0;
+                    d.eta_secs = None;
+                }
+                self.save_state();
+                Task::none()
+            }
             engine::Event::Failed {
                 id,
                 error,
@@ -12119,6 +12132,35 @@ mod tests {
         assert_eq!(app.batch.dir, "/tmp/iso");
         assert!(app.batch.to_dir);
         assert!(!app.batch.to_category);
+    }
+
+    #[test]
+    fn rejected_content_clears_metadata_and_resume_state_before_failure() {
+        let mut app = App::default();
+        let id = app.add_item("https://a.b/setup.zip".into(), None, None);
+        let d = app.item_mut(id).unwrap();
+        d.held = vec![(0, 1024)];
+        d.downloaded = 1024;
+        d.size = Some(1024);
+        d.disp_progress = 1.0;
+        d.resume = Some(true);
+        let _ = app.update(Message::Engine(engine::Event::Discarded { id }));
+        let _ = app.update(Message::Engine(engine::Event::Failed {
+            id,
+            error: "server returned a web page".into(),
+            done: 0,
+            held: vec![],
+            permission_denied: false,
+        }));
+        let d = app.item(id).unwrap();
+        assert_eq!(d.state, DlState::Error);
+        assert!(d.held.is_empty());
+        assert_eq!(d.downloaded, 0);
+        assert_eq!(d.size, None);
+        assert_eq!(d.resume, None);
+        assert_eq!(d.disp_progress, 0.0);
+        let _ = app.adopt_probed(id, None, Some(1_000_000));
+        assert_eq!(app.item(id).unwrap().size, Some(1_000_000));
     }
 
     /// A transfer that lost its folder shows the failure while the permission

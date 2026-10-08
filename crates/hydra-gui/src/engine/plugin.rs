@@ -590,7 +590,9 @@ async fn run_with_root(
         size,
         start.elapsed().as_secs_f64(),
         None,
-    );
+        None,
+    )
+    .await;
     true
 }
 

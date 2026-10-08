@@ -278,6 +278,10 @@ pub enum Event {
         done: u64,
         held: Vec<(u64, u64)>,
     },
+    /// Rejected staging content no longer supplies metadata or resume spans.
+    Discarded {
+        id: DlId,
+    },
     Failed {
         id: DlId,
         error: String,
@@ -679,6 +683,7 @@ async fn resolve_link(
     // The address asked for, kept for the whole chain: `headers` carry this
     // download's login and cookies, and a hop off this origin is not entitled
     // to them.
+    let requested = url.clone();
     let first = target_via(route.http(), &parse_url(&url).ok()?, Vec::new(), user_agent);
     for _ in 0..10 {
         let u = parse_url(&url).ok()?;
@@ -692,18 +697,99 @@ async fn resolve_link(
             url = join_url(&u, p.location.as_deref().unwrap_or(""))?;
             continue;
         }
-        if p.maybe_redirector() {
-            if let Some(next) = hya_net::html_redirect(connector, &t)
-                .await
-                .and_then(|loc| join_url(&u, &loc))
-            {
-                url = next;
-                continue;
-            }
+        let (redirect, intercepted) = inspect_page(connector, &t, &p, &[&url, &requested]).await;
+        if let Some(next) = redirect.and_then(|loc| join_url(&u, &loc)) {
+            url = next;
+            continue;
+        }
+        if intercepted.is_some() {
+            return None;
         }
         return Some((url, p));
     }
     None
+}
+
+fn expects_binary(name: &str) -> bool {
+    use hya_core::format::Category;
+
+    hya_core::format::from_extension(name).is_some_and(|format| {
+        matches!(
+            format.category,
+            Category::Archive
+                | Category::Application
+                | Category::DiskImage
+                | Category::Video
+                | Category::Audio
+                | Category::Image
+                | Category::Font
+        )
+    })
+}
+
+fn intercepted_page(prefix: &[u8], names: &[&str]) -> Option<String> {
+    names.iter().filter(|name| expects_binary(name)).find_map(|name| {
+        let detection = hya_core::format::detect_format(prefix, name, None);
+        detection.looks_intercepted().then(|| format!(
+            "server returned a web page instead of the requested file: {}; access may require a login or a proxy (Options > Proxy / Socks)",
+            detection.conflict.as_deref().unwrap_or("unexpected HTML content")
+        ))
+    })
+}
+
+async fn inspect_page(
+    connector: &TlsCapableConnector,
+    target: &Target,
+    probe: &Probe,
+    names: &[&str],
+) -> (Option<String>, Option<String>) {
+    let is_html = probe
+        .content_type
+        .as_deref()
+        .and_then(hya_core::format::from_media_type)
+        .is_some_and(|format| format.category == hya_core::format::Category::Markup);
+    if !(200..300).contains(&probe.status)
+        || probe.disposition.is_some()
+        || probe.size > hya_net::redirect::MAX_REDIRECTOR_PAGE
+        || !is_html
+    {
+        return (None, None);
+    }
+    let Ok(body) = hya_net::fetch_small(
+        connector,
+        target,
+        hya_net::redirect::MAX_REDIRECTOR_PAGE as usize,
+    )
+    .await
+    else {
+        return (None, None);
+    };
+    let redirect = hya_net::html_redirect_target(&String::from_utf8_lossy(&body));
+    let intercepted = if redirect.is_none() {
+        intercepted_page(&body, names)
+    } else {
+        None
+    };
+    (redirect, intercepted)
+}
+
+async fn reject_page(spec: &StartSpec, tx: &UnboundedSender<Event>, error: String) {
+    if let Err(e) = tokio::fs::remove_file(&spec.temp_path).await {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            crate::log::warn(&format!(
+                "#{} cannot remove rejected staging file: {e}",
+                spec.id
+            ));
+        }
+    }
+    let _ = tx.send(Event::Discarded { id: spec.id });
+    let _ = tx.send(Event::Failed {
+        id: spec.id,
+        error,
+        done: 0,
+        held: vec![],
+        permission_denied: false,
+    });
 }
 
 /// A target for `u` carrying the request headers and user agent, addressed
@@ -1998,22 +2084,33 @@ async fn resolve_primary(
                 // one-kilobyte `index.html` this resolves. Charged to the same
                 // hop budget as a `3xx`, since a pair of such pages pointing at
                 // each other is a loop like any other.
-                let hop_to = if p.maybe_redirector() {
-                    match cancellable(hya_net::html_redirect(connector.as_ref(), &t), cancel).await
-                    {
-                        Some(loc) => loc.and_then(|loc| join_url(&u, &loc)),
-                        None => {
-                            ev(Event::Stopped {
-                                id,
-                                done: 0,
-                                held: spec.held.clone(),
-                            });
-                            return None;
-                        }
+                let (redirect, intercepted) = match cancellable(
+                    inspect_page(connector.as_ref(), &t, &p, &[&url, &spec.final_path]),
+                    cancel,
+                )
+                .await
+                {
+                    Some(answer) => answer,
+                    None => {
+                        ev(Event::Stopped {
+                            id,
+                            done: 0,
+                            held: spec.held.clone(),
+                        });
+                        return None;
                     }
-                } else {
-                    None
                 };
+                if let Some(error) = intercepted {
+                    ev(Event::Failed {
+                        id,
+                        error,
+                        done: 0,
+                        held: spec.held.clone(),
+                        permission_denied: false,
+                    });
+                    return None;
+                }
+                let hop_to = redirect.and_then(|loc| join_url(&u, &loc));
                 if let Some(next) = hop_to {
                     if !chain.advance(&next) {
                         ev(Event::Failed {
@@ -2363,7 +2460,7 @@ async fn run_file_download(
         id,
         size: known_size,
         ranges: p.ranges,
-        file_name,
+        file_name: file_name.clone(),
     });
 
     // A signed URL is a credential that can expire within seconds (`data.dtu.dk`
@@ -2420,7 +2517,7 @@ async fn run_file_download(
                 r = &mut fut => {
                     match r {
                         Ok(n) => {
-                            finish_file(&spec, &final_path, &tx, n, t0.elapsed().as_secs_f64(), stamp);
+                            finish_file(&spec, &final_path, &tx, n, t0.elapsed().as_secs_f64(), stamp, file_name.as_deref()).await;
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
                             ev(Event::Stopped {
@@ -2714,7 +2811,16 @@ async fn run_file_download(
                 });
                 return;
             }
-            finish_file(&spec, &final_path, &tx, size, elapsed, stamp);
+            finish_file(
+                &spec,
+                &final_path,
+                &tx,
+                size,
+                elapsed,
+                stamp,
+                file_name.as_deref(),
+            )
+            .await;
         }
         Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
             ev(Event::Stopped { id, done, held });
@@ -2934,7 +3040,9 @@ async fn run_ftp_download(
                 size,
                 t0.elapsed().as_secs_f64(),
                 None,
-            );
+                None,
+            )
+            .await;
         }
         Some(Err(e)) => {
             crate::log::error(&format!("#{id} ftp failed at {done}/{size}: {e}"));
@@ -2982,20 +3090,47 @@ fn set_mtime(path: &std::path::Path, secs: u64) -> std::io::Result<()> {
 /// Move the finished `.part` into place and report completion. The
 /// destination is read at completion time so File-Info edits made while the
 /// transfer ran land the file where the user finally said.
-fn finish_file(
+async fn finish_file(
     spec: &StartSpec,
     final_path: &Arc<Mutex<String>>,
     tx: &UnboundedSender<Event>,
     size: u64,
     elapsed: f64,
     stamp: Option<u64>,
+    served_name: Option<&str>,
 ) {
     let final_str = final_path
         .lock()
         .map(|g| g.clone())
         .unwrap_or_else(|_| spec.final_path.clone());
     let final_path = std::path::Path::new(&final_str);
-    let moved = crate::files::move_file(std::path::Path::new(&spec.temp_path), final_path);
+    let names = [
+        &spec.url[..],
+        &spec.final_path[..],
+        &final_str[..],
+        served_name.unwrap_or(""),
+    ];
+    let validation = if names.iter().any(|name| expects_binary(name)) {
+        use tokio::io::AsyncReadExt as _;
+
+        async {
+            let file = tokio::fs::File::open(&spec.temp_path).await?;
+            let mut prefix = Vec::with_capacity(8192);
+            file.take(8192).read_to_end(&mut prefix).await?;
+            Ok::<_, std::io::Error>(intercepted_page(&prefix, &names))
+        }
+        .await
+    } else {
+        Ok(None)
+    };
+    let moved = match validation {
+        Ok(Some(error)) => {
+            reject_page(spec, tx, error).await;
+            return;
+        }
+        Ok(None) => crate::files::move_file(std::path::Path::new(&spec.temp_path), final_path),
+        Err(e) => Err(e),
+    };
     match moved {
         Ok(()) => {
             // After the rename, never before: the mtime has to be set on the
@@ -8654,4 +8789,505 @@ async fn run_stream(
         }
     };
     plugin::with_hooks(&direct, &cancel, &final_path, &tx, task, rx).await;
+}
+
+#[cfg(test)]
+mod intercepted_page_e2e_tests {
+    use super::*;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::TcpListener;
+
+    const HTML: &[u8] = b"\xef\xbb\xbf\r\n<!-- gateway -->\n<!DoCtYpE hTmL><html><title>Access denied</title></html>";
+    const ZIP: &[u8] = b"PK\x03\x04a real archive payload";
+
+    struct Origin {
+        url: String,
+        task: tokio::task::JoinHandle<()>,
+        requests: Arc<Mutex<Vec<String>>>,
+        page_requested: Arc<tokio::sync::Notify>,
+    }
+
+    impl Drop for Origin {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    async fn origin(
+        body: Vec<u8>,
+        content_type: Option<&'static str>,
+        disposition: Option<&'static str>,
+        ranges: bool,
+        redirect: bool,
+    ) -> Origin {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let seen = requests.clone();
+        let page_requested = Arc::new(tokio::sync::Notify::new());
+        let requested = page_requested.clone();
+        let task = tokio::spawn(async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                let mut socket = BufReader::new(socket);
+                let mut request = String::new();
+                loop {
+                    let mut line = String::new();
+                    if socket.read_line(&mut line).await.unwrap_or(0) == 0 || line == "\r\n" {
+                        break;
+                    }
+                    request.push_str(&line);
+                }
+                seen.lock().unwrap().push(request.clone());
+                if request.split_whitespace().nth(1) == Some("/redirect.zip") {
+                    let _ = socket.get_mut().write_all(b"HTTP/1.1 302 Found\r\nLocation: /login\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
+                    continue;
+                }
+                let forwarding = redirect && request.split_whitespace().nth(1) == Some("/go.zip");
+                let payload = if forwarding {
+                    b"<html><meta http-equiv='refresh' content='0; url=/real.zip'></html>"
+                        .as_slice()
+                } else {
+                    &body
+                };
+                let range = request.lines().find_map(|line| {
+                    let lower = line.to_ascii_lowercase();
+                    let value = lower.strip_prefix("range: bytes=")?;
+                    let (lo, hi) = value.trim().split_once('-')?;
+                    Some((
+                        lo.parse::<usize>().ok()?,
+                        hi.parse::<usize>().unwrap_or(payload.len() - 1),
+                    ))
+                });
+                let is_head = request.starts_with("HEAD ");
+                if !is_head && request.split_whitespace().nth(1) == Some("/waiting.zip") {
+                    requested.notify_one();
+                    std::future::pending::<()>().await;
+                }
+                let range = range.filter(|_| ranges && !forwarding && !is_head);
+                let (status, sent) = match range {
+                    Some((lo, hi)) => (
+                        "206 Partial Content",
+                        &payload[lo..=hi.min(payload.len() - 1)],
+                    ),
+                    None => ("200 OK", payload),
+                };
+                let length =
+                    if is_head && request.split_whitespace().nth(1) == Some("/wrong-size.zip") {
+                        1024
+                    } else {
+                        sent.len()
+                    };
+                let mut response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {length}\r\nConnection: close\r\n",
+                );
+                if let Some((lo, hi)) = range {
+                    response.push_str(&format!(
+                        "Content-Range: bytes {lo}-{}/{}\r\n",
+                        hi.min(payload.len() - 1),
+                        payload.len()
+                    ));
+                }
+                if ranges && !forwarding {
+                    response.push_str("Accept-Ranges: bytes\r\n");
+                }
+                if let Some(kind) = if forwarding {
+                    Some("text/html")
+                } else {
+                    content_type
+                } {
+                    response.push_str(&format!("Content-Type: {kind}\r\n"));
+                }
+                if let Some(value) = disposition {
+                    response.push_str(&format!("Content-Disposition: {value}\r\n"));
+                }
+                response.push_str("\r\n");
+                let socket = socket.get_mut();
+                if socket.write_all(response.as_bytes()).await.is_ok() && !is_head {
+                    let _ = socket.write_all(sent).await;
+                }
+            }
+        });
+        Origin {
+            url,
+            task,
+            requests,
+            page_requested,
+        }
+    }
+
+    fn spec(origin: &Origin, dir: &std::path::Path, name: &str) -> StartSpec {
+        StartSpec {
+            id: 300,
+            url: format!("{}/{}", origin.url, name),
+            user_agent: "hydra-e2e".into(),
+            temp_path: dir.join("download.part").to_string_lossy().into_owned(),
+            final_path: dir.join(name).to_string_lossy().into_owned(),
+            proxy: crate::model::ProxyChoice::Direct,
+            ..StartSpec::plain()
+        }
+    }
+
+    async fn download(spec: StartSpec) -> Vec<Event> {
+        let (tx, mut rx) = unbounded_channel();
+        let final_path = Arc::new(Mutex::new(spec.final_path.clone()));
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            run_download(
+                spec,
+                Arc::new(AtomicBool::new(false)),
+                Pace::unlimited(),
+                final_path,
+                tx,
+            ),
+        )
+        .await
+        .expect("download must terminate");
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+        events
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_html_block_pages_never_replace_the_requested_binary() {
+        for (index, (kind, disposition, ranges, early, large)) in [
+            (Some("text/html; charset=utf-8"), None, false, true, false),
+            (Some("application/xhtml+xml"), None, true, true, false),
+            (Some("application/octet-stream"), None, false, false, false),
+            (None, None, true, false, false),
+            (
+                Some("text/html"),
+                Some("attachment; filename=setup.exe"),
+                true,
+                false,
+                false,
+            ),
+            (Some("text/html"), None, false, false, true),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let dir = tempfile::tempdir().unwrap();
+            let mut body = HTML.to_vec();
+            if large {
+                body.resize(hya_net::redirect::MAX_REDIRECTOR_PAGE as usize + 1, b' ');
+            }
+            let origin = origin(body, kind, disposition, ranges, false).await;
+            let name = if index % 2 == 0 {
+                "setup.zip"
+            } else {
+                "setup.exe"
+            };
+            let spec = spec(&origin, dir.path(), name);
+            tokio::fs::write(&spec.final_path, b"existing good file")
+                .await
+                .unwrap();
+            let events = download(spec.clone()).await;
+            assert!(
+                !events.iter().any(|e| matches!(e, Event::Finished { .. })),
+                "case {index}: {events:?}"
+            );
+            assert!(events.iter().any(|e| matches!(e, Event::Failed { error, done: 0, held, .. } if error.contains("web page") && error.contains("proxy") && held.is_empty())), "case {index}: {events:?}");
+            assert_eq!(
+                events.iter().any(|e| matches!(e, Event::Discarded { .. })),
+                !early
+            );
+            assert_eq!(
+                tokio::fs::read(&spec.final_path).await.unwrap(),
+                b"existing good file"
+            );
+            assert!(!std::path::Path::new(&spec.temp_path).exists());
+            assert_eq!(
+                !events.iter().any(|e| matches!(e, Event::Probed { .. })),
+                early
+            );
+            if early {
+                let requests = origin.requests.lock().unwrap();
+                assert_eq!(
+                    requests.iter().filter(|r| r.starts_with("GET ")).count(),
+                    1,
+                    "reuse the redirect inspection"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_a_blocked_probe_preserves_previously_downloaded_ranges() {
+        let dir = tempfile::tempdir().unwrap();
+        let origin = origin(HTML.to_vec(), Some("text/html"), None, true, false).await;
+        let mut spec = spec(&origin, dir.path(), "setup.zip");
+        spec.held = vec![(0, ZIP.len() as u64)];
+        spec.expected_size = Some(1_000_000);
+        tokio::fs::write(&spec.temp_path, ZIP).await.unwrap();
+        let events = download(spec.clone()).await;
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::Failed { held, .. } if held == &spec.held)),
+            "{events:?}"
+        );
+        assert!(!events.iter().any(|e| matches!(e, Event::Discarded { .. })));
+        assert_eq!(tokio::fs::read(&spec.temp_path).await.unwrap(), ZIP);
+        assert!(!std::path::Path::new(&spec.final_path).exists());
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_valid_binaries_and_requested_html_still_complete() {
+        for (body, name, kind, ranges) in [
+            (ZIP, "setup.zip", Some("text/html"), false),
+            (ZIP, "setup.zip", Some("text/html"), true),
+            (HTML, "page.html", Some("text/html"), false),
+            (HTML, "notes.txt", Some("text/html"), true),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let origin = origin(body.to_vec(), kind, None, ranges, false).await;
+            let spec = spec(&origin, dir.path(), name);
+            let events = download(spec.clone()).await;
+            assert!(
+                events.iter().any(|e| matches!(e, Event::Finished { .. })),
+                "{events:?}"
+            );
+            assert!(
+                !events.iter().any(|e| matches!(e, Event::Failed { .. })),
+                "{events:?}"
+            );
+            assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), body);
+        }
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_html_redirect_is_followed_before_interception_checks() {
+        let dir = tempfile::tempdir().unwrap();
+        let origin = origin(ZIP.to_vec(), Some("application/zip"), None, true, true).await;
+        let spec = spec(&origin, dir.path(), "go.zip");
+        let meta = probe_link(
+            spec.url.clone(),
+            "hydra-e2e".into(),
+            vec![],
+            crate::model::ProxyChoice::Direct,
+        )
+        .await
+        .unwrap();
+        assert_eq!(meta.file_name.as_deref(), Some("real.zip"));
+        assert_eq!(meta.size, Some(ZIP.len() as u64));
+        let events = download(spec.clone()).await;
+        assert!(
+            events.iter().any(|e| matches!(e, Event::Finished { .. })),
+            "{events:?}"
+        );
+        assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), ZIP);
+        assert!(origin
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|r| r.starts_with("GET /real.zip ")));
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_probe_hides_block_page_metadata_but_keeps_mislabeled_files() {
+        for (body, hidden) in [(HTML, true), (ZIP, false)] {
+            let origin = origin(body.to_vec(), Some("text/html"), None, false, false).await;
+            let meta = probe_link(
+                format!("{}/setup.zip", origin.url),
+                "hydra-e2e".into(),
+                vec![],
+                crate::model::ProxyChoice::Direct,
+            )
+            .await;
+            assert_eq!(meta.is_none(), hidden);
+            if let Some(meta) = meta {
+                assert_eq!(meta.size, Some(ZIP.len() as u64));
+                assert_eq!(meta.file_name.as_deref(), Some("setup.zip"));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_a_rejected_download_can_be_retried_with_fresh_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let blocked = origin(HTML.to_vec(), None, None, true, false).await;
+        let mut spec = spec(&blocked, dir.path(), "setup.zip");
+        let failed = download(spec.clone()).await;
+        assert!(failed.iter().any(|e| matches!(e, Event::Failed { .. })));
+        assert!(!std::path::Path::new(&spec.temp_path).exists());
+        let working = origin(ZIP.to_vec(), Some("application/zip"), None, true, false).await;
+        spec.url = format!("{}/setup.zip", working.url);
+        let events = download(spec.clone()).await;
+        assert!(
+            events.iter().any(|e| matches!(e, Event::Finished { .. })),
+            "{events:?}"
+        );
+        assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), ZIP);
+        assert!(working
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|r| r.contains("Range: bytes=0-")));
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_stop_cancels_a_waiting_html_inspection() {
+        let dir = tempfile::tempdir().unwrap();
+        let origin = origin(HTML.to_vec(), Some("text/html"), None, false, false).await;
+        let spec = spec(&origin, dir.path(), "waiting.zip");
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (tx, mut rx) = unbounded_channel();
+        let final_path = Arc::new(Mutex::new(spec.final_path.clone()));
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            tokio::join!(
+                run_download(
+                    spec.clone(),
+                    cancel.clone(),
+                    Pace::unlimited(),
+                    final_path,
+                    tx
+                ),
+                async {
+                    origin.page_requested.notified().await;
+                    cancel.store(true, Ordering::Relaxed);
+                }
+            );
+        })
+        .await
+        .expect("Stop must cancel HTML inspection");
+        let mut stopped = false;
+        while let Ok(event) = rx.try_recv() {
+            assert!(!matches!(
+                event,
+                Event::Failed { .. } | Event::Finished { .. }
+            ));
+            stopped |= matches!(event, Event::Stopped { .. });
+        }
+        assert!(stopped);
+        assert!(!std::path::Path::new(&spec.temp_path).exists());
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_a_disposition_name_is_validated_even_before_the_gui_adopts_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let origin = origin(
+            HTML.to_vec(),
+            Some("application/octet-stream"),
+            Some("attachment; filename=setup.zip"),
+            false,
+            false,
+        )
+        .await;
+        let spec = spec(&origin, dir.path(), "download");
+        let events = download(spec.clone()).await;
+        assert!(events.iter().any(
+            |e| matches!(e, Event::Probed { file_name: Some(name), .. } if name == "setup.zip")
+        ));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::Failed { error, .. } if error.contains("web page"))),
+            "{events:?}"
+        );
+        assert!(!std::path::Path::new(&spec.final_path).exists());
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_a_login_redirect_keeps_the_original_binary_expectation() {
+        let dir = tempfile::tempdir().unwrap();
+        let origin = origin(HTML.to_vec(), Some("text/html"), None, false, false).await;
+        let spec = spec(&origin, dir.path(), "redirect.zip");
+        let events = download(spec.clone()).await;
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::Failed { error, .. } if error.contains("web page"))),
+            "{events:?}"
+        );
+        assert!(!std::path::Path::new(&spec.final_path).exists());
+        let meta = probe_link(
+            spec.url,
+            "hydra-e2e".into(),
+            vec![],
+            crate::model::ProxyChoice::Direct,
+        )
+        .await;
+        assert!(meta.is_none());
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_failed_page_inspection_does_not_reject_a_binary() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut body = ZIP.to_vec();
+        body.resize(hya_net::redirect::MAX_REDIRECTOR_PAGE as usize * 2, b'Z');
+        let origin = origin(body.clone(), Some("text/html"), None, false, false).await;
+        let spec = spec(&origin, dir.path(), "wrong-size.zip");
+        let events = download(spec.clone()).await;
+        assert!(
+            events.iter().any(|e| matches!(e, Event::Finished { .. })),
+            "{events:?}"
+        );
+        assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), body);
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_rejection_resets_resume_state_even_when_cleanup_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec = StartSpec {
+            id: 300,
+            temp_path: dir.path().to_string_lossy().into_owned(),
+            ..StartSpec::plain()
+        };
+        let (tx, mut rx) = unbounded_channel();
+        reject_page(&spec, &tx, "server returned a web page".into()).await;
+        assert!(matches!(rx.try_recv().unwrap(), Event::Discarded { .. }));
+        assert!(
+            matches!(rx.try_recv().unwrap(), Event::Failed { held, done: 0, .. } if held.is_empty())
+        );
+        assert!(dir.path().is_dir());
+
+        let missing = StartSpec {
+            temp_path: dir
+                .path()
+                .join("removed.part")
+                .to_string_lossy()
+                .into_owned(),
+            ..spec
+        };
+        reject_page(&missing, &tx, "server returned a web page".into()).await;
+        assert!(matches!(rx.try_recv().unwrap(), Event::Discarded { .. }));
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            Event::Failed { done: 0, .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_staging_read_errors_fail_without_replacing_the_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec = StartSpec {
+            id: 300,
+            temp_path: dir
+                .path()
+                .join("missing.part")
+                .to_string_lossy()
+                .into_owned(),
+            final_path: dir.path().join("setup.zip").to_string_lossy().into_owned(),
+            ..StartSpec::plain()
+        };
+        tokio::fs::write(&spec.final_path, ZIP).await.unwrap();
+        let (tx, mut rx) = unbounded_channel();
+        finish_file(
+            &spec,
+            &Arc::new(Mutex::new(spec.final_path.clone())),
+            &tx,
+            100,
+            0.1,
+            None,
+            None,
+        )
+        .await;
+        assert!(matches!(rx.try_recv().unwrap(), Event::Failed { .. }));
+        assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), ZIP);
+    }
 }

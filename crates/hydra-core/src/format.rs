@@ -258,10 +258,6 @@ static SIGS: &[Sig] = &[
     sig(0, b"\x93NUMPY", f("npy", Category::Data, "application/x-npy", "npy")),
     sig(0, b"\x89HDF\r\n\x1a\n", f("hdf5", Category::Data, "application/x-hdf5", "h5")),
     sig(0, b"<?xml", f("xml", Category::Data, "application/xml", "xml")),
-    sig(0, b"<!DOCTYPE html", f("html", Category::Markup, "text/html", "html")),
-    sig(0, b"<!doctype html", f("html", Category::Markup, "text/html", "html")),
-    sig(0, b"<html", f("html", Category::Markup, "text/html", "html")),
-    sig(0, b"<HTML", f("html", Category::Markup, "text/html", "html")),
     // ---- ZIP container LAST: OOXML, ODF, APK, JAR, EPUB all match it ----
     sig(0, b"PK\x03\x04", f("zip", Category::Archive, "application/zip", "zip")),
     sig(0, b"PK\x05\x06", f("zip-empty", Category::Archive, "application/zip", "zip")),
@@ -538,6 +534,9 @@ static BY_EXT: &[(&str, Format)] = &[
 
 /// Classify by magic bytes alone.
 pub fn from_magic(buf: &[u8]) -> Option<Format> {
+    if starts_html(buf) {
+        return Some(f("html", Category::Markup, "text/html", "html"));
+    }
     // RIFF containers carry their kind at offset 8.
     if buf.len() >= 12 && &buf[0..4] == b"RIFF" {
         return match &buf[8..12] {
@@ -574,6 +573,36 @@ pub fn from_magic(buf: &[u8]) -> Option<Format> {
         }
     }
     None
+}
+
+fn starts_html(buf: &[u8]) -> bool {
+    let mut head = buf.trim_ascii_start();
+    head = head
+        .strip_prefix(b"\xef\xbb\xbf")
+        .unwrap_or(head)
+        .trim_ascii_start();
+    loop {
+        let end_marker: &[u8] = if head.starts_with(b"<!--") {
+            b"-->"
+        } else if head.starts_with(b"<?xml ") {
+            b"?>"
+        } else {
+            break;
+        };
+        let Some(end) = head.windows(end_marker.len()).position(|w| w == end_marker) else {
+            return false;
+        };
+        head = head[end + end_marker.len()..].trim_ascii_start();
+    }
+    [b"<html".as_slice(), b"<!doctype html".as_slice()]
+        .iter()
+        .any(|tag| {
+            head.get(..tag.len())
+                .is_some_and(|s| s.eq_ignore_ascii_case(tag))
+                && head
+                    .get(tag.len())
+                    .is_some_and(|b| b.is_ascii_whitespace() || matches!(b, b'>' | b'/'))
+        })
 }
 
 fn zip_kind(buf: &[u8]) -> Option<Format> {
@@ -629,6 +658,9 @@ pub fn from_extension(name: &str) -> Option<Format> {
 /// Classify by a `Content-Type` header value.
 pub fn from_media_type(ct: &str) -> Option<Format> {
     let base = ct.split(';').next()?.trim().to_ascii_lowercase();
+    if base == "application/xhtml+xml" {
+        return Some(f("html", Category::Markup, "application/xhtml+xml", "html"));
+    }
     if base.is_empty() || base == "application/octet-stream" {
         // The universal "I don't know" of HTTP. Treating it as a classification
         // would overwrite better evidence with none.
@@ -1121,6 +1153,58 @@ mod tests {
         assert!(
             msg.contains("html") && msg.contains("iso"),
             "message must name both: {msg}"
+        );
+    }
+
+    #[test]
+    fn html_signatures_allow_preambles_and_case_without_matching_tag_names() {
+        for body in [
+            b"\xef\xbb\xbf \r\n<HtMl lang='en'>blocked".as_slice(),
+            b" \t<!DoCtYpE hTmL><html>blocked",
+            b"<!-- gateway -->\n<html>blocked",
+            b"<html/>",
+            b"<?xml version='1.0'?>\n<html xmlns='http://www.w3.org/1999/xhtml'>",
+        ] {
+            let detected = detect_format(body, "setup.zip", None);
+            assert!(detected.looks_intercepted(), "{body:?}");
+            assert_eq!(detected.evidence, Evidence::Magic);
+        }
+        for body in [
+            b"<htmlish>".as_slice(),
+            b"<!doctype htmlish>",
+            b"<!-- unclosed",
+            b"<?xml unclosed",
+            b"<html",
+        ] {
+            assert!(
+                !detect_format(body, "setup.zip", None).looks_intercepted(),
+                "{body:?}"
+            );
+        }
+        assert_eq!(
+            from_magic(b"<?xml version='1.0'?><svg/> ")
+                .unwrap()
+                .category,
+            Category::Data
+        );
+    }
+
+    #[test]
+    fn html_headers_do_not_override_binary_evidence() {
+        let probe = detect_format(b"", "setup.zip", Some("text/html"));
+        assert_eq!(probe.category, Category::Archive);
+        assert_eq!(probe.evidence, Evidence::Extension);
+        assert!(!probe.looks_intercepted());
+        let download = detect_format(b"PK\x03\x04", "setup.zip", Some("text/html"));
+        assert_eq!(download.category, Category::Archive);
+        assert!(!download.looks_intercepted());
+        let page = detect_format(b"<html>hello", "page.html", Some("text/html"));
+        assert!(!page.looks_intercepted());
+        assert_eq!(
+            from_media_type("Application/XHTML+XML; charset=UTF-8")
+                .unwrap()
+                .category,
+            Category::Markup
         );
     }
 
