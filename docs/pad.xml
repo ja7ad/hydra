@@ -34,19 +34,19 @@
   </Company_Info>
   <Program_Info>
     <Program_Name>Hydra Download Manager</Program_Name>
-    <Program_Version>1.0.1</Program_Version>
-    <Program_Release_Month>09</Program_Release_Month>
-    <Program_Release_Day>26</Program_Release_Day>
+    <Program_Version>1.1.0</Program_Version>
+    <Program_Release_Month>10</Program_Release_Month>
+    <Program_Release_Day>08</Program_Release_Day>
     <Program_Release_Year>2026</Program_Release_Year>
     <Program_Cost_Dollars>0</Program_Cost_Dollars>
     <Program_Cost_Other_Code>USD</Program_Cost_Other_Code>
     <Program_Cost_Other>0</Program_Cost_Other>
     <Program_Type>Freeware</Program_Type>
-    <Program_Release_Status>Minor Update</Program_Release_Status>
+    <Program_Release_Status>Major Update</Program_Release_Status>
     <Program_Install_Support>Install and Uninstall</Program_Install_Support>
     <Program_OS_Support>Windows 10,Windows 11,Mac OS X,Linux,Linux Console,Linux Gnome,Linux Open Source</Program_OS_Support>
     <Program_Language>English,Arabic,Chinese,ChineseTrad,Czech,Danish,Dutch,Finnish,French,German,Greek,Hebrew,Hindi,Hungarian,Indonesian,Italian,Japanese,Korean,Persian,Polish,Portuguese,Romanian,Russian,Spanish,Swedish,Thai,Turkish,Ukrainian,Vietnamese</Program_Language>
-    <Program_Change_Info>Fixes browser extensions installed from the Chrome Web Store, Edge Add-ons and Opera add-ons failing to connect, launch at startup on macOS 13 and later, and Full Disk Access being reported as missing on macOS 27.</Program_Change_Info>
+    <Program_Change_Info>Adds an extensible WebAssembly and native plugin system with official BitTorrent and YouTube download plugins, settings export and import (.hydata), up to 256 connections, and fixes for intercepted HTML block pages, Windows drive roots, and filename portability.</Program_Change_Info>
     <Program_Specific_Category>Download Manager</Program_Specific_Category>
     <Program_Category_Class>Internet::Download Managers</Program_Category_Class>
     <Program_System_Requirements>Windows 10 or 11 (x64 or ARM64); macOS 11 or later (Intel or Apple Silicon); Linux with glibc 2.35 or later for the desktop app, any distribution for the CLI</Program_System_Requirements>
@@ -94,10 +94,10 @@ Hydra has no ads, no telemetry and no accounts. The applications are licensed un
       <Application_XML_File_URL>https://hydra.javad.dev/pad.xml</Application_XML_File_URL>
     </Application_URLs>
     <Download_URLs>
-      <Primary_Download_URL>https://github.com/ja7ad/hydra/releases/download/v1.0.1/hydra-1.0.1-windows-x64-setup.exe</Primary_Download_URL>
-      <Secondary_Download_URL>https://github.com/ja7ad/hydra/releases/download/v1.0.1/Hydra-1.0.1-arm64.dmg</Secondary_Download_URL>
-      <Additional_Download_URL_1>https://github.com/ja7ad/hydra/releases/download/v1.0.1/hydra-download-manager_1.0.1_amd64.deb</Additional_Download_URL_1>
-      <Additional_Download_URL_2>https://github.com/ja7ad/hydra/releases/tag/v1.0.1</Additional_Download_URL_2>
+      <Primary_Download_URL>https://github.com/ja7ad/hydra/releases/download/v1.1.0/hydra-1.1.0-windows-x64-setup.exe</Primary_Download_URL>
+      <Secondary_Download_URL>https://github.com/ja7ad/hydra/releases/download/v1.1.0/Hydra-1.1.0-arm64.dmg</Secondary_Download_URL>
+      <Additional_Download_URL_1>https://github.com/ja7ad/hydra/releases/download/v1.1.0/hydra-download-manager_1.1.0_amd64.deb</Additional_Download_URL_1>
+      <Additional_Download_URL_2>https://github.com/ja7ad/hydra/releases/tag/v1.1.0</Additional_Download_URL_2>
     </Download_URLs>
   </Web_Info>
   <Permissions>

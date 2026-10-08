@@ -1,6 +1,6 @@
 [package]
 name = "hya-stream"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 # MIT OR Apache-2.0, like hya-core and hya-net and for the same reason: this
 # is a library built to be depended on. Manifest parsing and segment assembly
