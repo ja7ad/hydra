@@ -25,12 +25,12 @@ $global:HydraTestImports = 0
 $global:HydraTestRemovals = 0
 function Test-Path {
     param([string]$LiteralPath, [string]$PathType = 'Any')
-    if ($LiteralPath -like 'Cert:\CurrentUser\Root\*') { return $global:HydraTestRootExists }
+    if ($LiteralPath -like 'Cert:\LocalMachine\Root\*') { return $global:HydraTestRootExists }
     Microsoft.PowerShell.Management\Test-Path -LiteralPath $LiteralPath -PathType $PathType
 }
 function Import-Certificate {
     param([string]$FilePath, [string]$CertStoreLocation)
-    if ($CertStoreLocation -ne 'Cert:\CurrentUser\Root' -or -not $FilePath.EndsWith('test-certificate.cer')) {
+    if ($CertStoreLocation -ne 'Cert:\LocalMachine\Root' -or -not $FilePath.EndsWith('test-certificate.cer')) {
         throw 'Unexpected test certificate import'
     }
     $global:HydraTestImports++
@@ -38,7 +38,7 @@ function Import-Certificate {
 }
 function Remove-Item {
     param([string]$LiteralPath, [string]$Path, [switch]$Force, [switch]$Recurse)
-    if ($LiteralPath -like 'Cert:\CurrentUser\Root\*') {
+    if ($LiteralPath -like 'Cert:\LocalMachine\Root\*') {
         $global:HydraTestRootExists = $false
         $global:HydraTestRemovals++
         return

@@ -19,8 +19,9 @@ $outputs = @(Get-ChildItem $signed -Recurse -File)
 if ($inputs.Count -eq 0 -or $inputs.Count -ne $outputs.Count) {
     throw 'Signed output does not contain exactly the input files'
 }
+Write-Output "Checking $($inputs.Count) signed files with policy $SigningPolicy"
 $addedRoot = $false
-$rootPath = "Cert:\CurrentUser\Root\$expectedThumbprint"
+$rootPath = "Cert:\LocalMachine\Root\$expectedThumbprint"
 try {
     if ($SigningPolicy -eq 'test-signing') {
         if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
@@ -32,16 +33,19 @@ try {
             throw 'Pinned test certificate does not match the requested signing certificate'
         }
         if (-not (Test-Path -LiteralPath $rootPath)) {
+            Write-Output "Importing pinned test certificate into the disposable runner machine store"
             $addedRoot = $true
-            Import-Certificate -FilePath $certificateFile -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
+            Import-Certificate -FilePath $certificateFile -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
         }
     }
+    Write-Output "Certificate trust preparation complete"
     foreach ($inputFile in $inputs) {
         $relative = [IO.Path]::GetRelativePath($unsigned, $inputFile.FullName)
         $outputFile = Join-Path $signed $relative
         if (-not (Test-Path -LiteralPath $outputFile -PathType Leaf)) {
             throw "Missing signed output: $relative"
         }
+        Write-Output "Verifying $relative"
         $signature = Get-AuthenticodeSignature -LiteralPath $outputFile
         if ($signature.Status -ne 'Valid' -or
             $signature.SignerCertificate.Thumbprint -ne $expectedThumbprint -or
@@ -52,6 +56,7 @@ try {
     }
 } finally {
     if ($addedRoot -and (Test-Path -LiteralPath $rootPath)) {
+        Write-Output "Removing temporary test certificate trust"
         Remove-Item -LiteralPath $rootPath -Force
     }
 }

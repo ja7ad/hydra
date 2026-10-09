@@ -48,8 +48,5 @@ runs:
         CERTIFICATE_THUMBPRINT: ${{ inputs.certificate-thumbprint }}
         SIGNING_POLICY: ${{ inputs.signing-policy }}
       run: |
-        & "$env:GITHUB_WORKSPACE/scripts/signing/verify-authenticode.ps1" `
-          -UnsignedDirectory $env:UNSIGNED_DIRECTORY `
-          -SignedDirectory $env:SIGNED_DIRECTORY `
-          -CertificateThumbprint $env:CERTIFICATE_THUMBPRINT `
-          -SigningPolicy $env:SIGNING_POLICY
+        python "$env:GITHUB_WORKSPACE/scripts/signing/run-verification.py"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

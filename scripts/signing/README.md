@@ -23,11 +23,14 @@ it. These are new builds of v1.1.0, not byte-for-byte copies of the old EXEs.
 The public `test-certificate.cer` is downloaded from SignPath, has no private key,
 and has SHA-1 thumbprint `4924FFE138E36949CA3EDDF03252903CDB65B2AE`. This is pinned
 in the test workflow; no production thumbprint variable is needed for onboarding.
-Verification adds this certificate to Current User's Trusted Root store only on
+Verification adds this certificate to Local Machine's Trusted Root store only on
 GitHub-hosted runners and removes it in a `finally` block. It still requires a
 valid Authenticode signature, the exact certificate, a timestamp, and the complete
 output file set. It never accepts a hash mismatch or simply ignores untrusted
-signatures, and never installs test trust on a developer machine.
+signatures, and never installs test trust on a developer machine. Machine-store
+import avoids an interactive current-user trust prompt on unattended Windows
+runners. Verification logs each file before checking it and has a five-minute
+CI timeout.
 
 Manual test runs do not require an enable flag. To automatically test after
 relevant pushes to `main`, set repository variable
