@@ -1,0 +1,55 @@
+name: Sign and verify Windows files
+description: Submit loose Windows files to SignPath and verify the returned publisher and timestamp.
+inputs:
+  artifact-name:
+    description: Unique name for the unsigned GitHub artifact.
+    required: true
+  unsigned-directory:
+    description: Directory containing files to sign.
+    required: true
+  signed-directory:
+    description: Directory for verified signed outputs.
+    required: true
+  api-token:
+    description: SignPath CI submitter token.
+    required: true
+  certificate-thumbprint:
+    description: Expected signing certificate SHA-1 thumbprint.
+    required: true
+  signing-policy:
+    description: Explicit SignPath signing policy; test-signing is for onboarding only.
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.unsigned-directory }}/*
+        if-no-files-found: error
+    - name: Submit signing request
+      uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+      with:
+        api-token: ${{ inputs.api-token }}
+        organization-id: e8665a13-7b53-4cc4-9819-7832845ae7f5
+        project-slug: hydra
+        signing-policy-slug: ${{ inputs.signing-policy }}
+        artifact-configuration-slug: hydra-files
+        github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+        output-artifact-directory: ${{ inputs.signed-directory }}
+        wait-for-completion: true
+        wait-for-completion-timeout-in-seconds: 7200
+    - name: Verify publisher, timestamp and complete output
+      shell: pwsh
+      env:
+        UNSIGNED_DIRECTORY: ${{ inputs.unsigned-directory }}
+        SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+        CERTIFICATE_THUMBPRINT: ${{ inputs.certificate-thumbprint }}
+        SIGNING_POLICY: ${{ inputs.signing-policy }}
+      run: |
+        & "$env:GITHUB_WORKSPACE/scripts/signing/verify-authenticode.ps1" `
+          -UnsignedDirectory $env:UNSIGNED_DIRECTORY `
+          -SignedDirectory $env:SIGNED_DIRECTORY `
+          -CertificateThumbprint $env:CERTIFICATE_THUMBPRINT `
+          -SigningPolicy $env:SIGNING_POLICY
