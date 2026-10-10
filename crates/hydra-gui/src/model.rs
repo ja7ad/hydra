@@ -1099,6 +1099,7 @@ pub struct Settings {
     /// goes; the downloaded file stays where it was saved.
     pub remove_completed: bool,
     pub user_agent: String,
+    pub ffmpeg_path: String,
     pub virus_scanner: String,
     pub virus_args: String,
     // Connection tab
@@ -1230,6 +1231,7 @@ impl Default for Settings {
             remove_completed: false,
             user_agent: DEFAULT_USER_AGENT.into(),
             cookies_from_browser: String::new(),
+            ffmpeg_path: String::new(),
             virus_scanner: String::new(),
             virus_args: String::new(),
             // Default: 8 connections; the scheduler settles well at this
@@ -1348,6 +1350,7 @@ impl Settings {
             show_complete_dialog,
             remove_completed,
             user_agent,
+            ffmpeg_path,
             virus_scanner,
             virus_args,
             cookies_from_browser,
@@ -2140,6 +2143,18 @@ pub fn save_quota(q: &DlQuota) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ffmpeg_path_survives_config_roundtrip_and_draft_merge() {
+        let mut settings: Settings = toml::from_str("").unwrap();
+        assert!(settings.ffmpeg_path.is_empty());
+        let base = settings.clone();
+        let mut draft = base.clone();
+        draft.ffmpeg_path = "F:/Downloads/yt-dlp/ffmpeg.exe".into();
+        settings.apply_options_draft(&base, &draft);
+        let loaded: Settings = toml::from_str(&toml::to_string(&settings).unwrap()).unwrap();
+        assert_eq!(loaded.ffmpeg_path, draft.ffmpeg_path);
+    }
+
     #[test]
     fn a_stream_is_named_for_the_container_however_it_was_spelled() {
         for (container, ext) in [("TS", "ts"), ("ts", "ts"), ("MP4", "mp4"), ("", "mp4")] {

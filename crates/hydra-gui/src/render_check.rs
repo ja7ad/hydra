@@ -530,6 +530,29 @@ fn profile_main_window() {
 }
 
 #[test]
+fn ffmpeg_path_and_badge_repaint_after_browse_and_reset() {
+    use crate::app::{Message, OptField, OptTab};
+
+    let mut app = app_with(0);
+    app.options.tab = OptTab::MediaTools;
+    let mut h = Harness::new(app, WinKind::Options, Size::new(900.0, 660.0), 1.0, true);
+    let executable = std::env::current_exe().unwrap().display().to_string();
+    for (label, field) in [
+        ("ffmpeg-selected", OptField::FfmpegPicked(Some(executable))),
+        (
+            "ffmpeg-missing",
+            OptField::FfmpegPicked(Some("F:/Portable/Tools/ffmpeg.exe".into())),
+        ),
+        ("ffmpeg-reset", OptField::FfmpegPath(String::new())),
+    ] {
+        let _ = h.app.update(Message::OptDraft(field));
+        h.step(label, &[]);
+        dump(label, &h.shown, &h.shown, physical(h.logical, h.scale));
+    }
+    h.assert_clean("FFmpeg path and badge");
+}
+
+#[test]
 fn plugin_list_settings_and_info_render() {
     use crate::app::OptTab;
     use crate::plugins::Detail;

@@ -290,6 +290,9 @@ fn starts_in_tray(minimized: bool, login_launch: bool, preference: bool) -> bool
 
 fn boot_with_launch(login_launch: bool) -> (App, Task<Message>) {
     let cfg = model::load_config();
+    hya_stream::hls::set_ffmpeg_path(
+        (!cfg.settings.ffmpeg_path.is_empty()).then(|| cfg.settings.ffmpeg_path.clone().into()),
+    );
     let minimized = starts_in_tray(
         std::env::args().any(|a| a == "--minimized"),
         login_launch,

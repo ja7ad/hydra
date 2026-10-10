@@ -630,6 +630,12 @@ impl OptionsState {
             | OptField::DlLimitMb(_)
             | OptField::DlLimitHours(_)
             | OptField::SpeedLimitKb(_) => unreachable!(),
+            OptField::FfmpegPath(path) | OptField::FfmpegPicked(Some(path)) => {
+                self.ffmpeg_path_valid =
+                    hya_stream::hls::valid_ffmpeg_path(std::path::Path::new(&path));
+                s.ffmpeg_path = path;
+            }
+            OptField::FfmpegPicked(None) | OptField::BrowseFfmpeg => {}
             OptField::BrowseVirus | OptField::BrowseCatDir | OptField::SoundBrowse(_) => {}
             OptField::RememberLast(b) => s.remember_last_dir = b,
             OptField::ServerDate(b) => s.server_file_date = b,
@@ -1475,22 +1481,26 @@ impl FfmpegRow {
 /// sentence. Glued on, a Windows path wraps as one unbreakable word, runs
 /// out past the panel and straight under the button — and it buried the part
 /// that matters (which ffmpeg is this?) inside a paragraph.
-fn ffmpeg_row<'a>(found: Option<std::path::PathBuf>) -> El<'a> {
-    let st = FfmpegRow::of(found.as_deref());
+fn ffmpeg_row<'a>(st: FfmpegRow) -> El<'a> {
     let colour = if st.found {
         hex(theme::PROGRESS_GREEN)
     } else {
         hex(OFFLINE_RED)
     };
-    let action = match st.guide {
-        Some(url) => dlg_btn_auto_primary(st.action, Some(Message::OptExtStore(url))),
-        None => dlg_btn_auto(
-            st.action,
+    let actions = column![
+        dlg_btn(tr("Browse"), Some(o(OptField::BrowseFfmpeg))),
+        dlg_btn(
+            tr("Reset Path"),
+            Some(o(OptField::FfmpegPath(String::new())))
+        ),
+        dlg_btn(
+            tr("Copy path"),
             st.path
                 .as_ref()
-                .map(|(_, full)| Message::OptCopy(full.clone())),
+                .map(|(_, full)| Message::OptCopy(full.clone()))
         ),
-    };
+    ]
+    .spacing(6);
     let mut info = column![
         row![
             text("FFmpeg").size(theme::FONT_SIZE + 1.0),
@@ -1522,13 +1532,19 @@ fn ffmpeg_row<'a>(found: Option<std::path::PathBuf>) -> El<'a> {
             tooltip::Position::Top,
         ));
     }
+    if let Some(url) = st.guide {
+        info = info.push(dlg_btn_auto_primary(
+            st.action,
+            Some(Message::OptExtStore(url)),
+        ));
+    }
     container(
         row![
             iced::widget::svg(crate::icons::folder_video())
                 .width(30.0)
                 .height(30.0),
             info,
-            action,
+            actions,
         ]
         .spacing(12)
         .align_y(iced::Alignment::Center),
@@ -1644,13 +1660,36 @@ fn extensions(app: &App) -> El<'_> {
     col.into()
 }
 
+fn ffmpeg_state(options: &OptionsState) -> FfmpegRow {
+    let selected = &options.draft.ffmpeg_path;
+    let mut state = if selected.is_empty() {
+        FfmpegRow::of(hya_stream::hls::automatic_ffmpeg().as_deref())
+    } else {
+        FfmpegRow::of(
+            options
+                .ffmpeg_path_valid
+                .then(|| std::path::Path::new(selected)),
+        )
+    };
+    if !selected.is_empty() {
+        state.about =
+            tr("MPEG-TS is remuxed to MP4, and DASH video and audio are merged into one file.");
+        state.path = Some((
+            elide_path(std::path::Path::new(selected), 58),
+            selected.clone(),
+        ));
+    }
+    state
+}
+
 /// The external tools a download may need after the bytes arrive.
 ///
 /// Its own page rather than a section under the browser extensions: ffmpeg is
 /// what remuxes MPEG-TS and merges DASH video with its audio, which has
 /// nothing to do with which browser captured the download.
-fn media_tools(_app: &App) -> El<'_> {
-    column![section(tr("Media tools")), ffmpeg_row(hya_stream::ffmpeg()),]
+fn media_tools(app: &App) -> El<'_> {
+    let state = ffmpeg_state(&app.options);
+    column![section(tr("Media tools")), ffmpeg_row(state)]
         .spacing(10)
         .into()
 }
@@ -1866,6 +1905,37 @@ pub fn view(app: &App) -> El<'_> {
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn browsing_updates_the_ffmpeg_subtitle_and_badge_before_saving() {
+        let mut options = OptionsState::default();
+        let executable = std::env::current_exe().unwrap().display().to_string();
+        options.apply(OptField::FfmpegPicked(Some(executable.clone())));
+        let selected = ffmpeg_state(&options);
+        assert!(selected.found);
+        assert_eq!(selected.badge, tr("Installed"));
+        assert_eq!(selected.path.unwrap().1, executable);
+        options.apply(OptField::FfmpegPicked(Some(
+            "/missing-hydra-ffmpeg/executable".into(),
+        )));
+        let missing = ffmpeg_state(&options);
+        assert!(!missing.found);
+        assert_eq!(missing.badge, tr("Not found"));
+        assert_eq!(missing.path.unwrap().1, "/missing-hydra-ffmpeg/executable");
+        options.apply(OptField::FfmpegPath(String::new()));
+        let reset = ffmpeg_state(&options);
+        assert_eq!(reset.found, hya_stream::hls::automatic_ffmpeg().is_some());
+    }
+
+    #[test]
+    fn ffmpeg_picker_cancel_preserves_path_and_reset_clears_it() {
+        let mut state = crate::app::OptionsState::default();
+        state.apply(OptField::FfmpegPicked(Some("F:/Tools/ffmpeg.exe".into())));
+        state.apply(OptField::FfmpegPicked(None));
+        assert_eq!(state.draft.ffmpeg_path, "F:/Tools/ffmpeg.exe");
+        state.apply(OptField::FfmpegPath(String::new()));
+        assert!(state.draft.ffmpeg_path.is_empty());
+    }
 
     #[test]
     fn startup_checkbox_only_toggles_for_the_default_profile() {
@@ -2168,8 +2238,8 @@ mod tests {
     /// with it.
     #[test]
     fn both_states_of_the_row_lay_out() {
-        let _found: El<'_> = ffmpeg_row(Some("/usr/local/bin/ffmpeg".into()));
-        let _missing: El<'_> = ffmpeg_row(None);
+        let _found: El<'_> = ffmpeg_row(FfmpegRow::of(Some(Path::new("/usr/local/bin/ffmpeg"))));
+        let _missing: El<'_> = ffmpeg_row(FfmpegRow::of(None));
     }
 
     /// Every page builds, on the group it belongs to.

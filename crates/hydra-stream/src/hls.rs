@@ -2055,6 +2055,20 @@ fn finish_by(
     }
 }
 
+static FFMPEG_PATH: std::sync::RwLock<Option<std::path::PathBuf>> = std::sync::RwLock::new(None);
+
+/// Set an explicit executable path, or restore automatic discovery with `None`.
+pub fn set_ffmpeg_path(path: Option<std::path::PathBuf>) {
+    if let Ok(mut selected) = FFMPEG_PATH.write() {
+        *selected = path;
+    }
+}
+
+/// Whether a selected FFmpeg path points to an executable file.
+pub fn valid_ffmpeg_path(path: &std::path::Path) -> bool {
+    executable(path)
+}
+
 /// A usable ffmpeg, or `None`.
 ///
 /// Searching `PATH` alone is not enough on a desktop app. A macOS bundle
@@ -2065,27 +2079,46 @@ fn finish_by(
 /// scoop and chocolatey all put their shim directory on `PATH` at install
 /// time, and a session started before that install does not have it. The
 /// well-known locations are therefore checked too, and `HYDRA_FFMPEG`
-/// overrides everything for an install somewhere else.
+/// overrides automatic discovery for an install somewhere else. A selected
+/// application path takes precedence over automatic discovery.
 ///
 /// The answer is cached briefly rather than permanently: a UI that shows
 /// "installed / not installed" would otherwise stat the filesystem on every
 /// frame, or freeze the answer and never notice the user installing it.
 pub fn ffmpeg() -> Option<std::path::PathBuf> {
+    let selected = FFMPEG_PATH.read().ok().and_then(|path| path.clone());
+    cached_ffmpeg(selected)
+}
+
+/// Find FFmpeg using the environment and standard locations, ignoring the selected path.
+pub fn automatic_ffmpeg() -> Option<std::path::PathBuf> {
+    cached_ffmpeg(None)
+}
+
+fn cached_ffmpeg(selected: Option<std::path::PathBuf>) -> Option<std::path::PathBuf> {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
-    static CACHE: Mutex<Option<(Instant, Option<std::path::PathBuf>)>> = Mutex::new(None);
+    type CachedPath = (
+        Instant,
+        Option<std::path::PathBuf>,
+        Option<std::path::PathBuf>,
+    );
+    static CACHE: Mutex<Option<CachedPath>> = Mutex::new(None);
     const TTL: Duration = Duration::from_secs(5);
 
     if let Ok(g) = CACHE.lock() {
-        if let Some((at, found)) = g.as_ref() {
-            if at.elapsed() < TTL {
+        if let Some((at, source, found)) = g.as_ref() {
+            if source == &selected && at.elapsed() < TTL {
                 return found.clone();
             }
         }
     }
-    let found = find_ffmpeg();
+    let found = match selected.as_ref() {
+        Some(path) => executable(path).then(|| path.clone()),
+        None => find_ffmpeg(),
+    };
     if let Ok(mut g) = CACHE.lock() {
-        *g = Some((Instant::now(), found.clone()));
+        *g = Some((Instant::now(), selected, found.clone()));
     }
     found
 }
