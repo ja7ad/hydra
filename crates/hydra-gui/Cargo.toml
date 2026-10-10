@@ -131,6 +131,11 @@ embed-resource = "3"
 # "Hide Dock icon": NSApplication activation policy (Regular <-> Accessory).
 # Same objc2 generation the tray/menu stack (tray-icon 0.24) already links.
 objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std", "block2", "NSNotification", "NSOperation", "NSString",
+    "NSAppleEventManager", "NSAppleEventDescriptor", "objc2-core-services",
+] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "NSApplication",
