@@ -260,6 +260,9 @@ fn main() -> iced::Result {
 
 fn boot() -> (App, Task<Message>) {
     let cfg = model::load_config();
+    hya_stream::hls::set_ffmpeg_path(
+        (!cfg.settings.ffmpeg_path.is_empty()).then(|| cfg.settings.ffmpeg_path.clone().into()),
+    );
     if let Some(lang) = &cfg.language {
         i18n::set_locale(lang);
     }

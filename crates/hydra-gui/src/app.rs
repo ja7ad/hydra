@@ -619,6 +619,7 @@ pub enum OptTab {
 
 #[derive(Debug)]
 pub struct OptionsState {
+    pub ffmpeg_path_valid: bool,
     pub plugins: crate::plugins::Page,
     pub tab: OptTab,
     pub draft: crate::model::Settings,
@@ -688,6 +689,7 @@ pub struct OptionsState {
 impl Default for OptionsState {
     fn default() -> Self {
         OptionsState {
+            ffmpeg_path_valid: false,
             plugins: crate::plugins::Page::default(),
             tab: OptTab::General,
             draft: crate::model::Settings::default(),
@@ -1556,6 +1558,9 @@ pub enum OptField {
     UserAgent(String),
     VirusScanner(String),
     VirusArgs(String),
+    FfmpegPath(String),
+    BrowseFfmpeg,
+    FfmpegPicked(Option<String>),
     BrowseVirus,
     VirusPicked(Option<String>),
     DefaultConns(usize),
@@ -2455,6 +2460,9 @@ impl App {
     /// whichever page was last visited.
     fn open_options(&mut self, tab: Option<OptTab>) -> Task<Message> {
         self.options.draft = self.cfg.settings.clone();
+        self.options.ffmpeg_path_valid = hya_stream::hls::valid_ffmpeg_path(std::path::Path::new(
+            &self.options.draft.ffmpeg_path,
+        ));
         self.options.base = self.cfg.settings.clone();
         self.options.error = None;
         self.options.draft_cats = self.cfg.categories.clone();
@@ -2509,6 +2517,10 @@ impl App {
     /// transfers, the menus, the proxy, the OS integrations and the open
     /// progress boxes. `before` is the settings as they were.
     fn settings_changed(&mut self, before: &Settings) -> Task<Message> {
+        hya_stream::hls::set_ffmpeg_path(
+            (!self.cfg.settings.ffmpeg_path.is_empty())
+                .then(|| self.cfg.settings.ffmpeg_path.clone().into()),
+        );
         let details = self.cfg.settings.show_conn_details;
         let details_changed = details != before.show_conn_details;
         let capture_changed = self.cfg.settings.portable_capture != before.portable_capture;
@@ -3089,6 +3101,16 @@ impl App {
     fn options_problem(&self) -> Option<(OptTab, String)> {
         let st = &self.options;
         let s = &st.draft;
+        if !s.ffmpeg_path.is_empty()
+            && !hya_stream::hls::valid_ffmpeg_path(std::path::Path::new(&s.ffmpeg_path))
+        {
+            return Some((
+                OptTab::MediaTools,
+                i18n::tr(
+                    "Select an executable FFmpeg file, or clear the path for automatic discovery.",
+                ),
+            ));
+        }
         if s.dl_limit_enabled {
             let mb = st.dl_limit_mb_txt.trim().parse::<u64>().unwrap_or(0);
             let hours = st.dl_limit_hours_txt.trim().parse::<u64>().unwrap_or(0);
@@ -8340,6 +8362,8 @@ impl App {
 
     fn on_opt_field(&mut self, f: OptField) -> Task<Message> {
         match f {
+            OptField::BrowseFfmpeg => picker::file(self.win_of(WinKind::Options), Ask::default())
+                .map(|p| Message::OptDraft(OptField::FfmpegPicked(p.map(picker::into_string)))),
             OptField::BrowseVirus => picker::file(self.win_of(WinKind::Options), Ask::default())
                 .map(|p| Message::OptDraft(OptField::VirusPicked(p.map(picker::into_string)))),
             OptField::BrowseCatDir => picker::folder(self.win_of(WinKind::Options), Ask::default())
@@ -12388,6 +12412,19 @@ mod tests {
 
     /// A draft the transfers could not act on is refused on the page that
     /// holds the problem, and the settings in force are not touched.
+    #[test]
+    fn missing_ffmpeg_path_keeps_options_open_without_changing_settings() {
+        let mut app = App::default();
+        let win = window::Id::unique();
+        app.windows.insert(win, WinKind::Options);
+        app.options.draft.ffmpeg_path = "/missing-hydra-ffmpeg/executable".into();
+        let _ = app.update(Message::OptOk);
+        assert_eq!(app.options.tab, OptTab::MediaTools);
+        assert!(app.options.error.is_some());
+        assert!(app.cfg.settings.ffmpeg_path.is_empty());
+        assert!(app.win_of(WinKind::Options).is_some());
+    }
+
     #[test]
     fn options_ok_is_refused_on_the_page_that_holds_the_problem() {
         let mut app = App::default();
