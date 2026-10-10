@@ -4,8 +4,8 @@
 //! "Launch Hydra on startup": registers/unregisters the app as a login item.
 //!
 //! macOS 13+: `SMAppService.mainApp`, listed under System Settings > General >
-//! Login Items > Open at Login. It takes no arguments, so a login launch there
-//! opens the window whatever `minimized` says. macOS 11–12: a LaunchAgent
+//! Login Items > Open at Login. The launch Apple event identifies login
+//! launches, which honor the saved tray preference. macOS 11–12: a LaunchAgent
 //! plist, which can carry `--minimized`. Linux: an XDG autostart entry.
 //! Windows: a value under
 //! `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — which launches
