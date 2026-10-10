@@ -28,6 +28,8 @@ mod macos_dock;
 #[cfg(target_os = "macos")]
 mod macos_files;
 #[cfg(target_os = "macos")]
+mod macos_launch;
+#[cfg(target_os = "macos")]
 mod macos_menu;
 #[cfg(target_os = "macos")]
 mod macos_surface;
@@ -215,22 +217,24 @@ fn main() -> iced::Result {
 
     // Single instance: two would fight over state.redb, the tray and
     // ipc.json, so a running one gets the spotlight and this one leaves.
+    #[cfg(not(target_os = "macos"))]
     let minimized = std::env::args().any(|a| a == "--minimized");
-    let plugin_file = match plugin_file_arg(std::env::args_os()) {
+    let _plugin_file = match plugin_file_arg(std::env::args_os()) {
         Ok(path) => path,
         Err(error) => {
             eprintln!("hydra-gui: {error}");
             std::process::exit(2);
         }
     };
-    let plugin_link = match plugin_link_arg(std::env::args_os()) {
+    let _plugin_link = match plugin_link_arg(std::env::args_os()) {
         Ok(link) => link,
         Err(error) => {
             eprintln!("hydra-gui: {error}");
             std::process::exit(2);
         }
     };
-    if extbus::signal_existing(minimized, plugin_file.as_deref(), plugin_link.as_deref()) {
+    #[cfg(not(target_os = "macos"))]
+    if extbus::signal_existing(minimized, _plugin_file.as_deref(), _plugin_link.as_deref()) {
         return Ok(());
     }
 
@@ -259,7 +263,47 @@ fn main() -> iced::Result {
 }
 
 fn boot() -> (App, Task<Message>) {
+    #[cfg(target_os = "macos")]
+    {
+        macos_files::install();
+        macos_dock::install();
+        let launched = macos_launch::observe();
+        (
+            App {
+                cfg: model::load_config(),
+                startup_pending: true,
+                ..App::default()
+            },
+            Task::perform(
+                async move { launched.await.unwrap_or(false) },
+                Message::MacosLaunched,
+            ),
+        )
+    }
+    #[cfg(not(target_os = "macos"))]
+    boot_with_launch(false)
+}
+
+fn starts_in_tray(minimized: bool, login_launch: bool, preference: bool) -> bool {
+    minimized || (login_launch && preference)
+}
+
+fn boot_with_launch(login_launch: bool) -> (App, Task<Message>) {
     let cfg = model::load_config();
+    let minimized = starts_in_tray(
+        std::env::args().any(|a| a == "--minimized"),
+        login_launch,
+        cfg.settings.start_in_tray,
+    );
+    #[cfg(target_os = "macos")]
+    {
+        macos_launch::remove_observer();
+        let plugin_file = plugin_file_arg(std::env::args_os()).ok().flatten();
+        let plugin_link = plugin_link_arg(std::env::args_os()).ok().flatten();
+        if extbus::signal_existing(minimized, plugin_file.as_deref(), plugin_link.as_deref()) {
+            return (App::default(), iced::exit());
+        }
+    }
     if let Some(lang) = &cfg.language {
         i18n::set_locale(lang);
     }
@@ -280,10 +324,6 @@ fn boot() -> (App, Task<Message>) {
     // the native-messaging host on a loopback socket (port in ipc.json).
     extbus::publish_config(&cfg);
     extbus::start();
-    #[cfg(target_os = "macos")]
-    macos_files::install();
-    #[cfg(target_os = "macos")]
-    macos_dock::install();
     // Register the native-messaging host with every installed browser, so a
     // fresh install works without anyone running the shell script.
     nmhost::ensure_registered(cfg.settings.portable_capture);
@@ -322,10 +362,9 @@ fn boot() -> (App, Task<Message>) {
     // keeps the outgoing exe locked through teardown) get swept now.
     update::sweep_leftovers();
 
-    // Autostart hands us --minimized: live in the tray, no window. Whether
-    // the tray really materialises is only knowable on Linux after the D-Bus
+    // Tray availability on Linux is only known after the D-Bus
     // registration below, so this is the intent, not yet the outcome.
-    let mut start_hidden = std::env::args().any(|a| a == "--minimized")
+    let mut start_hidden = minimized
         && cfg!(any(
             target_os = "macos",
             target_os = "windows",
@@ -464,6 +503,10 @@ fn style_of(_app: &App, t: &Theme) -> iced::theme::Style {
 }
 
 fn subscription(app: &App) -> Subscription<Message> {
+    #[cfg(target_os = "macos")]
+    if app.startup_pending {
+        return Subscription::none();
+    }
     let power_save = app.cfg.settings.power_save;
     let mut subs = vec![
         Subscription::run(engine_events).map(Message::Engine),
@@ -635,6 +678,32 @@ mod tests {
     use super::{config_dir_arg, plugin_file_arg};
     use std::ffi::OsString;
     use std::path::PathBuf;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn startup_waits_for_appkit_before_subscribing_to_engine_events() {
+        let app = super::App {
+            startup_pending: true,
+            ..super::App::default()
+        };
+        assert_eq!(super::subscription(&app).units(), 0);
+    }
+
+    #[test]
+    fn tray_startup_respects_launch_reason_and_preference() {
+        for (explicit, login, preference, hidden) in [
+            (false, true, true, true),
+            (false, true, false, false),
+            (false, false, true, false),
+            (false, false, false, false),
+            (true, false, false, true),
+            (true, true, false, true),
+            (true, false, true, true),
+            (true, true, true, true),
+        ] {
+            assert_eq!(super::starts_in_tray(explicit, login, preference), hidden);
+        }
+    }
 
     fn parse(argv: &[&str]) -> Result<Option<PathBuf>, String> {
         config_dir_arg(argv.iter().map(OsString::from))

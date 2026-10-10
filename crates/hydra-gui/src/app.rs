@@ -1267,6 +1267,8 @@ pub enum Message {
     /// glides each item's displayed progress toward the real fraction.
     AnimTick,
     NativeMenu(String),
+    #[cfg(target_os = "macos")]
+    MacosLaunched(bool),
     /// One second of the "when done" power-action countdown. Subscribed only
     /// while that countdown is on screen, and at a fixed 1 s whatever power
     /// save does to the main tick — the dialog shows the number.
@@ -1630,6 +1632,8 @@ pub enum SchField {
 }
 
 pub struct App {
+    #[cfg(target_os = "macos")]
+    pub startup_pending: bool,
     pub cfg: ConfigFile,
     pub state: StateFile,
     pub windows: HashMap<window::Id, WinKind>,
@@ -1919,6 +1923,8 @@ fn follow_tree_sel(
 impl Default for App {
     fn default() -> Self {
         App {
+            #[cfg(target_os = "macos")]
+            startup_pending: false,
             cfg: ConfigFile::default(),
             state: StateFile::default(),
             windows: HashMap::new(),
@@ -5298,6 +5304,12 @@ impl App {
 
     fn update_inner(&mut self, message: Message) -> Task<Message> {
         match message {
+            #[cfg(target_os = "macos")]
+            Message::MacosLaunched(login_launch) => {
+                let (app, task) = crate::boot_with_launch(login_launch);
+                *self = app;
+                task
+            }
             Message::Noop => Task::none(),
             Message::WindowOpened(id) => {
                 if self.window_is_orphan(id) {
