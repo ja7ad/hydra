@@ -25,7 +25,7 @@ Package: hydra-download-manager
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libgtk-3-0 | libgtk-3-0t64
 Conflicts: hydra
-Recommends: gnome-shell-extension-appindicator
+Suggests: gnome-shell-extension-appindicator
 Description: Multi-connection download manager (GUI, CLI, browser integration)
  Hydra downloads files over many parallel connections with integrity
  verification. This package installs the hydra CLI, the hydra-gui desktop
