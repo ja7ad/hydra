@@ -28,6 +28,7 @@ use muda as backend;
 use sni as backend;
 
 use crate::app::MenuAction;
+use crate::dl_indicator::IconFrame;
 use crate::i18n::tr;
 
 /// Reserved [`crate::menubus`] id: the desktop's theme changed and the tray
@@ -37,6 +38,12 @@ use crate::i18n::tr;
 /// already has to the UI thread, and only the UI thread may touch the icon.
 pub const THEME_CHANGED: &str = "tray_theme_changed";
 
+/// Reserved [`crate::menubus`] id: the tray icon was left-clicked or the Dock
+/// icon clicked. `app.rs` answers with the main window, or — while the icon
+/// is the download arrow — with the progress window of the newest active
+/// download, the way IDM's tray icon does.
+pub const ICON_CLICKED: &str = "icon_clicked";
+
 /// Re-tint the tray glyph for the theme in force now. Must run on the UI
 /// thread. A no-op where the platform recolors the glyph itself (macOS
 /// template images) or watches it already (the Linux backend re-tints from
@@ -44,6 +51,17 @@ pub const THEME_CHANGED: &str = "tray_theme_changed";
 pub fn refresh_icon() {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     backend::refresh_icon();
+}
+
+/// Swap the tray glyph for the download arrow at `frame`, or back to the
+/// logo with [`IconFrame::Idle`]. UI thread only on macOS and Windows.
+/// Before the icon exists the frame is only remembered, and the icon is then
+/// created with it. `animate` runs a sheen down the arrow from a native
+/// timer (no iced message, so no window repaint).
+#[allow(unused_variables)]
+pub fn set_progress(frame: IconFrame, animate: bool) {
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    backend::set_progress(frame, animate);
 }
 
 /// Backend-neutral menu description, built once per rebuild and rendered by

@@ -8,7 +8,8 @@
 #![cfg(any(target_os = "macos", target_os = "windows"))]
 
 use super::Entry;
-use std::cell::RefCell;
+use crate::dl_indicator::IconFrame;
+use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tray_icon::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
@@ -20,10 +21,136 @@ thread_local! {
 /// closing the last window may leave the app running.
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 
+thread_local! {
+    /// The download frame in force and whether it is animated.
+    static FRAME: Cell<(IconFrame, bool)> = const { Cell::new((IconFrame::Idle, false)) };
+    static PHASE: Cell<u8> = const { Cell::new(0) };
+}
+
 /// The shared mono silhouette as a muda icon (see [`crate::icons::logo_mono_rgba`]).
 fn mono_icon(white: bool) -> Option<tray_icon::Icon> {
     let (rgba, w, h) = crate::icons::logo_mono_rgba(white)?;
     tray_icon::Icon::from_rgba(rgba, w, h).ok()
+}
+
+/// The download arrow for the frame in force, `None` while idle. In its own
+/// colours on every platform, so it is never a template or a tinted glyph.
+fn download_icon() -> Option<tray_icon::Icon> {
+    const SIZE: u32 = 64;
+    let (frame, animate) = FRAME.get();
+    if frame == IconFrame::Idle {
+        return None;
+    }
+    let sheen = animate.then(|| PHASE.get());
+    let rgba = crate::icons::download_rgba(frame, sheen, SIZE, false);
+    tray_icon::Icon::from_rgba(rgba, SIZE, SIZE).ok()
+}
+
+/// Put the icon for the current frame and phase on the tray, and keep the
+/// animation timer running exactly while there is an animated arrow on it.
+fn draw() {
+    let installed = CURRENT.with(|c| {
+        let current = c.borrow();
+        let Some(tray) = current.as_ref() else {
+            return false;
+        };
+        #[cfg(target_os = "macos")]
+        {
+            let (icon, template) = match download_icon() {
+                Some(icon) => (Some(icon), false),
+                None => (mono_icon(false), true),
+            };
+            if icon.is_some() {
+                let _ = tray.set_icon_with_as_template(icon, template);
+            }
+        }
+        #[cfg(target_os = "windows")]
+        if let Some(icon) = download_icon().or_else(|| mono_icon(taskbar_wants_white())) {
+            let _ = tray.set_icon(Some(icon));
+        }
+        true
+    });
+    let (frame, animate) = FRAME.get();
+    ticker::run(installed && animate && frame != IconFrame::Idle);
+}
+
+pub fn set_progress(frame: IconFrame, animate: bool) {
+    if FRAME.replace((frame, animate)) != (frame, animate) {
+        draw();
+    }
+}
+
+fn tick() {
+    PHASE.set((PHASE.get() + 1) % crate::dl_indicator::SHEEN_PHASES);
+    draw();
+}
+
+/// The animation clock: a timer on the UI thread's own loop, so a step is a
+/// tray redraw and nothing else.
+#[cfg(target_os = "macos")]
+mod ticker {
+    use objc2::rc::Retained;
+    use objc2_foundation::NSTimer;
+    use std::cell::RefCell;
+    use std::ptr::NonNull;
+
+    thread_local! {
+        static TIMER: RefCell<Option<Retained<NSTimer>>> = const { RefCell::new(None) };
+    }
+
+    pub fn run(on: bool) {
+        TIMER.with_borrow_mut(|timer| match (on, timer.is_some()) {
+            (true, false) => {
+                let step = block2::RcBlock::new(|_: NonNull<NSTimer>| super::tick());
+                let seconds = f64::from(crate::dl_indicator::SHEEN_INTERVAL_MS) / 1000.0;
+                // SAFETY: scheduled on, and only ever fired by, this
+                // thread's run loop; the block captures nothing.
+                *timer = Some(unsafe {
+                    NSTimer::scheduledTimerWithTimeInterval_repeats_block(seconds, true, &step)
+                });
+            }
+            (false, true) => {
+                if let Some(timer) = timer.take() {
+                    timer.invalidate();
+                }
+            }
+            _ => {}
+        });
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod ticker {
+    use std::cell::Cell;
+    use std::ffi::c_void;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{KillTimer, SetTimer};
+
+    thread_local! {
+        static TIMER: Cell<usize> = const { Cell::new(0) };
+    }
+
+    unsafe extern "system" fn fire(_: *mut c_void, _: u32, _: usize, _: u32) {
+        super::tick();
+    }
+
+    pub fn run(on: bool) {
+        let running = TIMER.get();
+        // SAFETY: a thread timer with no window: its callback runs on this
+        // thread's message loop, and the id is the one SetTimer returned.
+        unsafe {
+            if on && running == 0 {
+                TIMER.set(SetTimer(
+                    std::ptr::null_mut(),
+                    0,
+                    crate::dl_indicator::SHEEN_INTERVAL_MS,
+                    Some(fire),
+                ));
+            } else if !on && running != 0 {
+                KillTimer(std::ptr::null_mut(), running);
+                TIMER.set(0);
+            }
+        }
+    }
 }
 
 /// Whether the notification area wants the WHITE glyph.
@@ -57,6 +184,9 @@ const THEME_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Pe
 /// [`super::THEME_CHANGED`] from the watcher below.
 #[cfg(target_os = "windows")]
 pub fn refresh_icon() {
+    if FRAME.get().0 != IconFrame::Idle {
+        return; // The download arrow carries its own colours.
+    }
     let white = taskbar_wants_white();
     CURRENT.with(|c| {
         if let Some(tray) = c.borrow().as_ref() {
@@ -210,7 +340,7 @@ fn install_with_menu(menu: Menu) {
             ..
         } = ev
         {
-            let _ = tx.send("show_main".into());
+            let _ = tx.send(super::ICON_CLICKED.into());
         }
     }));
 
@@ -228,13 +358,15 @@ fn install_with_menu(menu: Menu) {
     // `watch_taskbar_theme` whenever the taskbar's own theme changes.
     #[cfg(target_os = "macos")]
     {
-        if let Some(icon) = mono_icon(false) {
+        if let Some(icon) = download_icon() {
+            builder = builder.with_icon(icon);
+        } else if let Some(icon) = mono_icon(false) {
             builder = builder.with_icon(icon).with_icon_as_template(true);
         }
     }
     #[cfg(target_os = "windows")]
     {
-        if let Some(icon) = mono_icon(taskbar_wants_white()) {
+        if let Some(icon) = download_icon().or_else(|| mono_icon(taskbar_wants_white())) {
             builder = builder.with_icon(icon);
         }
     }
@@ -242,6 +374,8 @@ fn install_with_menu(menu: Menu) {
         Ok(tray) => {
             CURRENT.with(|c| *c.borrow_mut() = Some(tray));
             INSTALLED.store(true, Ordering::Relaxed);
+            // Downloads that were running before the icon existed.
+            draw();
             // Only once there IS an icon to re-tint.
             #[cfg(target_os = "windows")]
             watch_taskbar_theme();

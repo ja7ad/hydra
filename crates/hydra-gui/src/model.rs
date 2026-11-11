@@ -1304,6 +1304,9 @@ pub struct Settings {
     pub show_speed_tab: bool,
     /// Fill each Status cell up to the download's percentage.
     pub show_progress_bar: bool,
+    /// Swap the tray, Dock and taskbar icons for a download arrow showing
+    /// the active downloads' combined progress.
+    pub show_progress_icon: bool,
     pub show_completion_tab: bool,
     pub show_hide_buttons: bool,
     /// Whether a progress window opens with the per-connection panel already
@@ -1458,6 +1461,7 @@ impl Default for Settings {
             start_minimized: false,
             show_speed_tab: true,
             show_progress_bar: true,
+            show_progress_icon: true,
             show_completion_tab: true,
             show_hide_buttons: true,
             show_conn_details: true,
@@ -1584,6 +1588,7 @@ impl Settings {
             start_minimized,
             show_speed_tab,
             show_progress_bar,
+            show_progress_icon,
             show_completion_tab,
             show_hide_buttons,
             show_conn_details,

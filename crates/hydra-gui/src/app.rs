@@ -1599,6 +1599,7 @@ pub enum OptField {
     StartMinimized(bool),
     SpeedTab(bool),
     ProgressBar(bool),
+    ProgressIcon(bool),
     CompletionTab(bool),
     HideButtons(bool),
     ConnDetails(bool),
@@ -1690,6 +1691,10 @@ pub struct App {
     pub state: StateFile,
     pub windows: HashMap<window::Id, WinKind>,
     pub main_id: Option<window::Id>,
+    /// What the tray, Dock and taskbar icons show; `None` until first drawn.
+    pub indicator: Option<crate::dl_indicator::Indicator>,
+    /// Whether the tray arrow was last drawn animated (off in power save).
+    pub icon_animated: bool,
     /// Multi-selection: click selects, Cmd/Ctrl-click toggles, Shift-click
     /// extends from the anchor. First entry is the primary item.
     pub selected: Vec<DlId>,
@@ -1982,6 +1987,8 @@ impl Default for App {
             state: StateFile::default(),
             windows: HashMap::new(),
             main_id: None,
+            indicator: None,
+            icon_animated: false,
             selected: vec![],
             sel_anchor: None,
             mods: iced::keyboard::Modifiers::default(),
@@ -2732,7 +2739,85 @@ impl App {
         } else {
             Task::none()
         };
-        Task::batch([skip_taskbar, details_task])
+        Task::batch([skip_taskbar, details_task, self.sync_indicator()])
+    }
+
+    /// Bring the tray, Dock and taskbar icons up to date with the active
+    /// downloads. The native surfaces are only touched when the whole
+    /// percent they display has moved.
+    fn sync_indicator(&mut self) -> Task<Message> {
+        let next = crate::dl_indicator::aggregate(
+            self.cfg.settings.show_progress_icon,
+            self.state
+                .downloads
+                .iter()
+                .filter(|d| d.state.is_active())
+                .map(|d| (d.downloaded, d.size)),
+        );
+        // Power save keeps the arrow still; a change of that redraws it.
+        let animate = !self.cfg.settings.power_save;
+        let prev = self.indicator.filter(|_| self.icon_animated == animate);
+        if prev == Some(next) {
+            return Task::none();
+        }
+        (self.indicator, self.icon_animated) = (Some(next), animate);
+        crate::dl_indicator::show(prev, next, animate);
+        match self.main_id {
+            Some(id) => self.window_progress_task(id, prev),
+            None => Task::none(),
+        }
+    }
+
+    /// A click on the tray or Dock icon. While it is the download arrow the
+    /// click restores the progress window of the newest active download;
+    /// otherwise it brings the main window back.
+    fn reveal_from_icon(&mut self) -> Task<Message> {
+        let showing = self
+            .indicator
+            .is_some_and(|shown| shown != crate::dl_indicator::Indicator::Idle);
+        let newest = self
+            .state
+            .downloads
+            .iter()
+            .rev()
+            .find(|d| showing && d.state.is_active())
+            .map(|d| d.id);
+        let Some(dl) = newest else {
+            return self.open_window(WinKind::Main);
+        };
+        self.sync_prog_state(dl);
+        match self.win_of(WinKind::Progress(dl)) {
+            Some(win) => Task::batch([window::minimize(win, false), window::gain_focus(win)]),
+            None => self.open_window(WinKind::Progress(dl)),
+        }
+    }
+
+    /// Bring `id`'s taskbar button up to date when it is the main window:
+    /// its icon (Windows, Linux) and its progress fill (Windows). `prev` is
+    /// what the button shows now. macOS has no per-window icon; the Dock
+    /// icon is the app's.
+    #[allow(unused_variables)]
+    fn window_progress_task(
+        &self,
+        id: window::Id,
+        prev: Option<crate::dl_indicator::Indicator>,
+    ) -> Task<Message> {
+        #[cfg(not(target_os = "macos"))]
+        if let (true, Some(shown)) = (self.main_id == Some(id), self.indicator) {
+            use crate::dl_indicator::Indicator;
+            let frame = shown.icon_frame();
+            let icon = (prev.map(Indicator::icon_frame) != Some(frame))
+                .then(|| crate::icons::window_icon_for(frame))
+                .flatten()
+                .map_or_else(Task::none, |icon| window::set_icon(id, icon));
+            #[cfg(target_os = "windows")]
+            let icon = Task::batch([
+                icon,
+                window::run(id, move |w| crate::windows_taskbar::apply(w, shown)).discard(),
+            ]);
+            return icon;
+        }
+        Task::none()
     }
 
     fn export_settings(&mut self, path: &std::path::Path) -> Task<Message> {
@@ -5552,7 +5637,11 @@ impl App {
                 // "Hide from taskbar" is a per-window creation flag on
                 // Windows; on X11 it is a hint the window manager only takes
                 // once the window exists, so it is applied here instead.
-                let skip_taskbar = self.skip_taskbar_task(id);
+                let skip_taskbar = Task::batch([
+                    self.skip_taskbar_task(id),
+                    // A new window opens with the logo and no progress.
+                    self.window_progress_task(id, Some(crate::dl_indicator::Indicator::Idle)),
+                ]);
                 let parent = self.attach_to_main(id);
                 // Browser-capture dialogs float above everything: at that
                 // moment this app is in the background and a normal-level
@@ -5720,7 +5809,7 @@ impl App {
                 self.sweep_pending_deletes();
                 self.schedule_tick();
                 let quota = self.quota_tick();
-                let queue = Task::batch([quota, self.queue_tick()]);
+                let queue = Task::batch([quota, self.queue_tick(), self.sync_indicator()]);
                 self.flush_saves();
                 if self.cfg.settings.monitor_clipboard {
                     Task::batch([queue, iced::clipboard::read().map(Message::ClipboardSeen)])
@@ -5810,6 +5899,9 @@ impl App {
             Message::NativeMenu(id) => {
                 if id == "show_main" {
                     return self.open_window(WinKind::Main);
+                }
+                if id == crate::tray::ICON_CLICKED {
+                    return self.reveal_from_icon();
                 }
                 if id == crate::tray::THEME_CHANGED {
                     crate::tray::refresh_icon();
@@ -11072,6 +11164,76 @@ mod tests {
         assert_eq!(d.file_name, "renamed-pending.zip");
         assert!(d.name_locked);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_progress_icon_follows_active_downloads_and_its_setting() {
+        use crate::dl_indicator::Indicator;
+        let mut app = App::default();
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Idle));
+
+        let mut running = item(1, "/tmp", "a.bin", None, DlState::Receiving);
+        (running.downloaded, running.size) = (25, Some(100));
+        let mut paused = item(2, "/tmp", "b.bin", None, DlState::Paused);
+        (paused.downloaded, paused.size) = (900, Some(1000));
+        app.state.downloads = vec![running, paused];
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Percent(25)));
+
+        app.state.downloads[0].size = None;
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Indeterminate));
+
+        app.cfg.settings.show_progress_icon = false;
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Idle), "switched off");
+
+        app.cfg.settings.show_progress_icon = true;
+        app.state.downloads[0].state = DlState::Paused;
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Idle), "cleared on pause");
+        let _ = app.window_progress_task(window::Id::unique(), None);
+    }
+
+    #[test]
+    fn an_icon_click_restores_the_newest_active_progress_window() {
+        let click = || Message::NativeMenu(crate::tray::ICON_CLICKED.into());
+        let mut app = App::default();
+        let _ = app.update(click());
+        assert!(app.win_of(WinKind::Main).is_some(), "idle: main window");
+        assert!(app.win_of(WinKind::Progress(2)).is_none());
+
+        app.state.downloads = vec![
+            item(1, "/tmp", "a.bin", None, DlState::Receiving),
+            item(2, "/tmp", "b.bin", None, DlState::Receiving),
+            item(3, "/tmp", "c.bin", None, DlState::Paused),
+        ];
+        let _ = app.update(click());
+        assert!(
+            app.win_of(WinKind::Progress(2)).is_none(),
+            "the arrow is not on the icon yet"
+        );
+        let _ = app.sync_indicator();
+        let _ = app.update(click());
+        let opened = app.win_of(WinKind::Progress(2));
+        assert!(opened.is_some());
+        assert!(app.win_of(WinKind::Progress(1)).is_none());
+        let _ = app.update(click());
+        assert_eq!(
+            app.win_of(WinKind::Progress(2)),
+            opened,
+            "restored, not duplicated"
+        );
+
+        app.cfg.settings.show_progress_icon = false;
+        let _ = app.sync_indicator();
+        app.state.downloads[1].state = DlState::Paused;
+        let _ = app.update(click());
+        assert!(
+            app.win_of(WinKind::Progress(1)).is_none(),
+            "logo: main window"
+        );
     }
 
     fn item(id: DlId, dir: &str, name: &str, queue: Option<&str>, state: DlState) -> DownloadItem {
