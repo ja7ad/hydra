@@ -1,6 +1,6 @@
 [package]
 name = "hya-net"
-version = "0.6.3"
+version = "0.6.4"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -36,7 +36,15 @@ serde_json = { workspace = true }
 # Chromium on Windows wraps its master key with DPAPI, whose only interface is
 # `CryptUnprotectData`. One function, declared by the same crate the rest of the
 # workspace already builds against rather than by a hand-written extern block.
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+# The staging file needs FSCTL_SET_SPARSE and GetCompressedFileSizeW too: NTFS
+# zero-fills a non-sparse file up to every far-offset write.
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "fs", "sync"] }

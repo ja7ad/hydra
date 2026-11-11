@@ -439,29 +439,13 @@ fn targets_for(
 /// Proxy setting for a URL, honouring `--no-proxy` semantics via the environment.
 /// How many bytes of `path` are really there.
 ///
-/// A resume record is authoritative when present. Otherwise fall back to allocated
-/// blocks, which for a sparse file is far smaller than its apparent length. On a
-/// filesystem that does not report blocks, treat a file whose apparent length equals
-/// its allocation as fully present.
+/// A resume record is authoritative when present. Otherwise fall back to the
+/// allocation, which for a sparse file is far smaller than its apparent length.
 fn bytes_present(path: &Path, sidecar: Option<&Sidecar>) -> u64 {
     if let Some(sc) = sidecar {
         return sc.bytes_done();
     }
-    let Ok(md) = std::fs::metadata(path) else {
-        return 0;
-    };
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let allocated = md.blocks() * 512;
-        // Allocation is rounded up to a block, so it can exceed the apparent length by
-        // less than one block; clamp rather than report more bytes than the file has.
-        allocated.min(md.len())
-    }
-    #[cfg(not(unix))]
-    {
-        md.len()
-    }
+    hya_net::allocated_bytes(path).unwrap_or(0)
 }
 
 /// An Outcome with every field at a neutral value, for tests that care about two of them.

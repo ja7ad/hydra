@@ -9562,8 +9562,8 @@ pub fn sanitize_spans(spans: &[(u64, u64)], size: Option<u64>) -> Vec<(u64, u64)
 ///
 /// Length must match the recorded size exactly — `SparseSink::create` calls
 /// `set_len(size)` up front, so any other length means another object or a
-/// truncation. On unix the allocated blocks are checked against the bytes
-/// the spans claim: holes are not allocated, so a `.part` that received one
+/// truncation. The allocated bytes are checked against the bytes the spans
+/// claim: holes are not allocated, so a `.part` that received one
 /// byte cannot pass for one that received everything (file length says
 /// nothing about completeness — the lesson the CLI already recorded).
 pub fn part_matches(part: &std::path::Path, size: Option<u64>, held: &[(u64, u64)]) -> bool {
@@ -9578,40 +9578,13 @@ pub fn part_matches(part: &std::path::Path, size: Option<u64>, held: &[(u64, u64
             return false;
         }
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let allocated = meta.blocks().saturating_mul(512);
-        let claimed = sum_spans(held);
-        // Filesystems account allocation in blocks; allow one block of
-        // rounding at each end of every span.
-        let slop = (held.len() as u64 + 1).saturating_mul(2 * 4096);
-        if allocated.saturating_add(slop) < claimed {
-            return false;
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        use std::io::Read;
-        // On Windows, detect sparse files by checking if we can read actual
-        // data from the claimed parts. A file created with set_len but no
-        // actual data written will fail this check.
-        if !held.is_empty() {
-            if let Ok(mut file) = std::fs::File::open(part) {
-                let mut buf = vec![0u8; 4096.min(meta.len() as usize)];
-                // Try to read from the first claimed part
-                if let Ok(n) = file.read(&mut buf) {
-                    if n == 0 {
-                        // File is sparse: no data could be read
-                        return false;
-                    }
-                }
-            }
-        }
-    }
-    #[cfg(not(any(unix, target_os = "windows")))]
-    let _ = held;
-    true
+    let Ok(allocated) = hya_net::allocated_bytes(part) else {
+        return false;
+    };
+    // Filesystems account allocation in blocks; allow one block of rounding
+    // at each end of every span.
+    let slop = (held.len() as u64 + 1).saturating_mul(2 * 4096);
+    allocated.saturating_add(slop) >= sum_spans(held)
 }
 
 /// What Escape means in window `kind`: its Cancel button, or nothing for
@@ -12346,14 +12319,20 @@ mod tests {
         // Missing file never resumes.
         assert!(!part_matches(&path, Some(1000), &[(0, 1000)]));
 
-        // Sparse file: set_len only, no byte written. Length matches, but
-        // nothing is allocated — claiming the whole object must fail.
-        let f = std::fs::File::create(&path).unwrap();
-        f.set_len(1_000_000).unwrap();
-        drop(f);
-        assert!(!part_matches(&path, Some(1_000_000), &[(0, 1_000_000)]));
+        // A staging file as the engine makes it, no byte written. Length
+        // matches, but nothing is allocated — claiming the whole object must fail.
+        const SIZE: u64 = 64 << 20;
+        const HEAD: u64 = 1 << 20;
+        let sink = hya_net::SparseSink::create(&path.to_string_lossy(), SIZE).unwrap();
+        assert!(!part_matches(&path, Some(SIZE), &[(0, SIZE)]));
         // ...while claiming nothing (fresh start) is fine.
-        assert!(part_matches(&path, Some(1_000_000), &[]));
+        assert!(part_matches(&path, Some(SIZE), &[]));
+
+        // Only the head arrived: its claim holds, the whole object's does not.
+        sink.write_at(0, &vec![0xCD; HEAD as usize]).unwrap();
+        drop(sink);
+        assert!(part_matches(&path, Some(SIZE), &[(0, HEAD)]));
+        assert!(!part_matches(&path, Some(SIZE), &[(0, SIZE)]));
 
         // Fully written file passes.
         std::fs::write(&path, vec![0xAB; 1_000_000]).unwrap();
