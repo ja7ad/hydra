@@ -13,6 +13,8 @@ ignore = [
     "RUSTSEC-2024-0436",
     "RUSTSEC-2026-0206",
     "RUSTSEC-2026-0192",
+    # pin-utils via wasmtimer under iced_futures 0.14.
+    "RUSTSEC-2026-0441",
     # Unmaintained, no known vulnerability: zbus_names, zvariant and
     # zvariant_derive via zbus 5.19 (latest) under ksni, dark-light, mundy
     # and system_shutdown.
