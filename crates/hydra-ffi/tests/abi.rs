@@ -669,6 +669,34 @@ fn an_unreachable_origin_fails_with_a_transport_code() {
 }
 
 #[test]
+fn a_file_served_only_to_browsers_completes_through_the_abi() {
+    let body = make_body(256 * 1024 + 5);
+    let origin = serve(
+        body.clone(),
+        Behaviour {
+            admit_only: Some("Chrome/".into()),
+            ..Behaviour::default()
+        },
+    );
+    let h = harness("gated", false, |c| c.max_retries = 1);
+    let out = h.dir.join("gated.bin");
+    let id = make_job(&h, &origin.url("/d/token/gated.bin"), &out, |_| {});
+    unsafe { hydra_job_start(h.engine, id) };
+
+    let ev = await_terminal(&h, id, Duration::from_secs(60));
+    assert_eq!(
+        ev.kind,
+        hydra_event_type_t::HYDRA_EVENT_COMPLETED,
+        "{}",
+        last_error()
+    );
+    assert_eq!(
+        sha256(&std::fs::read(&out).expect("output file")),
+        sha256(&body)
+    );
+}
+
+#[test]
 fn an_http_error_status_is_reported_with_the_status_attached() {
     let origin = serve(
         make_body(16),

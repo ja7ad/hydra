@@ -1937,7 +1937,26 @@ pub fn app_dir() -> PathBuf {
     if let Some(dir) = APP_DIR_OVERRIDE.get() {
         return dir.clone();
     }
+    #[cfg(test)]
+    if std::env::var_os("HYDRA_CONFIG_DIR").is_none() {
+        return test_app_dir();
+    }
     hya_plugin::hydra_dir()
+}
+
+/// Where a test build keeps its files. Any test that drives the app saves a
+/// default `config.toml` and download list, and with the real directory that
+/// was the developer's own settings being reset by `cargo test`.
+#[cfg(test)]
+fn test_app_dir() -> PathBuf {
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/gui-test-profile");
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    })
+    .clone()
 }
 
 /// User configuration: everything the Options/Scheduler dialogs edit.
@@ -2462,6 +2481,24 @@ pub fn save_recent_dirs(dirs: &[String]) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_test_build_keeps_its_settings_out_of_the_users_profile() {
+        if std::env::var_os("HYDRA_CONFIG_DIR").is_some() {
+            return;
+        }
+        assert_ne!(app_dir(), hya_plugin::hydra_dir());
+
+        let mut cfg = ConfigFile::default();
+        cfg.settings.beta_channel = true;
+        cfg.settings.hide_from_taskbar = true;
+        save_config(&cfg);
+
+        assert!(app_dir().join("config.toml").starts_with(test_app_dir()));
+        let reopened = load_config();
+        assert!(reopened.settings.beta_channel);
+        assert!(reopened.settings.hide_from_taskbar);
+    }
 
     #[test]
     fn recent_dir_goes_first_and_is_not_repeated() {

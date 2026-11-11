@@ -694,19 +694,18 @@ async fn resolve_link(
     // to them.
     let requested = url.clone();
     let first = target_via(route.http(), &parse_url(&url).ok()?, Vec::new(), user_agent);
-    let mut headers = headers.to_vec();
+    let mut guise = hya_net::Guise::default();
     for _ in 0..10 {
         let u = parse_url(&url).ok()?;
-        let t = target_via(route.http(), &u, Vec::new(), user_agent).with_headers_from(
-            &first,
-            headers.clone(),
-            Some(user_agent.to_string()),
-        );
-        let p = probe_resilient(connector, &t).await.ok()?;
-        if let Some(referer) = referer_fallback(&p, &u, &headers) {
-            headers.push(format!("Referer: {referer}"));
-            continue;
-        }
+        let t = target_via(route.http(), &u, Vec::new(), user_agent)
+            .with_headers_from(&first, headers.to_vec(), Some(user_agent.to_string()))
+            .in_guise(&guise);
+        let (p, admitted) =
+            hya_net::probe_admitted(&t, |t| async move { probe_resilient(connector, &t).await })
+                .await
+                .ok()?;
+        let t = t.in_guise(&admitted);
+        guise.absorb(admitted);
         if p.is_redirect() {
             url = join_url(&u, p.location.as_deref().unwrap_or(""))?;
             continue;
@@ -1963,29 +1962,23 @@ struct Primary {
     delta: f64,
 }
 
-/// The `Referer` to ask again with when `p` is a `403` to a request that
-/// carried none: the object's own origin, as a link on its own site would
-/// send. Hotlink-protected hosts (erome's CDN) refuse a pasted link outright
-/// and serve it to any same-site referer.
-fn referer_fallback(p: &Probe, u: &ParsedUrl, headers: &[String]) -> Option<String> {
-    let has_referer = headers
-        .iter()
-        .any(|h| h.to_ascii_lowercase().starts_with("referer:"));
-    if p.status != 403 || has_referer || u.ftp {
-        return None;
+/// Send what the origin accepted on every later request of this download.
+fn wear(spec: &mut StartSpec, guise: hya_net::Guise) {
+    if guise == hya_net::Guise::default() {
+        return;
     }
-    let scheme = if u.tls { "https" } else { "http" };
-    let default_port = if u.tls { 443 } else { 80 };
-    let host = if u.host.contains(':') && !u.host.starts_with('[') {
-        format!("[{}]", u.host)
-    } else {
-        u.host.clone()
-    };
-    Some(if u.port == default_port {
-        format!("{scheme}://{host}/")
-    } else {
-        format!("{scheme}://{host}:{}/", u.port)
-    })
+    crate::log::debug(&format!(
+        "#{} refused as written; served as {guise:?}",
+        spec.id
+    ));
+    if guise.referer.is_some() || guise.no_referer {
+        spec.referer = guise.referer;
+        spec.plugin_headers
+            .retain(|h| !h.to_ascii_lowercase().starts_with("referer:"));
+    }
+    if let Some(agent) = guise.user_agent {
+        spec.user_agent = agent;
+    }
 }
 
 /// Probe `spec.url`, following header and HTML redirects and falling forward
@@ -2065,13 +2058,14 @@ async fn resolve_primary(
         // against an origin that accepts a request and then says nothing, the
         // row sat in "Connecting..." and Stop All left it there, still holding
         // its socket. Dropping the probe future is what closes that socket.
-        let probe = async {
-            if spec.force_stream {
+        let force_stream = spec.force_stream;
+        let probe = hya_net::probe_admitted(&t, |t| async move {
+            if force_stream {
                 hya_net::probe(connector.as_ref(), &t).await
             } else {
                 probe_resilient(connector.as_ref(), &t).await
             }
-        };
+        });
         let answer = match cancellable(probe, cancel).await {
             Some(a) => a,
             None => {
@@ -2083,17 +2077,14 @@ async fn resolve_primary(
                 return None;
             }
         };
-        let fallback_referer = match &answer {
-            Ok(p) if spec.referer.is_none() => referer_fallback(p, &u, &spec.plugin_headers),
-            _ => None,
+        let (answer, t) = match answer {
+            Ok((p, guise)) => {
+                let t = t.in_guise(&guise);
+                wear(spec, guise);
+                (Ok(p), t)
+            }
+            Err(e) => (Err(e), t),
         };
-        if let Some(referer) = fallback_referer {
-            crate::log::debug(&format!(
-                "#{id} 403 with no referer; asking again as linked from {referer}"
-            ));
-            spec.referer = Some(referer);
-            continue;
-        }
         match answer {
             Ok(p) if p.is_redirect() => {
                 let loc = p.location.clone().unwrap_or_default();
@@ -8894,7 +8885,11 @@ mod intercepted_page_e2e_tests {
                     && !request
                         .lines()
                         .any(|l| l.eq_ignore_ascii_case(own_referer.trim_end()));
-                if hotlinked {
+                let not_a_browser = request.split_whitespace().nth(1) == Some("/browsers-only.bin")
+                    && !request.contains("Chrome/");
+                let posing = request.split_whitespace().nth(1) == Some("/tools-only.bin")
+                    && (request.contains("User-Agent: Mozilla/") || request.contains("Referer:"));
+                if hotlinked || not_a_browser || posing {
                     let _ = socket.get_mut().write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
                     continue;
                 }
@@ -9060,28 +9055,66 @@ mod intercepted_page_e2e_tests {
             .all(|r| r.contains("Referer: https://elsewhere.example/page")));
     }
 
-    #[test]
-    fn referer_fallback_names_the_origin_and_only_for_a_bare_403() {
-        let probe = |status| Probe {
-            status,
-            ..Probe::default()
-        };
-        let u = parse_url("https://v46.erome.com/7232/a_720p.mp4").unwrap();
-        assert_eq!(
-            referer_fallback(&probe(403), &u, &[]).as_deref(),
-            Some("https://v46.erome.com/")
+    /// #277, #367: an origin that answers `403` to anything but a current
+    /// browser refused the download under the configured `User-Agent`.
+    #[tokio::test]
+    async fn gui_e2e_an_origin_that_serves_only_browsers_is_asked_as_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = b"browser bytes".to_vec();
+        let origin = origin(body.clone(), None, None, true, false).await;
+        let spec = spec(&origin, dir.path(), "browsers-only.bin");
+
+        let events = download(spec.clone()).await;
+
+        assert!(
+            events.iter().any(|e| matches!(e, Event::Finished { .. })),
+            "{events:?}"
         );
-        let odd = parse_url("http://cdn.example:8080/f").unwrap();
-        assert_eq!(
-            referer_fallback(&probe(403), &odd, &[]).as_deref(),
-            Some("http://cdn.example:8080/")
+        assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), body);
+        let requests = origin.requests.lock().unwrap();
+        let as_browser = format!("User-Agent: {}", hya_net::BROWSER_USER_AGENT);
+        let first = requests
+            .iter()
+            .position(|r| r.contains(&as_browser))
+            .expect("a request went out as a browser");
+        assert!(requests[..first].iter().all(|r| r.contains("hydra-e2e")));
+        assert!(
+            requests[first..].iter().all(|r| r.contains(&as_browser)),
+            "every request after the admitted one is a browser's: {requests:?}"
         );
-        assert_eq!(referer_fallback(&probe(404), &u, &[]), None);
-        assert_eq!(referer_fallback(&probe(200), &u, &[]), None);
-        let given = ["referer: https://www.erome.com/".to_string()];
-        assert_eq!(referer_fallback(&probe(403), &u, &given), None);
-        let ftp = parse_url("ftp://ftp.example/f").unwrap();
-        assert_eq!(referer_fallback(&probe(403), &ftp, &[]), None);
+    }
+
+    /// #277: a bot filter that refuses anything naming a browser without
+    /// being one answered `403` to the default `User-Agent`, and to a
+    /// captured download carrying the page it was clicked on.
+    #[tokio::test]
+    async fn gui_e2e_an_origin_that_refuses_a_posed_browser_is_asked_as_hydra() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = b"tool bytes".to_vec();
+        let origin = origin(body.clone(), None, None, true, false).await;
+        let mut spec = spec(&origin, dir.path(), "tools-only.bin");
+        spec.user_agent = crate::model::DEFAULT_USER_AGENT.into();
+        spec.referer = Some("https://files.example/project".into());
+
+        let events = download(spec.clone()).await;
+
+        assert!(
+            events.iter().any(|e| matches!(e, Event::Finished { .. })),
+            "{events:?}"
+        );
+        assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), body);
+        let requests = origin.requests.lock().unwrap();
+        let own_name = format!("User-Agent: {}", hya_net::DEFAULT_USER_AGENT);
+        let first = requests
+            .iter()
+            .position(|r| r.contains(&own_name))
+            .expect("a request went out under hydra's own name");
+        assert!(
+            requests[first..]
+                .iter()
+                .all(|r| r.contains(&own_name) && !r.contains("Referer:")),
+            "{requests:?}"
+        );
     }
 
     #[tokio::test]

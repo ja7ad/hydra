@@ -30,6 +30,8 @@ pub struct Behaviour {
     pub force_status: Option<u16>,
     /// Answer a request for the first path with a `302` to the second.
     pub redirect: Option<(String, String)>,
+    /// Answer `403` to any request whose head does not contain this.
+    pub admit_only: Option<String>,
 }
 
 impl Default for Behaviour {
@@ -41,6 +43,7 @@ impl Default for Behaviour {
             chunk: 64 * 1024,
             force_status: None,
             redirect: None,
+            admit_only: None,
         }
     }
 }
@@ -217,6 +220,15 @@ fn handle(
             let msg =
                 format!("HTTP/1.1 {code} Nope\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             sock.write_all(msg.as_bytes())?;
+            return Ok(());
+        }
+        if b.admit_only
+            .as_ref()
+            .is_some_and(|pass| !head.contains(pass))
+        {
+            sock.write_all(
+                b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )?;
             return Ok(());
         }
         if let Some((from, to)) = &b.redirect {

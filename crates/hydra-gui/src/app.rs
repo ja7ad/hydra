@@ -3022,9 +3022,10 @@ impl App {
                     .map_or(window::Position::Centered, window::Position::Specific)
             }
             (_, None) => window::Position::Centered,
-            (_, Some(origin)) => window::Position::Specific(Point::new(
-                origin.x + (self.main_size.width - os_w) / 2.0,
-                origin.y + (self.main_size.height - os_h) / 2.0,
+            (_, Some(origin)) => window::Position::Specific(child_open_position(
+                iced::Rectangle::new(origin, self.main_size),
+                iced::Size::new(os_w, os_h),
+                &display_bounds(),
             )),
         };
         // "Hide from taskbar" on Windows is a per-window creation flag, so
@@ -8774,6 +8775,16 @@ fn sort_keyed<'a, K: Ord>(v: &mut [&'a DownloadItem], asc: bool, key: impl Fn(&D
 /// line — by the time this runs, the queue or download it was guarding is
 /// already done.
 fn run_power_action(action: PowerAction) {
+    crate::log::info(&format!("power action {action:?}: asking the system"));
+    // Forced: Windows reports success and then drops a shutdown that an
+    // application with unsaved work vetoes, and nobody is there to answer it.
+    #[cfg(target_os = "windows")]
+    let result = match action {
+        PowerAction::Shutdown => system_shutdown::force_shutdown(),
+        PowerAction::LogOff => system_shutdown::force_logout(),
+        PowerAction::Sleep => system_shutdown::sleep(),
+    };
+    #[cfg(not(target_os = "windows"))]
     let result = match action {
         PowerAction::Shutdown => system_shutdown::shutdown(),
         PowerAction::LogOff => system_shutdown::logout(),
@@ -8908,6 +8919,36 @@ fn main_open_position(
         }
         _ => None,
     }
+}
+
+/// Where a dialog or progress box opens: centred over the main window, then
+/// moved the least it takes to sit wholly on the display that shows most of
+/// that window. A main window dragged half off the screen used to open its
+/// children half off the screen with it. Everything is in OS points.
+fn child_open_position(
+    main: iced::Rectangle,
+    child: iced::Size,
+    displays: &[iced::Rectangle],
+) -> Point {
+    let centred = Point::new(
+        main.x + (main.width - child.width) / 2.0,
+        main.y + (main.height - child.height) / 2.0,
+    );
+    let shown = |d: &iced::Rectangle| d.intersection(&main).map_or(0.0, |r| r.width * r.height);
+    let Some(display) = displays
+        .iter()
+        .filter(|d| shown(d) > 0.0)
+        .max_by(|a, b| shown(a).total_cmp(&shown(b)))
+    else {
+        return centred;
+    };
+    // `max` before `min`, so a child larger than the display keeps its title
+    // bar on it rather than its far edge.
+    let held = |at: f32, len: f32, from: f32, span: f32| at.min(from + span - len).max(from);
+    Point::new(
+        held(centred.x, child.width, display.x, display.width),
+        held(centred.y, child.height, display.y, display.height),
+    )
 }
 
 /// Windows parks a minimized window at (-32000, -32000) pixels, and reports
@@ -11243,6 +11284,65 @@ mod tests {
         // converts with it — or a window left on it reads as off every screen.
         let right = display_normalized(rect(1920.0, 0.0, 1920.0, 1080.0), 1.25);
         assert_eq!(right, rect(1536.0, 0.0, 1536.0, 864.0));
+    }
+
+    #[test]
+    fn a_child_window_opens_wholly_on_the_screen_that_shows_the_main_window() {
+        use super::child_open_position;
+        let rect = |x, y, w, h| iced::Rectangle::new(Point::new(x, y), iced::Size::new(w, h));
+        let screen = rect(0.0, 0.0, 1920.0, 1080.0);
+        let progress = iced::Size::new(620.0, 600.0);
+
+        let centred = child_open_position(rect(400.0, 200.0, 1000.0, 600.0), progress, &[screen]);
+        assert_eq!(centred, Point::new(590.0, 200.0));
+
+        // The reported case: the main window dragged half off the right edge.
+        let off_right = child_open_position(rect(1113.0, 30.0, 1600.0, 830.0), progress, &[screen]);
+        assert_eq!(off_right, Point::new(1300.0, 145.0));
+
+        let off_top_left =
+            child_open_position(rect(-700.0, -300.0, 1000.0, 600.0), progress, &[screen]);
+        assert_eq!(off_top_left, Point::new(0.0, 0.0));
+
+        let off_bottom =
+            child_open_position(rect(400.0, 900.0, 1000.0, 600.0), progress, &[screen]);
+        assert_eq!(off_bottom, Point::new(590.0, 480.0));
+    }
+
+    #[test]
+    fn a_child_window_follows_the_main_window_onto_a_second_screen() {
+        use super::child_open_position;
+        let rect = |x, y, w, h| iced::Rectangle::new(Point::new(x, y), iced::Size::new(w, h));
+        let laptop = rect(0.0, 0.0, 1512.0, 982.0);
+        let external = rect(1512.0, -200.0, 2560.0, 1440.0);
+        let dialog = iced::Size::new(600.0, 400.0);
+
+        // Straddling both, mostly on the external one.
+        let at = child_open_position(
+            rect(1400.0, 100.0, 1000.0, 600.0),
+            dialog,
+            &[laptop, external],
+        );
+        assert_eq!(at, Point::new(1600.0, 200.0));
+
+        // A dialog taller than the screen keeps its title bar reachable.
+        let tall = child_open_position(
+            rect(100.0, 100.0, 1000.0, 600.0),
+            iced::Size::new(600.0, 1200.0),
+            &[laptop],
+        );
+        assert_eq!(tall.y, 0.0);
+
+        // No display reported, or none showing the window: centred as before.
+        let main = rect(5000.0, 5000.0, 1000.0, 600.0);
+        assert_eq!(
+            child_open_position(main, dialog, &[]),
+            Point::new(5200.0, 5100.0)
+        );
+        assert_eq!(
+            child_open_position(main, dialog, &[laptop]),
+            Point::new(5200.0, 5100.0)
+        );
     }
 
     #[test]
