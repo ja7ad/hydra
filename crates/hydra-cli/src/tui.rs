@@ -1421,14 +1421,15 @@ async fn run_interactive(
         return Ok(0);
     }
 
-    // Anything still running is recorded as paused, not lost: its bytes and
-    // sidecar are on disk and `-c` or a later session picks them up.
+    // Anything still running goes back in line, not on hold: its bytes and
+    // sidecar are on disk and the next session resumes it before anything
+    // that was waiting behind it. Pausing here read as a user's pause.
     for stop in stops.values() {
         stop.store(true, Ordering::Relaxed);
     }
     for (id, h) in running.drain() {
         let _ = h.await;
-        q.pause(id);
+        q.interrupt(id);
     }
     let _ = q.save(&queue_path);
     let (_, _, _, failed) = q.counts();
