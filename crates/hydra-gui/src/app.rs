@@ -3639,6 +3639,7 @@ impl App {
         if let Some(d) = self.item(id) {
             if d.state != DlState::Complete {
                 let _ = std::fs::remove_file(d.part_file());
+                let _ = std::fs::remove_dir_all(d.track_dir());
             } else if remove_file {
                 let _ = std::fs::remove_file(d.full_path());
             }
@@ -9378,6 +9379,7 @@ fn reroute(d: &DownloadItem, fi: &FileInfoState) -> (ProxyChoice, bool) {
 /// owns its `.part`.
 fn reset_for_redownload(d: &mut DownloadItem) {
     let _ = std::fs::remove_file(d.part_file());
+    let _ = std::fs::remove_dir_all(d.track_dir());
     d.held.clear();
     d.downloaded = 0;
     d.disp_progress = 0.0;

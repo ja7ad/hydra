@@ -44,6 +44,8 @@ criterion = { workspace = true }
 # Writes the fixture archives the `zipdir` tests read back: a real archiver's
 # output, ZIP64 included, rather than bytes laid out by the code under test.
 zip = { version = "9", default-features = false, features = ["deflate"] }
+# Mints the root, intermediate and leaf the incomplete-chain TLS tests serve.
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
 
 [[bench]]
 name = "hot_paths"

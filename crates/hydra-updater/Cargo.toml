@@ -34,6 +34,8 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 # is not clang-parsable, so blake3's C NEON path cannot build when
 # cross-compiling; the pure-Rust implementation is forced in for Windows.
 blake3 = { version = "1", features = ["pure"] }
+# The setup installer's Add/Remove Programs entry carries the version.
+winreg = "0.56"
 
 [lints]
 workspace = true

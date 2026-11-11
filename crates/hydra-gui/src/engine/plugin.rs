@@ -285,9 +285,28 @@ async fn run_with_root(
         ));
         return true;
     }
-    let size = selected.tracks.iter().try_fold(0u64, |n, &i| {
-        plan.tracks[i].size.and_then(|s| n.checked_add(s))
-    });
+    let scratch = TrackDir::at(std::path::Path::new(&spec.temp_path));
+    let mut saved = scratch.load();
+    saved.resize_with(selected.tracks.len(), SavedTrack::default);
+    for (entry, &i) in saved.iter_mut().zip(&selected.tracks) {
+        if entry.id != plan.tracks[i].id {
+            *entry = SavedTrack {
+                id: plan.tracks[i].id.clone(),
+                ..SavedTrack::default()
+            };
+        }
+    }
+    let mut sizes: Vec<Option<u64>> = selected
+        .tracks
+        .iter()
+        .zip(&saved)
+        .map(|(&i, entry)| entry.size.or(plan.tracks[i].size))
+        .collect();
+    let mut size = total(&sizes);
+    let ranges = selected
+        .tracks
+        .iter()
+        .all(|&i| plan.tracks[i].ranges != hya_plugin_api::Ranges::Deny);
     let title = plan.title.as_deref().unwrap_or(&plan.id);
     let name = hya_net::filename::portable(title).unwrap_or_else(|| "download".into());
     let ext = if extract {
@@ -335,27 +354,32 @@ async fn run_with_root(
     let _ = tx.send(Event::Probed {
         id: spec.id,
         size,
-        ranges: false,
+        ranges,
         file_name,
     });
     let start = std::time::Instant::now();
     let mut completed = 0;
-    let scratch_parent = std::path::Path::new(&spec.temp_path)
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."));
-    if let Err(e) = std::fs::create_dir_all(scratch_parent) {
+    if let Err(e) = std::fs::create_dir_all(scratch.path()) {
         fail(format!("plugin {plugin}: {e}"));
         return true;
     }
-    let scratch = match tempfile::tempdir_in(scratch_parent) {
-        Ok(dir) => dir,
-        Err(e) => {
-            fail(format!("plugin {plugin}: {e}"));
-            return true;
-        }
-    };
     let mut outputs = Vec::new();
     for (ordinal, &i) in selected.tracks.iter().enumerate() {
+        let part = scratch.path().join(format!("track-{ordinal}.part"));
+        let output = scratch.path().join(format!("track-{ordinal}"));
+        let entry = &mut saved[ordinal];
+        if let Some(done) = entry
+            .size
+            .filter(|&n| entry.done && file_len(&output) == Some(n))
+        {
+            completed += done;
+            outputs.push((i, output.to_string_lossy().into_owned()));
+            continue;
+        }
+        if entry.done || !part.exists() {
+            entry.held.clear();
+        }
+        entry.done = false;
         let mut attempt = 0;
         loop {
             let track = plan.tracks[i].clone();
@@ -399,8 +423,8 @@ async fn run_with_root(
                     max_connections: source.max_connections.map(|n| n as usize),
                 })
                 .collect();
-            child.held.clear();
-            child.expected_size = None;
+            child.held = saved[ordinal].held.clone();
+            child.expected_size = saved[ordinal].size;
             child.attested_size = track.size;
             child.attested_digest = track.digest.clone();
             child.pieces = None;
@@ -414,16 +438,8 @@ async fn run_with_root(
                 child.conns = 1;
                 child.force_stream = true;
             }
-            child.temp_path = scratch
-                .path()
-                .join(format!("track-{ordinal}.part"))
-                .to_string_lossy()
-                .into_owned();
-            child.final_path = scratch
-                .path()
-                .join(format!("track-{ordinal}"))
-                .to_string_lossy()
-                .into_owned();
+            child.temp_path = part.to_string_lossy().into_owned();
+            child.final_path = output.to_string_lossy().into_owned();
             let destination = child.final_path.clone();
             let (events, mut rx) = tokio::sync::mpsc::unbounded_channel();
             let task = super::run_file_download(
@@ -436,17 +452,77 @@ async fn run_with_root(
             tokio::pin!(task);
             let mut finished = None;
             let mut failure = None;
+            let mut task_done = false;
             loop {
-                tokio::select! {
-                    () = &mut task => { while let Ok(event) = rx.try_recv() { if let Event::Finished {size,..} = event { finished = Some(size); } else if let Event::Failed {error,..} = event {failure = Some(error);} } break; }
-                    event = rx.recv() => match event {
-                        Some(Event::Finished {size,..}) => finished = Some(size),
-                        Some(Event::Progress {done,rate,eta,conns,..}) => { let _ = tx.send(Event::Progress { id:spec.id,done:completed+done,rate,eta,conns,held:vec![],recorded:None }); }
-                        Some(Event::Failed {error,..}) => {failure = Some(error);break;}
-                        Some(Event::Stopped {done,..}) => { let _ = tx.send(Event::Stopped { id:spec.id,done:completed+done,held:vec![] }); return true; }
-                        Some(Event::Status {line,..}) => { let _ = tx.send(Event::Status {id:spec.id,line:format!("{plugin}: {line}")}); }
-                        _ => {}
+                // The task's last events may still be queued when it returns,
+                // a Stop among them; polling it again after that would panic.
+                let event = if task_done {
+                    match rx.try_recv() {
+                        Ok(event) => event,
+                        Err(_) => break,
                     }
+                } else {
+                    tokio::select! {
+                        () = &mut task => { task_done = true; continue; }
+                        event = rx.recv() => match event {
+                            Some(event) => event,
+                            None => { task_done = true; continue; }
+                        },
+                    }
+                };
+                match event {
+                    Event::Finished { size, .. } => finished = Some(size),
+                    Event::Probed { size: Some(n), .. } => {
+                        saved[ordinal].size = Some(n);
+                        sizes[ordinal] = Some(n);
+                        if total(&sizes) != size {
+                            size = total(&sizes);
+                            let _ = tx.send(Event::Probed {
+                                id: spec.id,
+                                size,
+                                ranges,
+                                file_name: None,
+                            });
+                        }
+                    }
+                    Event::Progress {
+                        done,
+                        rate,
+                        eta,
+                        conns,
+                        ..
+                    } => {
+                        let _ = tx.send(Event::Progress {
+                            id: spec.id,
+                            done: completed + done,
+                            rate,
+                            eta,
+                            conns,
+                            held: vec![],
+                            recorded: None,
+                        });
+                    }
+                    Event::Failed { error, .. } => {
+                        failure = Some(error);
+                        break;
+                    }
+                    Event::Stopped { done, held, .. } => {
+                        saved[ordinal].held = held;
+                        scratch.keep(&saved);
+                        let _ = tx.send(Event::Stopped {
+                            id: spec.id,
+                            done: completed + done,
+                            held: vec![],
+                        });
+                        return true;
+                    }
+                    Event::Status { line, .. } => {
+                        let _ = tx.send(Event::Status {
+                            id: spec.id,
+                            line: format!("{plugin}: {line}"),
+                        });
+                    }
+                    _ => {}
                 }
             }
             if let Some(error) = failure {
@@ -467,8 +543,9 @@ async fn run_with_root(
                 fail(format!("plugin {plugin}, track {}: {error}", track.id));
                 return true;
             }
-            let Some(size) = finished else {
+            let Some(track_size) = finished else {
                 if cancel.load(Ordering::Relaxed) {
+                    scratch.keep(&saved);
                     let _ = tx.send(Event::Stopped {
                         id: spec.id,
                         done: completed,
@@ -479,7 +556,13 @@ async fn run_with_root(
                 }
                 return true;
             };
-            completed += size;
+            saved[ordinal] = SavedTrack {
+                id: track.id.clone(),
+                size: Some(track_size),
+                held: vec![],
+                done: true,
+            };
+            completed += track_size;
             outputs.push((i, destination));
             break;
         }
@@ -599,6 +682,74 @@ async fn run_with_root(
     )
     .await;
     true
+}
+
+/// One selected track's progress, kept across a Stop so the next start
+/// resumes it instead of fetching it again from byte zero.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+struct SavedTrack {
+    id: String,
+    size: Option<u64>,
+    held: Vec<(u64, u64)>,
+    done: bool,
+}
+
+/// Where a plugin download stages its tracks: [`crate::model::track_dir`]
+/// beside the item's `.part`, so a restarted transfer finds them again.
+/// Removed when it is dropped, unless a Stop asked to [`keep`](Self::keep)
+/// it.
+struct TrackDir {
+    path: std::path::PathBuf,
+    keep: std::cell::Cell<bool>,
+}
+
+impl TrackDir {
+    const STATE: &'static str = "resume.json";
+
+    fn at(part: &std::path::Path) -> Self {
+        TrackDir {
+            path: crate::model::track_dir(part),
+            keep: std::cell::Cell::new(false),
+        }
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    fn load(&self) -> Vec<SavedTrack> {
+        std::fs::read(self.path.join(Self::STATE))
+            .ok()
+            .and_then(|raw| serde_json::from_slice(&raw).ok())
+            .unwrap_or_default()
+    }
+
+    fn keep(&self, tracks: &[SavedTrack]) {
+        let saved = serde_json::to_vec(tracks)
+            .map_err(std::io::Error::other)
+            .and_then(|json| std::fs::write(self.path.join(Self::STATE), json));
+        // Without the record the held spans cannot be trusted, and keeping
+        // the files would only leave them behind.
+        self.keep.set(saved.is_ok());
+    }
+}
+
+impl Drop for TrackDir {
+    fn drop(&mut self) {
+        if !self.keep.get() {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
+fn total(sizes: &[Option<u64>]) -> Option<u64> {
+    sizes
+        .iter()
+        .try_fold(0u64, |n, size| size.and_then(|s| n.checked_add(s)))
+}
+
+fn file_len(path: &std::path::Path) -> Option<u64> {
+    std::fs::metadata(path).ok().map(|m| m.len())
 }
 
 async fn run_transfer(
@@ -1020,6 +1171,196 @@ mod tests {
         assert!(write_sidecar(&source, &destination).is_err());
         assert_eq!(std::fs::read(&destination).unwrap(), b"WEBVTT");
     }
+    /// Install a resolver that answers every claim with `plan`.
+    fn install_fixture(
+        root: &std::path::Path,
+        package: &std::path::Path,
+        plan: &hya_plugin_api::Plan,
+    ) {
+        let reply = serde_json::to_vec(&hya_plugin_api::Resolve::Plan(plan.clone())).unwrap();
+        let encoded = reply
+            .iter()
+            .map(|b| format!("\\{b:02x}"))
+            .collect::<String>();
+        let module=wat::parse_str(format!(r#"(module
+          (memory (export "memory") 4) (global $heap (mut i32) (i32.const 10000))
+          (data (i32.const 128) "{encoded}")
+          (func (export "hydra_api") (result i32) i32.const 1)
+          (func (export "hydra_alloc") (param $n i32) (result i32) (local $p i32) global.get $heap local.set $p global.get $heap local.get $n i32.add global.set $heap local.get $p)
+          (func (export "hydra_call") (param i32 i32 i32 i32) (result i64) i64.const {}))"#,hya_plugin_api::abi::pack(128,reply.len() as u32))).unwrap();
+        std::fs::write(package.join("plugin.wasm"), module).unwrap();
+        std::fs::write(package.join("hydra-plugin.toml"),"id='test.gui'\nname='GUI fixture'\nversion='1.0.0'\napi=1\nmodule='plugin.wasm'\nhooks=['resolve']\nclaims=['https://example.com/*']\n[permissions]\nsources=['127.0.0.1']\n").unwrap();
+        let mut manager = hya_plugin::manager::Manager::open(root.into()).unwrap();
+        let manifest = hya_plugin::manager::Manager::inspect(package)
+            .unwrap()
+            .manifest;
+        manager.install(package, manifest.permissions).unwrap();
+        drop(manager);
+    }
+
+    /// #328: a Stop part-way through a plugin download threw away every
+    /// track already fetched, and Resume started again from byte zero.
+    #[tokio::test]
+    async fn a_stopped_plugin_download_resumes_its_finished_tracks() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let root = tempfile::tempdir().unwrap();
+        let package = tempfile::tempdir().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let hold_sub = Arc::new(AtomicBool::new(true));
+        let sub_asked = Arc::new(tokio::sync::Notify::new());
+        let file_gets = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (hold, asked, gets) = (hold_sub.clone(), sub_asked.clone(), file_gets.clone());
+        let server = tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let (hold, asked, gets) = (hold.clone(), asked.clone(), gets.clone());
+                tokio::spawn(async move {
+                    let mut request = Vec::new();
+                    let mut byte = [0];
+                    while !request.ends_with(b"\r\n\r\n") {
+                        if socket.read(&mut byte).await.unwrap_or(0) == 0 {
+                            return;
+                        }
+                        request.push(byte[0]);
+                    }
+                    let request = String::from_utf8_lossy(&request);
+                    let sub = request.contains("/sub ");
+                    if sub && hold.load(Ordering::Relaxed) {
+                        asked.notify_one();
+                        std::future::pending::<()>().await;
+                    }
+                    if !sub && request.starts_with("GET ") {
+                        gets.fetch_add(1, Ordering::Relaxed);
+                    }
+                    let body = if sub {
+                        b"WEBVTT\n".as_slice()
+                    } else {
+                        b"first track".as_slice()
+                    };
+                    let head = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = socket.write_all(head.as_bytes()).await;
+                    if !request.starts_with("HEAD ") {
+                        let _ = socket.write_all(body).await;
+                    }
+                });
+            }
+        });
+        let plan: hya_plugin_api::Plan = serde_json::from_value(serde_json::json!({"id":"gui","title":"GUI file","tracks":[
+            {"id":"file","kind":"audio","container":"bin","ranges":"deny","sources":[{"url":format!("http://{address}/file")}]},
+            {"id":"sub","kind":"subtitle","language":"en","container":"vtt","ranges":"deny","sources":[{"url":format!("http://{address}/sub")}]}
+        ]})).unwrap();
+        install_fixture(root.path(), package.path(), &plan);
+        let mut spec = StartSpec::plain();
+        spec.id = 77;
+        spec.url = "https://example.com/file".into();
+        spec.proxy = crate::model::ProxyChoice::Direct;
+        spec.temp_path = output
+            .path()
+            .join("result.bin.part")
+            .to_string_lossy()
+            .into_owned();
+        spec.final_path = output
+            .path()
+            .join("result.bin")
+            .to_string_lossy()
+            .into_owned();
+        spec.plugin_plan = Some(crate::plugins::PlanInfo {
+            plugin: "test.gui".into(),
+            plan,
+            preferences: Preferences {
+                include_files: true,
+                subtitle_languages: vec!["en".into()],
+                ..Default::default()
+            },
+        });
+        let final_path = Arc::new(Mutex::new(spec.final_path.clone()));
+        let pace = Pace::pair(
+            Arc::new(super::super::RateLimiter::unlimited()),
+            Arc::new(super::super::RateLimiter::unlimited()),
+        );
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+        let stopper = {
+            let cancel = cancel.clone();
+            tokio::spawn(async move {
+                sub_asked.notified().await;
+                cancel.store(true, Ordering::Relaxed);
+            })
+        };
+        let root_path: std::path::PathBuf = root.path().into();
+        assert!(run_with_root(&spec, &cancel, &pace, &final_path, &tx, root_path.clone()).await);
+        stopper.await.unwrap();
+        let stopped: Vec<_> = std::iter::from_fn(|| events.try_recv().ok()).collect();
+        assert!(
+            stopped
+                .iter()
+                .any(|e| matches!(e, Event::Stopped { done: 11, .. })),
+            "{stopped:?}"
+        );
+        assert!(
+            stopped
+                .iter()
+                .any(|e| matches!(e, Event::Probed { ranges: false, .. })),
+            "tracks that refuse ranges cannot resume mid-file"
+        );
+        let tracks = crate::model::track_dir(std::path::Path::new(&spec.temp_path));
+        assert!(
+            tracks.join("track-0").exists(),
+            "the finished track is kept"
+        );
+
+        hold_sub.store(false, Ordering::Relaxed);
+        cancel.store(false, Ordering::Relaxed);
+        assert!(run_with_root(&spec, &cancel, &pace, &final_path, &tx, root_path).await);
+        let resumed: Vec<_> = std::iter::from_fn(|| events.try_recv().ok()).collect();
+        assert!(
+            resumed.iter().any(|e| matches!(e, Event::Finished { .. })),
+            "{resumed:?}"
+        );
+        assert_eq!(std::fs::read(&spec.final_path).unwrap(), b"first track");
+        assert_eq!(
+            file_gets.load(Ordering::Relaxed),
+            1,
+            "the finished track is not fetched again"
+        );
+        assert!(
+            !tracks.exists(),
+            "a finished download leaves no staging behind"
+        );
+        server.abort();
+    }
+
+    #[test]
+    fn track_state_survives_only_a_kept_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let part = dir.path().join("x.mkv.part");
+        let saved = vec![SavedTrack {
+            id: "137".into(),
+            size: Some(9),
+            held: vec![(0, 4)],
+            done: false,
+        }];
+        {
+            let tracks = TrackDir::at(&part);
+            std::fs::create_dir_all(tracks.path()).unwrap();
+            tracks.keep(&saved);
+        }
+        let tracks = TrackDir::at(&part);
+        assert_eq!(tracks.load(), saved);
+        drop(tracks);
+        assert!(
+            !crate::model::track_dir(&part).exists(),
+            "not kept this time"
+        );
+        assert_eq!(total(&[Some(2), Some(3)]), Some(5));
+        assert_eq!(total(&[Some(2), None]), None);
+    }
+
     #[tokio::test]
     async fn gui_engine_executes_installed_plan_saves_sidecar_and_cleans_failed_tracks() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -1070,27 +1411,7 @@ mod tests {
             {"id":"file","kind":"audio","container":"bin","ranges":"deny","sources":[{"url":format!("http://{address}/file")}]},
             {"id":"sub","kind":"subtitle","language":"en","container":"vtt","ranges":"deny","sources":[{"url":format!("http://{address}/sub")}]}
         ]})).unwrap();
-        let reply = serde_json::to_vec(&hya_plugin_api::Resolve::Plan(plan.clone())).unwrap();
-        let encoded = reply
-            .iter()
-            .map(|b| format!("\\{b:02x}"))
-            .collect::<String>();
-        let module=wat::parse_str(format!(r#"(module
-          (memory (export "memory") 4) (global $heap (mut i32) (i32.const 10000))
-          (data (i32.const 128) "{encoded}")
-          (func (export "hydra_api") (result i32) i32.const 1)
-          (func (export "hydra_alloc") (param $n i32) (result i32) (local $p i32) global.get $heap local.set $p global.get $heap local.get $n i32.add global.set $heap local.get $p)
-          (func (export "hydra_call") (param i32 i32 i32 i32) (result i64) i64.const {}))"#,hya_plugin_api::abi::pack(128,reply.len() as u32))).unwrap();
-        std::fs::write(package.path().join("plugin.wasm"), module).unwrap();
-        std::fs::write(package.path().join("hydra-plugin.toml"),"id='test.gui'\nname='GUI fixture'\nversion='1.0.0'\napi=1\nmodule='plugin.wasm'\nhooks=['resolve']\nclaims=['https://example.com/*']\n[permissions]\nsources=['127.0.0.1']\n").unwrap();
-        let mut manager = hya_plugin::manager::Manager::open(root.path().into()).unwrap();
-        let manifest = hya_plugin::manager::Manager::inspect(package.path())
-            .unwrap()
-            .manifest;
-        manager
-            .install(package.path(), manifest.permissions)
-            .unwrap();
-        drop(manager);
+        install_fixture(root.path(), package.path(), &plan);
         let mut spec = StartSpec::plain();
         spec.id = 99;
         spec.url = "https://example.com/file".into();

@@ -102,11 +102,19 @@ async function closeBlankTab(tabId) {
 /// Blocking a response to decide costs the round-trip to the app, paid only
 /// on transfers that were going to be downloads anyway.
 function interceptResponse(details) {
+  // core.js observes every response too, but nothing promises its listener
+  // runs before this one, and the capture below asks for this very route.
+  noteProxyInfo(details);
   const headers = Object.fromEntries(
     (details.responseHeaders || []).map((h) => [h.name.toLowerCase(), h.value]),
   );
   if (!willDownload(headers)) return;
   if (browserOwned.get(details.url) !== undefined) return;
+  if (details.method === "POST") {
+    // Its request is in a body Hydra is never handed; see `notePosted`.
+    headerVerdicts.set(details.url);
+    return;
+  }
 
   // The same choice `decideCapture` makes, given the same two URLs: a resolved
   // URL that is a short-lived signature is dead by Hydra's first retry, and

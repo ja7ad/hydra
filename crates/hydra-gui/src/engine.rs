@@ -694,14 +694,19 @@ async fn resolve_link(
     // to them.
     let requested = url.clone();
     let first = target_via(route.http(), &parse_url(&url).ok()?, Vec::new(), user_agent);
+    let mut headers = headers.to_vec();
     for _ in 0..10 {
         let u = parse_url(&url).ok()?;
         let t = target_via(route.http(), &u, Vec::new(), user_agent).with_headers_from(
             &first,
-            headers.to_vec(),
+            headers.clone(),
             Some(user_agent.to_string()),
         );
         let p = probe_resilient(connector, &t).await.ok()?;
+        if let Some(referer) = referer_fallback(&p, &u, &headers) {
+            headers.push(format!("Referer: {referer}"));
+            continue;
+        }
         if p.is_redirect() {
             url = join_url(&u, p.location.as_deref().unwrap_or(""))?;
             continue;
@@ -1958,6 +1963,31 @@ struct Primary {
     delta: f64,
 }
 
+/// The `Referer` to ask again with when `p` is a `403` to a request that
+/// carried none: the object's own origin, as a link on its own site would
+/// send. Hotlink-protected hosts (erome's CDN) refuse a pasted link outright
+/// and serve it to any same-site referer.
+fn referer_fallback(p: &Probe, u: &ParsedUrl, headers: &[String]) -> Option<String> {
+    let has_referer = headers
+        .iter()
+        .any(|h| h.to_ascii_lowercase().starts_with("referer:"));
+    if p.status != 403 || has_referer || u.ftp {
+        return None;
+    }
+    let scheme = if u.tls { "https" } else { "http" };
+    let default_port = if u.tls { 443 } else { 80 };
+    let host = if u.host.contains(':') && !u.host.starts_with('[') {
+        format!("[{}]", u.host)
+    } else {
+        u.host.clone()
+    };
+    Some(if u.port == default_port {
+        format!("{scheme}://{host}/")
+    } else {
+        format!("{scheme}://{host}:{}/", u.port)
+    })
+}
+
 /// Probe `spec.url`, following header and HTML redirects and falling forward
 /// through the mirror list when a lead mirror cannot be reached at all. A
 /// dead mirror is removed from `spec.mirrors` so nothing probes it again.
@@ -2053,6 +2083,17 @@ async fn resolve_primary(
                 return None;
             }
         };
+        let fallback_referer = match &answer {
+            Ok(p) if spec.referer.is_none() => referer_fallback(p, &u, &spec.plugin_headers),
+            _ => None,
+        };
+        if let Some(referer) = fallback_referer {
+            crate::log::debug(&format!(
+                "#{id} 403 with no referer; asking again as linked from {referer}"
+            ));
+            spec.referer = Some(referer);
+            continue;
+        }
         match answer {
             Ok(p) if p.is_redirect() => {
                 let loc = p.location.clone().unwrap_or_default();
@@ -8835,6 +8876,7 @@ mod intercepted_page_e2e_tests {
         let seen = requests.clone();
         let page_requested = Arc::new(tokio::sync::Notify::new());
         let requested = page_requested.clone();
+        let own_referer = format!("referer: {url}/");
         let task = tokio::spawn(async move {
             loop {
                 let (socket, _) = listener.accept().await.unwrap();
@@ -8848,6 +8890,14 @@ mod intercepted_page_e2e_tests {
                     request.push_str(&line);
                 }
                 seen.lock().unwrap().push(request.clone());
+                let hotlinked = request.split_whitespace().nth(1) == Some("/hotlink.bin")
+                    && !request
+                        .lines()
+                        .any(|l| l.eq_ignore_ascii_case(own_referer.trim_end()));
+                if hotlinked {
+                    let _ = socket.get_mut().write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
+                    continue;
+                }
                 if request.split_whitespace().nth(1) == Some("/redirect.zip") {
                     let _ = socket.get_mut().write_all(b"HTTP/1.1 302 Found\r\nLocation: /login\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
                     continue;
@@ -8957,6 +9007,81 @@ mod intercepted_page_e2e_tests {
             events.push(event);
         }
         events
+    }
+
+    /// #398: a CDN that refuses any request without a same-site `Referer`
+    /// answered a pasted link with `403`.
+    #[tokio::test]
+    async fn gui_e2e_a_hotlink_403_is_asked_again_as_linked_from_its_own_site() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = b"protected bytes".to_vec();
+        let origin = origin(body.clone(), Some("video/mp4"), None, true, false).await;
+        let spec = spec(&origin, dir.path(), "hotlink.bin");
+
+        let events = download(spec.clone()).await;
+
+        assert!(
+            events.iter().any(|e| matches!(e, Event::Finished { .. })),
+            "{events:?}"
+        );
+        assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), body);
+        let requests = origin.requests.lock().unwrap();
+        let referer = format!("Referer: {}/", origin.url);
+        let first_with = requests.iter().position(|r| r.contains(&referer));
+        let first_with = first_with.expect("the second probe carries it");
+        assert!(
+            first_with > 0,
+            "the first ask is the bare one: {requests:?}"
+        );
+        assert!(
+            requests[first_with..].iter().all(|r| r.contains(&referer)),
+            "every request after the refusal carries it: {requests:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_a_referer_the_user_gave_is_never_replaced() {
+        let dir = tempfile::tempdir().unwrap();
+        let origin = origin(b"x".to_vec(), None, None, true, false).await;
+        let mut spec = spec(&origin, dir.path(), "hotlink.bin");
+        spec.referer = Some("https://elsewhere.example/page".into());
+
+        let events = download(spec).await;
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::Failed { error, .. } if error.contains("403"))),
+            "{events:?}"
+        );
+        let requests = origin.requests.lock().unwrap();
+        assert!(requests
+            .iter()
+            .all(|r| r.contains("Referer: https://elsewhere.example/page")));
+    }
+
+    #[test]
+    fn referer_fallback_names_the_origin_and_only_for_a_bare_403() {
+        let probe = |status| Probe {
+            status,
+            ..Probe::default()
+        };
+        let u = parse_url("https://v46.erome.com/7232/a_720p.mp4").unwrap();
+        assert_eq!(
+            referer_fallback(&probe(403), &u, &[]).as_deref(),
+            Some("https://v46.erome.com/")
+        );
+        let odd = parse_url("http://cdn.example:8080/f").unwrap();
+        assert_eq!(
+            referer_fallback(&probe(403), &odd, &[]).as_deref(),
+            Some("http://cdn.example:8080/")
+        );
+        assert_eq!(referer_fallback(&probe(404), &u, &[]), None);
+        assert_eq!(referer_fallback(&probe(200), &u, &[]), None);
+        let given = ["referer: https://www.erome.com/".to_string()];
+        assert_eq!(referer_fallback(&probe(403), &u, &given), None);
+        let ftp = parse_url("ftp://ftp.example/f").unwrap();
+        assert_eq!(referer_fallback(&probe(403), &ftp, &[]), None);
     }
 
     #[tokio::test]

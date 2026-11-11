@@ -236,6 +236,21 @@ impl Queue {
         }
     }
 
+    /// Put a running item back in line because its session is ending, not
+    /// because anyone asked it to stop: the next session starts it first,
+    /// ahead of the items that were still waiting behind it. The interrupted
+    /// run is not a failed attempt.
+    pub fn interrupt(&mut self, id: u64) {
+        if let Some(i) = self.get_mut(id) {
+            if i.state == State::Running {
+                i.state = State::Queued;
+                i.rate = 0.0;
+                i.owner_pid = None;
+                i.attempts = i.attempts.saturating_sub(1);
+            }
+        }
+    }
+
     /// Resume a paused or failed item, clearing its attempt count so an
     /// explicit user action is not throttled by earlier automatic retries.
     pub fn resume(&mut self, id: u64) {
@@ -690,6 +705,47 @@ mod tests {
             "no file at all is simply a fresh start"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #396: quitting mid-transfer put the item on hold, so the next session
+    /// skipped it and started the one queued behind it.
+    #[test]
+    fn a_quit_mid_transfer_resumes_that_item_first_in_the_next_session() {
+        let dir = std::env::temp_dir().join(format!("hydra_q_quit_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("queue.json");
+        let mut q = Queue::new(1);
+        for n in 1..=5 {
+            q.add(vec![format!("http://a/{n}")], format!("{n}.bin").into());
+        }
+        for id in [1, 2] {
+            q.mark_running(id);
+            q.finish(id, None, None);
+        }
+        assert_eq!(q.to_start(), vec![3]);
+        q.mark_running(3);
+        q.progress(3, 4096, Some(8192), 1.0e6);
+
+        q.interrupt(3);
+        q.save(&path).unwrap();
+        let back = Queue::load(&path).unwrap().unwrap();
+
+        let item = back.get(3).unwrap();
+        assert_eq!(item.state, State::Queued);
+        assert_eq!(item.done_bytes, 4096, "the bytes already held are kept");
+        assert_eq!(item.attempts, 0, "an interrupted run is not a failure");
+        assert_eq!(item.owner_pid, None);
+        assert_eq!(back.to_start(), vec![3], "#3 resumes; #4 keeps waiting");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn interrupt_leaves_a_user_pause_alone() {
+        let mut q = q3();
+        q.mark_running(1);
+        q.pause(1);
+        q.interrupt(1);
+        assert_eq!(q.get(1).unwrap().state, State::Paused);
     }
 
     #[test]

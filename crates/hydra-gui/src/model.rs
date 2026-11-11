@@ -326,6 +326,11 @@ impl DownloadItem {
         }
     }
 
+    /// Where a plugin download stages its tracks between runs.
+    pub fn track_dir(&self) -> PathBuf {
+        track_dir(&self.part_file())
+    }
+
     pub fn progress(&self) -> f32 {
         // A live recording has no size, so bytes can say nothing about how
         // far along it is — but a recording with a time limit does have a
@@ -1402,6 +1407,14 @@ pub struct Settings {
     /// Last main-window top-left corner in OS points; restored on start
     /// while it still lands on a connected display.
     pub window_pos: Option<(f32, f32)>,
+}
+
+/// The folder beside a `.part` that a plugin download keeps its separate
+/// tracks in until they are combined into the one file.
+pub fn track_dir(part: &std::path::Path) -> PathBuf {
+    let mut dir = part.as_os_str().to_owned();
+    dir.push(".tracks");
+    PathBuf::from(dir)
 }
 
 /// The User-Agent a download added by hand sends unless Options picks another.

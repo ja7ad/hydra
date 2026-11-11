@@ -18,11 +18,20 @@ const check = (label, cond, extra = "") => {
 };
 const tick = (n = 3) => new Promise((r) => { let i = 0; const f = () => (++i >= n ? r() : setImmediate(f)); setImmediate(f); });
 
-function build({ hydraReply = { ok: true }, store = {}, gecko = false, tab = null, proxy, proxyStyle = "callback", cookieJar = null, frames = null, fetchImpl = null } = {}) {
+// The PAC evaluator the Chromium sandbox page runs, loaded the same way: a
+// classic script whose declarations land on its global.
+function pacSandbox() {
+  const ctx = vm.createContext({});
+  vm.runInContext(readFileSync("extensions/chrome/pac.js", "utf8"), ctx, { filename: "pac.js" });
+  return ctx;
+}
+
+function build({ hydraReply = { ok: true }, store = {}, gecko = false, ua = UA, tab = null, proxy, proxyStyle = "callback", cookieJar = null, frames = null, fetchImpl = null, offscreen = null } = {}) {
   const sent = [];          // messages that reached "Hydra"
   const calls = [];         // downloads API calls
   const cookieQueries = []; // every cookies.getAll details object
-  const listeners = {};
+  const listeners = { headerObservers: [] };
+  const pacDoc = { open: false, created: [], closed: 0, asked: [], sandbox: null };
   const ev = () => { const l = []; return { addListener: (f) => l.push(f), fire: (...a) => l.map((f) => f(...a)), l }; };
 
   const storage = () => ({
@@ -45,7 +54,39 @@ function build({ hydraReply = { ok: true }, store = {}, gecko = false, tab = nul
       onMessage: (listeners.msg = ev()),
       getURL: (p) => `chrome-extension://x/${p}`,
       sendNativeMessage: (_h, _m, cb) => cb(undefined),
+      // The offscreen document, as the service worker reaches it: "pac" runs
+      // the real sandbox evaluator, "hang" is a script that never returns.
+      ...(offscreen
+        ? {
+            getContexts: async () => (pacDoc.open ? [{ contextType: "OFFSCREEN_DOCUMENT" }] : []),
+            sendMessage: async (msg) => {
+              pacDoc.asked.push(msg);
+              if (!pacDoc.open || msg.target !== "hydra-pac") throw new Error("Receiving end does not exist.");
+              if (offscreen === "hang") return new Promise(() => {});
+              try {
+                return { result: (pacDoc.sandbox ??= pacSandbox()).pacFindProxy(msg.script, msg.url, msg.host) };
+              } catch (e) {
+                return { error: String(e) };
+              }
+            },
+          }
+        : {}),
     },
+    ...(offscreen
+      ? {
+          offscreen: {
+            createDocument: async (opts) => {
+              if (pacDoc.open) throw new Error("Only a single offscreen document may be created.");
+              pacDoc.created.push(opts);
+              pacDoc.open = true;
+            },
+            closeDocument: async () => {
+              pacDoc.open = false;
+              pacDoc.closed++;
+            },
+          },
+        }
+      : {}),
     storage: { local: storage(), session: storage() },
     action: {
       setBadgeBackgroundColor: async () => {}, setBadgeText: async () => {}, setTitle: async () => {},
@@ -112,6 +153,7 @@ function build({ hydraReply = { ok: true }, store = {}, gecko = false, tab = nul
       },
       onHeadersReceived: {
         addListener: (fn, filter, spec) => {
+          if (!spec?.includes("blocking")) return listeners.headerObservers.push(fn);
           listeners.headers = fn;
           listeners.headersFilter = filter;
           listeners.headersSpec = spec;
@@ -119,6 +161,9 @@ function build({ hydraReply = { ok: true }, store = {}, gecko = false, tab = nul
       },
       onBeforeRedirect: {
         addListener: (fn) => { listeners.redirect = fn; },
+      },
+      onBeforeRequest: {
+        addListener: (fn, filter) => { listeners.request = fn; listeners.requestFilter = filter; },
       },
     },
   };
@@ -138,7 +183,7 @@ function build({ hydraReply = { ok: true }, store = {}, gecko = false, tab = nul
   }
 
   const ctx = vm.createContext({
-    chrome, navigator: { userAgent: UA }, WebSocket: FakeWS, console,
+    chrome, navigator: { userAgent: ua }, WebSocket: FakeWS, console,
     setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, fetch: fetchImpl ?? (async () => { throw new Error("no net"); }),
     // A fresh vm context has the ECMAScript built-ins only; URL and friends
     // are web globals the service worker relies on, so hand them in.
@@ -168,19 +213,26 @@ function build({ hydraReply = { ok: true }, store = {}, gecko = false, tab = nul
   // registered `types` filter the way the browser gates it: a test that called
   // the listener directly would pass against a filter the response never
   // reaches. Returns whatever the listener returns — the blocking verdict.
-  const headResponse = ({ url, headers = {}, type = "main_frame", tabId = 7, requestId = "r1" }) =>
+  const headResponse = ({ url, headers = {}, type = "main_frame", tabId = 7, requestId = "r1", proxyInfo, method = "GET" }) =>
     (listeners.headersFilter?.types || []).includes(type)
       ? listeners.headers?.({
-          url, type, tabId, requestId,
+          url, type, tabId, requestId, proxyInfo, method,
           responseHeaders: Object.entries(headers).map(([name, value]) => ({ name, value })),
         })
       : undefined;
+  // Any response at all, as Firefox shows it to a non-blocking observer.
+  const observed = ({ url, proxyInfo = null, type = "xmlhttprequest" }) =>
+    listeners.headerObservers.forEach((fn) => fn({ url, type, tabId: 7, requestId: "o1", proxyInfo }));
+  // A request as the browser announces it before sending, gated like the rest.
+  const requested = ({ url, method = "GET", type = "sub_frame" }) =>
+    (listeners.requestFilter?.types || []).includes(type) &&
+    listeners.request?.({ url, method, type, tabId: 7, requestId: "q1" });
   const redirected = ({ url, redirectUrl, requestId = "r1" }) =>
     listeners.redirect?.({ url, redirectUrl, requestId, type: "main_frame", tabId: 7 });
 
   return {
     sent, calls, onCreated, onDetermining, onMenu, send, store, respond,
-    headResponse, redirected, cookieQueries,
+    headResponse, redirected, requested, cookieQueries, observed, pacDoc,
     sniffFilter: () => listeners.sniffFilter,
     headersSpec: () => listeners.headersSpec,
   };
@@ -215,6 +267,49 @@ function build({ hydraReply = { ok: true }, store = {}, gecko = false, tab = nul
   check("capture: the request names its browser", dl?.browser === "Google Chrome", JSON.stringify(dl));
   check("capture: browser's copy is cancelled and erased", h.calls.some(([c]) => c === "cancel") && h.calls.some(([c]) => c === "erase"));
   check("capture: it is NOT resumed once Hydra took it", !h.calls.some(([c]) => c === "resume"));
+}
+
+// ------------------------------------------- 1b. a download a form POSTed
+//
+// SharePoint zips a shared folder by posting the file list and its tokens to
+// the zip service from a hidden frame. Hydra would replay the URL as a GET
+// with no body, and the service answers that with an error.
+{
+  const h = build();
+  await tick(4);
+  const zip = "https://northeurope1-mediap.svc.ms/transform/zip?cs=abc";
+  h.requested({ url: zip, method: "POST" });
+  const item = { id: 11, url: zip, filename: "share.zip", mime: "application/zip", totalBytes: 0 };
+  h.onCreated.fire(item);
+  await tick(3);
+  h.onDetermining.fire(item, () => h.calls.push(["suggest"]));
+  await tick(6);
+  check("form post: the zip is not sent to Hydra", !h.sent.some((m) => m.type === "download"), JSON.stringify(h.sent));
+  check("form post: the browser keeps it", h.calls.some(([c]) => c === "resume"));
+
+  const plain = "https://cdn.example/after.zip";
+  h.requested({ url: plain, method: "GET" });
+  const next = { id: 12, url: plain, filename: "after.zip", mime: "application/zip", totalBytes: 5e6 };
+  h.onCreated.fire(next);
+  await tick(3);
+  h.onDetermining.fire(next, () => h.calls.push(["suggest"]));
+  await tick(6);
+  check("form post: a GET download is still captured", h.sent.some((m) => m.type === "download" && m.url === plain));
+}
+{
+  const h = build({ gecko: true });
+  await tick(4);
+  const zip = "https://northeurope1-mediap.svc.ms/transform/zip?cs=abc";
+  const verdict = await h.headResponse({
+    url: zip,
+    type: "sub_frame",
+    method: "POST",
+    headers: { "Content-Type": "application/zip", "Content-Disposition": "attachment; filename=share.zip" },
+  });
+  check("form post (gecko): the response is let through", verdict === undefined, JSON.stringify(verdict));
+  h.onCreated.fire({ id: 13, url: zip, filename: "share.zip", mime: "application/zip" });
+  await tick(6);
+  check("form post (gecko): nothing reaches Hydra", !h.sent.some((m) => m.type === "download"), JSON.stringify(h.sent));
 }
 
 // ------------------------------------- 2. a type outside the capture list
@@ -836,15 +931,171 @@ function build({ hydraReply = { ok: true }, store = {}, gecko = false, tab = nul
 }
 {
   // "system" is the browser saying it follows the machine and will not say
-  // what that is; a PAC script is a program neither side runs. Both leave
-  // the download on whatever Hydra's Options say.
-  for (const mode of ["system", "direct", "auto_detect", "pac_script"]) {
+  // what that is. That, and going direct, leave the download on whatever
+  // Hydra's Options say.
+  for (const mode of ["system", "direct", "auto_detect"]) {
     const h = build({ proxy: { mode, rules: { singleProxy: { scheme: "socks5", host: "h", port: 1 } } } });
     await tick(4);
     await h.send({ type: "download-url", url: "https://cdn.example/pack.zip" });
     check(`proxy: "${mode}" names nothing we can pass on`,
       h.sent.at(-1)?.proxy === null, JSON.stringify(h.sent.at(-1)?.proxy));
   }
+}
+// ZeroOmega's Auto Switch profile, as Chromium holds it: a generated PAC
+// script that picks a profile per host and ends in a FindProxyForURL answer.
+const SWITCHER_PAC = `
+var FindProxyForURL = function(init, profiles) {
+  return function(url, host) {
+    "use strict";
+    var result = init, scheme = url.substr(0, url.indexOf(":"));
+    do {
+      if (!profiles[result]) return result;
+      result = profiles[result];
+      if (typeof result === "function") result = result(url, host, scheme);
+    } while (typeof result !== "string" || result.charCodeAt(0) === 43);
+    return result;
+  };
+}("+auto switch", {
+  "+auto switch": function(url, host, scheme) {
+    "use strict";
+    if (/(?:^|\\.)blocked\\.example$/.test(host)) return "+proxy";
+    if (shExpMatch(host, "*.tunnel.example")) return "+socks";
+    return "DIRECT";
+  },
+  "+proxy": function(url, host, scheme) {
+    "use strict";
+    return "PROXY 127.0.0.1:8080; DIRECT";
+  },
+  "+socks": function(url, host, scheme) {
+    "use strict";
+    return "SOCKS5 127.0.0.1:1080; SOCKS 127.0.0.1:1080";
+  }
+});`;
+{
+  // ZeroOmega's Auto Switch in Chromium: the browser's setting is a PAC
+  // script, and what it resolves to depends on the URL.
+  const h = build({ offscreen: "pac", proxy: { mode: "pac_script", pacScript: { data: SWITCHER_PAC, mandatory: true } } });
+  await tick(4);
+  await h.send({ type: "download-url", url: "https://cdn.blocked.example/pack.zip" });
+  check("pac: a host the switcher routes through its proxy takes that proxy",
+    h.sent.at(-1)?.proxy === "http://127.0.0.1:8080", JSON.stringify(h.sent.at(-1)?.proxy));
+  await h.send({ type: "download-url", url: "https://files.tunnel.example/pack.zip" });
+  check("pac: a SOCKS5 profile is handed over as socks5",
+    h.sent.at(-1)?.proxy === "socks5://127.0.0.1:1080", JSON.stringify(h.sent.at(-1)?.proxy));
+  await h.send({ type: "download-url", url: "https://open.example/pack.zip" });
+  check("pac: a host the script sends DIRECT gets no proxy",
+    h.sent.at(-1)?.proxy === null, JSON.stringify(h.sent.at(-1)?.proxy));
+  check("pac: one offscreen document serves every capture",
+    h.pacDoc.created.length === 1 && h.pacDoc.created[0].reasons.includes("IFRAME_SCRIPTING"),
+    JSON.stringify(h.pacDoc.created));
+  // Chromium hands the script only the origin of an https URL; a rule keyed
+  // on a path must not see one here that the browser would not show it.
+  check("pac: an https URL reaches the script as its origin only",
+    h.pacDoc.asked[0]?.url === "https://cdn.blocked.example/" && h.pacDoc.asked[0]?.host === "cdn.blocked.example",
+    JSON.stringify(h.pacDoc.asked[0]));
+
+  check("pac: the popup is told the route for the page in front",
+    (await h.send({ type: "proxy-status" }))?.spec === null);
+}
+{
+  // ZeroOmega's PAC profile points at a URL rather than inlining the script.
+  const fetchImpl = async (url) => ({ ok: url === "http://pac.example/proxy.pac", text: async () => SWITCHER_PAC });
+  const h = build({ offscreen: "pac", fetchImpl, proxy: { mode: "pac_script", pacScript: { url: "http://pac.example/proxy.pac" } } });
+  await tick(4);
+  await h.send({ type: "download-url", url: "http://www.blocked.example/pack.zip" });
+  check("pac: a script fetched by URL is run the same way",
+    h.sent.at(-1)?.proxy === "http://127.0.0.1:8080", JSON.stringify(h.sent.at(-1)?.proxy));
+}
+{
+  // A script that throws, or one with no FindProxyForURL, is not a proxy.
+  for (const data of ["throw new Error('boom')", "var nothing = 1;"]) {
+    const h = build({ offscreen: "pac", proxy: { mode: "pac_script", pacScript: { data } } });
+    await tick(4);
+    await h.send({ type: "download-url", url: "https://cdn.example/pack.zip" });
+    check(`pac: a broken script leaves Hydra to decide (${data})`,
+      h.sent.at(-1)?.proxy === null, JSON.stringify(h.sent.at(-1)?.proxy));
+  }
+}
+{
+  // A script that never returns: the capture still goes out, without a
+  // proxy, and the stuck document is discarded for the next one.
+  const h = build({ offscreen: "hang", proxy: { mode: "pac_script", pacScript: { data: SWITCHER_PAC } } });
+  await tick(4);
+  const sent = h.send({ type: "download-url", url: "https://cdn.blocked.example/pack.zip" });
+  const raced = await Promise.race([sent.then(() => "answered"), new Promise((r) => setTimeout(() => r("hung"), 6000))]);
+  check("pac: a script that never answers does not park the download",
+    raced === "answered" && h.sent.at(-1)?.proxy === null, JSON.stringify([raced, h.sent.at(-1)?.proxy]));
+  check("pac: and the stuck document is closed", h.pacDoc.closed === 1, String(h.pacDoc.closed));
+}
+{
+  // A browser with no offscreen API (Firefox reports PAC as autoConfig and
+  // never reaches this) has nowhere to run the script: no proxy known.
+  const h = build({ proxy: { mode: "pac_script", pacScript: { data: SWITCHER_PAC } } });
+  await tick(4);
+  await h.send({ type: "download-url", url: "https://cdn.blocked.example/pack.zip" });
+  check("pac: without an offscreen document the script is not run",
+    h.sent.at(-1)?.proxy === null, JSON.stringify(h.sent.at(-1)?.proxy));
+}
+
+const FIREFOX_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:140.0) Gecko/20100101 Firefox/140.0";
+{
+  // ZeroOmega in Firefox routes each request from `proxy.onRequest`; the
+  // settings still say "system", and only the response says where it went.
+  const h = build({ gecko: true, ua: FIREFOX_UA, proxy: { proxyType: "system" } });
+  await tick(4);
+  h.observed({ url: "https://cdn.example/page.js", proxyInfo: { type: "socks", host: "127.0.0.1", port: 1080, proxyDNS: true, username: "u" } });
+  h.observed({ url: "https://open.example/page.js", proxyInfo: { type: "direct", host: "", port: -1 } });
+  await h.send({ type: "download-url", url: "https://cdn.example/pack.zip" });
+  check("firefox route: the proxy a response from that origin took is sent",
+    h.sent.at(-1)?.proxy === "socks5://127.0.0.1:1080", JSON.stringify(h.sent.at(-1)?.proxy));
+  await h.send({ type: "download-url", url: "https://open.example/pack.zip" });
+  check("firefox route: an origin reached directly gets no proxy",
+    h.sent.at(-1)?.proxy === null, JSON.stringify(h.sent.at(-1)?.proxy));
+  await h.send({ type: "download-url", url: "https://never-seen.example/pack.zip" });
+  check("firefox route: an origin never seen is left to Hydra",
+    h.sent.at(-1)?.proxy === null, JSON.stringify(h.sent.at(-1)?.proxy));
+  await h.send({ type: "download-url", url: "http://cdn.example/pack.zip" });
+  check("firefox route: another scheme is another origin",
+    h.sent.at(-1)?.proxy === null, JSON.stringify(h.sent.at(-1)?.proxy));
+
+  // The route changes when the switcher's rules do; the latest one wins.
+  h.observed({ url: "https://cdn.example/other.js", proxyInfo: { type: "http", host: "::1", port: 3128 } });
+  await h.send({ type: "download-url", url: "https://cdn.example/pack.zip" });
+  check("firefox route: the newest observation wins, IPv6 bracketed",
+    h.sent.at(-1)?.proxy === "http://[::1]:3128", JSON.stringify(h.sent.at(-1)?.proxy));
+}
+{
+  // The download's own response, at the blocking header stage, is the first
+  // the extension sees from that origin — the capture it triggers must use it.
+  const h = build({ gecko: true, ua: FIREFOX_UA, proxy: { proxyType: "none" } });
+  await tick(4);
+  const verdict = h.headResponse({
+    url: "https://dl.example/pack.zip",
+    headers: { "content-type": "application/zip", "content-length": "5000000" },
+    proxyInfo: { type: "socks4", host: "10.0.0.1", port: 1081, proxyDNS: false },
+  });
+  await verdict;
+  const dl = h.sent.find((m) => m.type === "download");
+  check("firefox route: the download's own response names its proxy",
+    dl?.proxy === "socks4://10.0.0.1:1081", JSON.stringify(dl?.proxy));
+}
+{
+  // Off means off: without the permission the observation is never used.
+  const h = build({ gecko: true, ua: FIREFOX_UA });
+  await tick(4);
+  h.observed({ url: "https://cdn.example/page.js", proxyInfo: { type: "http", host: "proxy.example", port: 8080 } });
+  await h.send({ type: "download-url", url: "https://cdn.example/pack.zip" });
+  check("firefox route: without the permission nothing is passed on",
+    h.sent.at(-1)?.proxy === null, JSON.stringify(h.sent.at(-1)?.proxy));
+}
+{
+  // Manual settings still decide on their own, bypass list included.
+  const h = build({ gecko: true, ua: FIREFOX_UA, proxy: { proxyType: "manual", http: "proxy.example:3128", passthrough: ".corp.example" } });
+  await tick(4);
+  h.observed({ url: "https://files.corp.example/x", proxyInfo: { type: "http", host: "other.example", port: 1 } });
+  await h.send({ type: "download-url", url: "https://files.corp.example/pack.zip" });
+  check("firefox route: manual settings with a bypass are not second-guessed",
+    h.sent.at(-1)?.proxy === null, JSON.stringify(h.sent.at(-1)?.proxy));
 }
 {
   // Firefox's own shape, and the SOCKS fallback for a scheme its per-protocol
@@ -923,6 +1174,12 @@ function build({ hydraReply = { ok: true }, store = {}, gecko = false, tab = nul
   const safari = JSON.parse(readFileSync("extensions/safari/manifest.json", "utf8"));
   check("proxy: Safari has no proxy API, so it does not ask for one",
     !(safari.optional_permissions || []).includes("proxy"));
+  check("pac: the sandbox page is declared, so it may compile the script",
+    (manifest.sandbox?.pages || []).includes("pac-sandbox.html") && manifest.permissions.includes("offscreen"),
+    JSON.stringify([manifest.sandbox, manifest.permissions]));
+  const firefox = JSON.parse(readFileSync("extensions/firefox/manifest.json", "utf8"));
+  check("pac: Firefox, with no offscreen documents, is not asked for one",
+    !firefox.sandbox && !firefox.permissions.includes("offscreen"));
 }
 
 // ------------------------------------------- 7. what the Firefox manifest pins

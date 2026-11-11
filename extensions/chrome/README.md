@@ -195,11 +195,17 @@ id?, error?}`.
   overwritten today. The entry for the URL's scheme is the one that is sent,
   the browser's bypass list (`bypassList` / `passthrough`, including
   `<local>`) is honoured, and no credentials are involved: neither browser's
-  API exposes them. Two settings are deliberately *not* passed on, because
-  neither browser will say what they resolve to: following the **machine's**
-  proxy (`system` / `autoDetect`) and a **PAC script**, which is a program
-  neither the extension nor Hydra runs. Both leave the download on whatever
-  Hydra's Options say. The read is capped at 1.5 s, because a capture awaits
+  API exposes them. Following the **machine's** proxy (`system` /
+  `autoDetect`) is deliberately *not* passed on, because the browser will not
+  say what it resolves to; it leaves the download on whatever Hydra's
+  Options say. A proxy switcher (ZeroOmega, SwitchyOmega) is followed: in
+  Chromium its **PAC script** (inline or by URL) is run for the download's
+  URL in a sandbox page hosted by an offscreen document — MV3 service
+  workers cannot compile code — with the PAC helpers but no DNS, capped at
+  3 s, and its first `PROXY`/`HTTPS`/`SOCKS*` entry is sent (`DIRECT` sends
+  none). In Firefox the switcher routes requests from `proxy.onRequest`,
+  which the settings never show, so the `proxyInfo` of the last response
+  seen from the download's origin is sent instead. The read is capped at 1.5 s, because a capture awaits
   it and a browser that answers neither way would leave the download parked
   on a question about a proxy. `proxy` is an **optional permission** and *is* the
   switch — the API does not exist until the checkbox grants it, so there is
