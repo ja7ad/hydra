@@ -42,6 +42,7 @@ impl SparseSink {
             .write(true)
             .read(true)
             .open(path)?;
+        mark_sparse(&file);
         file.set_len(size)?;
         Ok(SparseSink {
             file: Some(file),
@@ -187,6 +188,78 @@ impl SparseSink {
     }
 }
 
+/// Ask NTFS for holes. Without the sparse flag, `set_len` only moves the end of
+/// file: the first write far into it makes the kernel zero-fill every byte below,
+/// synchronously inside that `WriteFile` — gigabytes of disk writes that block
+/// the engine and cannot be cancelled. Best effort: FAT32 and exFAT have no
+/// sparse files, and there is nothing cheaper to fall back to.
+#[cfg(windows)]
+fn mark_sparse(file: &std::fs::File) {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::System::{Ioctl::FSCTL_SET_SPARSE, IO::DeviceIoControl};
+    let mut returned = 0u32;
+    // SAFETY: the handle is open for writing and outlives the call; a null input
+    // buffer means "set sparse", and FSCTL_SET_SPARSE has no output buffer.
+    unsafe {
+        DeviceIoControl(
+            file.as_raw_handle(),
+            FSCTL_SET_SPARSE,
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            0,
+            &mut returned,
+            std::ptr::null_mut(),
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn mark_sparse(_file: &std::fs::File) {}
+
+/// Bytes the filesystem has actually allocated for `path`, capped at its length.
+///
+/// The staging file is full-length from its first byte, so its length says nothing
+/// about what arrived; for a sparse file the allocation does. On a filesystem without
+/// holes this is the full length.
+pub fn allocated_bytes(path: &std::path::Path) -> io::Result<u64> {
+    let meta = std::fs::metadata(path)?;
+    Ok(raw_allocation(path, &meta)?.min(meta.len()))
+}
+
+#[cfg(unix)]
+fn raw_allocation(_path: &std::path::Path, meta: &std::fs::Metadata) -> io::Result<u64> {
+    use std::os::unix::fs::MetadataExt;
+    Ok(meta.blocks().saturating_mul(512))
+}
+
+#[cfg(windows)]
+fn raw_allocation(path: &std::path::Path, _meta: &std::fs::Metadata) -> io::Result<u64> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::{GetLastError, SetLastError, NO_ERROR};
+    use windows_sys::Win32::Storage::FileSystem::{GetCompressedFileSizeW, INVALID_FILE_SIZE};
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    let mut high = 0u32;
+    // INVALID_FILE_SIZE is also a legitimate low word; only the last error tells the
+    // two apart, so clear it first.
+    // SAFETY: `wide` is NUL-terminated and outlives the call; `high` is a valid
+    // out-pointer; the error calls have no preconditions.
+    let (low, err) = unsafe {
+        SetLastError(NO_ERROR);
+        let low = GetCompressedFileSizeW(wide.as_ptr(), &mut high);
+        (low, GetLastError())
+    };
+    if low == INVALID_FILE_SIZE && err != NO_ERROR {
+        return Err(io::Error::from_raw_os_error(err as i32));
+    }
+    Ok((u64::from(high) << 32) | u64::from(low))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn raw_allocation(_path: &std::path::Path, meta: &std::fs::Metadata) -> io::Result<u64> {
+    Ok(meta.len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,5 +329,55 @@ mod tests {
             "set_len must cut a longer pre-existing file, or a stale tail survives"
         );
         let _ = std::fs::remove_file(&p);
+    }
+
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("hydra_sink_{tag}_{}", std::process::id()))
+    }
+
+    #[test]
+    fn a_far_write_allocates_only_the_bytes_written() {
+        // Issue #414: on NTFS without the sparse flag, this one 64 KiB write near the
+        // end made the kernel write 256 MiB of zeros below it before returning.
+        let path = scratch("far_write");
+        let _ = std::fs::remove_file(&path);
+        const SIZE: u64 = 256 << 20;
+        let sink = SparseSink::create(&path.to_string_lossy(), SIZE).unwrap();
+        sink.write_at(SIZE - (64 << 10), &[0x5A; 64 << 10]).unwrap();
+        drop(sink);
+
+        let allocated = allocated_bytes(&path).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), SIZE);
+        assert!(
+            allocated < 16 << 20,
+            "a staging file must stay sparse below its first write, got {allocated} bytes allocated"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_fully_written_file_reports_its_whole_length_allocated() {
+        let path = scratch("full");
+        std::fs::write(&path, vec![0x11; 3 * 4096 + 5]).unwrap();
+        assert_eq!(allocated_bytes(&path).unwrap(), 3 * 4096 + 5);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn allocation_of_a_missing_file_is_an_error() {
+        assert!(allocated_bytes(&scratch("missing")).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_staging_file_carries_the_sparse_attribute() {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SPARSE_FILE;
+        let path = scratch("attr");
+        let _ = std::fs::remove_file(&path);
+        drop(SparseSink::create(&path.to_string_lossy(), 1 << 20).unwrap());
+        let attrs = std::fs::metadata(&path).unwrap().file_attributes();
+        assert_ne!(attrs & FILE_ATTRIBUTE_SPARSE_FILE, 0);
+        let _ = std::fs::remove_file(&path);
     }
 }
