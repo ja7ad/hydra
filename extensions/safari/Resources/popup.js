@@ -204,9 +204,9 @@ const PROXY_OPTIONAL = (chrome.runtime.getManifest().optional_permissions || [])
   "proxy"
 );
 
-// Set, but to something the browser will not spell out for us.
+// Direct for this page, or set to something the browser will not spell out.
 const PROXY_OPAQUE =
-  "This browser is set to follow the machine's proxy, or a configuration script. Neither says what it resolves to, so downloads take whatever Hydra's Options say.";
+  "This browser goes direct for this page, or follows the machine's proxy, which it does not say. Downloads take whatever Hydra's Options say.";
 
 async function refreshProxy() {
   if (!PROXY_OPTIONAL) return;

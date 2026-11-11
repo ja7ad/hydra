@@ -460,11 +460,13 @@ async function altBypassed() {
 // and a second stored flag beside the permission could only ever disagree
 // with it.
 //
-// Two things are deliberately NOT captured. A browser following the machine's
-// proxy ("system" / "autoDetect") will not say what that is, and a PAC script
-// is a program neither this extension nor Hydra runs — see the same note in
-// hydra-gui's proxy.rs. Both resolve to "no proxy known", which leaves the
+// A browser following the machine's proxy ("system" / "autoDetect") will not
+// say what that is, and resolves to "no proxy known", which leaves the
 // download on whatever Options says, exactly as if this were switched off.
+// A proxy switcher (ZeroOmega, SwitchyOmega) is the other case people have:
+// in Chromium it installs a PAC script, which is run here for the one URL;
+// in Firefox it routes each request from a listener the settings never show,
+// so the route a response actually took is remembered instead.
 
 // A local settings read answers in microseconds. The ceiling is not about
 // slowness: a capture AWAITS this, and a browser whose namespace neither
@@ -618,12 +620,147 @@ function geckoProxy(cfg, url) {
   );
 }
 
+// What a PAC entry's keyword means to Chromium, the one running the script.
+// A bare SOCKS there is version 4, unlike the bare word in a settings field.
+const PAC_KINDS = {
+  PROXY: "http",
+  HTTPS: "https",
+  SOCKS: "socks4",
+  SOCKS4: "socks4",
+  SOCKS5: "socks5",
+};
+
+/// The first usable entry of a `FindProxyForURL` answer such as
+/// `PROXY 127.0.0.1:8080; DIRECT`. DIRECT ahead of any proxy means the
+/// browser goes direct, and so does the download.
+function pacAnswerProxy(answer) {
+  for (const entry of String(answer ?? "").split(";")) {
+    const [kind, where] = entry.trim().split(/\s+/);
+    if (!kind) continue;
+    const upper = kind.toUpperCase();
+    if (upper === "DIRECT") return null;
+    const spec = upper in PAC_KINDS ? proxySpec(PAC_KINDS[upper], where) : null;
+    if (spec) return spec;
+  }
+  return null;
+}
+
+// A rule list can run to thousands of entries and the offscreen document may
+// have to be created first; still, a capture awaits this, so a script that
+// loops or a PAC server that never answers costs a bounded wait and then
+// "no proxy known".
+const PAC_TIMEOUT_MS = 3000;
+const PAC_DOCUMENT = "offscreen.html";
+let pacDocumentCreating = null;
+
+async function ensurePacDocument() {
+  const open = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
+  if (open.length) return;
+  pacDocumentCreating ??= chrome.offscreen
+    .createDocument({
+      url: PAC_DOCUMENT,
+      reasons: ["IFRAME_SCRIPTING"],
+      justification: "Evaluate the browser's proxy auto-config script for a captured download.",
+    })
+    // Losing a race with a service worker instance that created it first
+    // still leaves a document to talk to.
+    .catch(() => {})
+    .finally(() => {
+      pacDocumentCreating = null;
+    });
+  await pacDocumentCreating;
+}
+
+async function pacScriptText(pac) {
+  if (typeof pac?.data === "string" && pac.data.trim()) return pac.data;
+  if (!pac?.url) return null;
+  const res = await fetch(pac.url, { cache: "no-store" });
+  return res.ok ? res.text() : null;
+}
+
+/// Run Chromium's PAC script for this URL in the sandbox, as the browser
+/// would: an https URL is reduced to its origin before the script sees it.
+async function evaluatePac(pac, url) {
+  const script = await pacScriptText(pac);
+  if (!script) return null;
+  await ensurePacDocument();
+  const u = new URL(url);
+  const reply = await chrome.runtime.sendMessage({
+    target: "hydra-pac",
+    script,
+    url: u.protocol === "https:" ? `${u.origin}/` : url,
+    host: u.hostname.replace(/^\[|\]$/g, ""),
+  });
+  return reply && !reply.error ? pacAnswerProxy(reply.result) : null;
+}
+
+async function pacProxy(pac, url) {
+  if (!chrome.offscreen?.createDocument || !chrome.runtime.getContexts) return null;
+  const expired = Symbol("expired");
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(expired), PAC_TIMEOUT_MS);
+  });
+  const answer = evaluatePac(pac, url).catch(() => null);
+  const got = await Promise.race([answer, deadline]);
+  clearTimeout(timer);
+  if (got !== expired) return got;
+  // A script stuck in a loop holds the sandbox for good; closing the document
+  // discards it, and the next capture starts a fresh one.
+  chrome.offscreen.closeDocument().catch(() => {});
+  return null;
+}
+
+// Firefox: the proxy each recent response really came through, by origin.
+// Bounded, oldest first out; an origin seen again moves to the back.
+const OBSERVED_PROXY_ORIGINS = 256;
+const observedProxies = new Map();
+
+function proxyInfoSpec(info) {
+  if (!info?.host) return null;
+  const host = info.host.includes(":") && !info.host.startsWith("[") ? `[${info.host}]` : info.host;
+  const kinds = { http: "http", https: "https", socks: "socks5" };
+  const kind = info.type === "socks4" ? (info.proxyDNS ? "socks4a" : "socks4") : kinds[info.type];
+  return kind ? proxySpec(kind, `${host}:${info.port}`) : null;
+}
+
+/// Note the route a Firefox webRequest event reports. Credentials are left
+/// out, as in `proxySpec`.
+function noteProxyInfo(details) {
+  let origin;
+  try {
+    origin = new URL(details.url).origin;
+  } catch {
+    return;
+  }
+  observedProxies.delete(origin);
+  observedProxies.set(origin, proxyInfoSpec(details.proxyInfo));
+  if (observedProxies.size > OBSERVED_PROXY_ORIGINS) {
+    observedProxies.delete(observedProxies.keys().next().value);
+  }
+}
+
+function observedProxy(url) {
+  try {
+    return observedProxies.get(new URL(url).origin) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+if (BROWSER === "Mozilla Firefox") {
+  chrome.webRequest?.onHeadersReceived.addListener(noteProxyInfo, { urls: ["<all_urls>"] });
+}
+
 /// The proxy to hand over with this URL, or null for "Hydra decides".
 async function captureProxy(url) {
   const cfg = await proxyConfig();
   if (!cfg) return null;
   // The two browsers answer with different objects; each names itself.
-  if (typeof cfg.proxyType === "string") return geckoProxy(cfg, url);
+  if (typeof cfg.proxyType === "string") {
+    return cfg.proxyType === "manual" ? geckoProxy(cfg, url) : observedProxy(url);
+  }
+  if (cfg.mode === "pac_script") return pacProxy(cfg.pacScript, url);
   if (typeof cfg.mode === "string") return chromiumProxy(cfg, url);
   return null;
 }
@@ -967,6 +1104,36 @@ async function retryDeferredCaptures() {
 // therefore whether there is anything to hand back. Resuming one that was
 // never parked is not harmless: on Gecko it throws, and the throw used to be
 // swallowed next to a download that had already been cancelled.
+// ------------------------------------------------------------ form posts
+
+// A download that answered a form POST — SharePoint and OneDrive zip a folder
+// by posting its file list and tokens to `*.svc.ms/transform/zip` — has its
+// request in the body. Hydra is handed a URL and asks with a bodiless GET,
+// which the service refuses, so such a download stays with the browser.
+const POSTED_TTL_MS = 120_000;
+const POSTED_MAX = 64;
+const postedUrls = new Map();
+
+function notePosted(details) {
+  if (details.method !== "POST") return;
+  const url = details.url.split("#")[0];
+  postedUrls.delete(url);
+  postedUrls.set(url, Date.now());
+  if (postedUrls.size > POSTED_MAX) postedUrls.delete(postedUrls.keys().next().value);
+}
+
+function wasPosted(...urls) {
+  return urls.some((url) => {
+    const at = url && postedUrls.get(url.split("#")[0]);
+    return !!at && Date.now() - at < POSTED_TTL_MS;
+  });
+}
+
+chrome.webRequest?.onBeforeRequest?.addListener(notePosted, {
+  urls: ["http://*/*", "https://*/*"],
+  types: ["main_frame", "sub_frame"],
+});
+
 async function decideCapture(item, parked) {
   const url = captureUrl(item);
 
@@ -984,6 +1151,7 @@ async function decideCapture(item, parked) {
   };
 
   if (item.byExtensionId === chrome.runtime.id) return giveBack("started by this extension");
+  if (wasPosted(url, item.url, item.finalUrl)) return giveBack("answered a form POST");
 
   const why = await offerToHydra({
     url,
