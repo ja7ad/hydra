@@ -1178,7 +1178,55 @@ pub fn apply_with(
     if let Some(bundle) = &bundle {
         finish_bundle(bundle, opts.version.as_deref(), &mut report);
     }
+    if let Some(version) = opts.version.as_deref() {
+        match set_uninstall_version(install_dir, version) {
+            Ok(true) => report.notes.push(format!("DisplayVersion -> {version}")),
+            Ok(false) => {}
+            Err(e) => report
+                .notes
+                .push(format!("DisplayVersion update failed: {e}")),
+        }
+    }
     Ok(report)
+}
+
+/// Restamp `DisplayVersion` in the setup installer's uninstall entry, which
+/// Settings > Apps and every inventory tool read; a swap in place would
+/// otherwise leave it naming the version that was first installed.
+/// `Ok(false)` off Windows, or when the entry belongs to another install.
+#[cfg(windows)]
+fn set_uninstall_version(install_dir: &Path, version: &str) -> io::Result<bool> {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE};
+    // The Add/Remove Programs entry `hydra-installer.nsi` writes.
+    const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Hydra";
+    let key = match winreg::RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(UNINSTALL_KEY, KEY_READ | KEY_SET_VALUE)
+    {
+        Ok(key) => key,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    let location: String = key.get_value("InstallLocation").unwrap_or_default();
+    if !same_install_dir(&location, install_dir) {
+        return Ok(false);
+    }
+    key.set_value("DisplayVersion", &version)?;
+    Ok(true)
+}
+
+#[cfg(not(windows))]
+fn set_uninstall_version(_install_dir: &Path, _version: &str) -> io::Result<bool> {
+    Ok(false)
+}
+
+/// Whether the installer's recorded `InstallLocation` names `install_dir`.
+/// Windows paths compare without case, and NSIS may or may not leave a
+/// trailing separator on `$INSTDIR`.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn same_install_dir(location: &str, install_dir: &Path) -> bool {
+    let trim = |s: &str| s.trim_end_matches(['\\', '/']).replace('/', "\\");
+    let location = trim(location);
+    !location.is_empty() && location.eq_ignore_ascii_case(&trim(&install_dir.to_string_lossy()))
 }
 
 /// The short second name every Hydra installer puts next to the CLI, because
@@ -1551,6 +1599,33 @@ fn user_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn uninstall_entry_matches_its_own_install_dir_only() {
+        let dir = Path::new(r"C:\Users\me\AppData\Local\Programs\Hydra");
+        assert!(same_install_dir(
+            r"C:\Users\me\AppData\Local\Programs\Hydra",
+            dir
+        ));
+        assert!(same_install_dir(
+            r"c:\users\ME\appdata\local\programs\hydra\",
+            dir
+        ));
+        assert!(same_install_dir(
+            "C:/Users/me/AppData/Local/Programs/Hydra",
+            dir
+        ));
+        assert!(!same_install_dir(r"D:\Portable\Hydra", dir));
+        assert!(!same_install_dir("", dir));
+    }
+
+    #[test]
+    fn uninstall_version_is_left_alone_off_windows() {
+        if cfg!(windows) {
+            return;
+        }
+        assert!(!set_uninstall_version(Path::new("/opt/hydra"), "1.2.0").unwrap());
+    }
 
     #[test]
     fn appimage_asset_is_matched_by_shape() {
