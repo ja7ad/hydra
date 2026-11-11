@@ -2287,7 +2287,7 @@ dependencies = [
 
 [[package]]
 name = "hya-cli"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -2340,7 +2340,7 @@ dependencies = [
 
 [[package]]
 name = "hya-gui"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "aes",
  "blake3",
@@ -2396,7 +2396,7 @@ dependencies = [
 
 [[package]]
 name = "hya-host"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "embed-resource",
  "serde_json",
@@ -2465,7 +2465,7 @@ dependencies = [
 
 [[package]]
 name = "hya-plugin-cli"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2503,7 +2503,7 @@ dependencies = [
 
 [[package]]
 name = "hya-updater"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "blake3",
  "clap",
