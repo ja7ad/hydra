@@ -553,12 +553,15 @@ impl Connector for TcpConnector {
     }
 }
 
+pub mod guise;
 pub mod http;
 pub mod pool;
 pub mod sink;
 pub mod transfer;
 
 pub use cookies::{Cookie, CookieJar};
+
+pub use guise::{probe_admitted, Guise, BROWSER_USER_AGENT};
 
 pub use http::{
     describe_status, fetch_object, fetch_range_retry, fetch_small, fetch_small_range,
