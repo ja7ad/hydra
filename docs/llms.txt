@@ -5,7 +5,7 @@
 ## Documentation & Pages
 
 - [Overview & Download](https://hydra.javad.dev/): Landing page with binary installers for Windows (x64/Arm64), macOS (Intel/Apple Silicon .dmg/.pkg), Linux (.deb/.rpm/tarball/PPA/COPR), and CLI installation scripts.
-- [Feature Deep Dive](https://hydra.javad.dev/features.html): Comprehensive architectural breakdown of all 28 core engine, storage, networking, embedding, and interface features.
+- [Feature Deep Dive](https://hydra.javad.dev/features.html): Comprehensive architectural breakdown of all 30 core engine, storage, networking, embedding, and interface features.
 - [Plugins](https://hydra.javad.dev/plugins.html): Searchable plugin catalog with package downloads and desktop installation links. The official desktop/CLI index is https://hydra.javad.dev/plugins.json.
 - [Changelog](https://hydra.javad.dev/changelog.html): Release history, version notes, new features, bug fixes, and breaking change tracking.
 - [Privacy Policy](https://hydra.javad.dev/privacy.html): Privacy commitments and permissions documentation for the desktop app and browser extensions.
