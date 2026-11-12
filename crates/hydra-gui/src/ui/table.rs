@@ -78,12 +78,7 @@ fn header<'a>(app: &App, c: &[(Column, f32)], tw: f32) -> El<'a> {
                 .size(theme::FONT_SIZE)
                 .wrapping(iced::widget::text::Wrapping::None),
         )
-        .padding(iced::Padding {
-            top: 3.0,
-            bottom: 3.0,
-            left: CELL_PAD_X,
-            right: CELL_PAD_X,
-        })
+        .padding([3.0, CELL_PAD_X])
         .width(*w)
         .height(CELL_H)
         .clip(true)
@@ -133,12 +128,7 @@ fn cell<'a>(content: El<'a>, w: f32) -> El<'a> {
     container(content)
         .width(w)
         .height(CELL_H)
-        .padding(iced::Padding {
-            top: 2.0,
-            bottom: 2.0,
-            left: CELL_PAD_X,
-            right: CELL_PAD_X,
-        })
+        .padding([2.0, CELL_PAD_X])
         .clip(true)
         .into()
 }

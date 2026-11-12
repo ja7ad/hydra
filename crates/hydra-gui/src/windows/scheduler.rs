@@ -328,18 +328,23 @@ fn schedule_tab<'a>(q: &'a QueueDef) -> El<'a> {
     col.into()
 }
 
-/// The four cells of a queue member's row, as [`files_tab`] paints them and
-/// [`fit_width`] measures them.
-fn file_texts(d: &crate::model::DownloadItem) -> [String; 4] {
-    [
-        d.file_name.clone(),
-        d.size.map(fmt::size2).unwrap_or_default(),
-        d.status_text(),
-        match d.state {
+/// Cell `index` of a queue member's row, as [`files_tab`] paints it and
+/// [`fit_width`] measures it.
+fn file_text(d: &crate::model::DownloadItem, index: usize) -> String {
+    match index {
+        0 => d.file_name.clone(),
+        1 => d.size.map(fmt::size2).unwrap_or_default(),
+        2 => d.status_text(),
+        _ => match d.state {
             DlState::Receiving => d.eta_secs.map(fmt::eta).unwrap_or_default(),
             _ => String::new(),
         },
-    ]
+    }
+}
+
+/// The four cells of a queue member's row.
+fn file_texts(d: &crate::model::DownloadItem) -> [String; 4] {
+    std::array::from_fn(|i| file_text(d, i))
 }
 
 const FILE_HEADERS: [&str; 4] = ["File Name", "Size", "Status", "Time Left"];
@@ -363,8 +368,8 @@ pub fn fit_width(app: &App, index: usize) -> Option<f32> {
         .iter()
         .filter(|d| in_selected_queue(app, d))
     {
-        let text = &file_texts(d)[index];
-        w = w.max(crate::font::line_width(text, theme::FONT_SIZE));
+        let text = file_text(d, index);
+        w = w.max(crate::font::line_width(&text, theme::FONT_SIZE));
     }
     // `cell` has no padding; one pixel each side is rounding slack, so a text
     // measured at a fractional width is never cut by its last pixel.
