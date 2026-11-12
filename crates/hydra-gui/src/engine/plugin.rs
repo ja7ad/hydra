@@ -1133,6 +1133,34 @@ mod tests {
         assert!(complete);
     }
 
+    /// A plugin transfer running alone parks the HTTP lane at 1 B/s. A read
+    /// that reserves against it then, and is still asleep when the lane gets
+    /// its share back, used to sleep the parked price out: hours.
+    #[tokio::test]
+    async fn an_http_read_parked_behind_a_plugin_transfer_moves_when_the_lane_reopens() {
+        let _alone = RATES_IN_USE.write().await;
+        const CAP: u64 = 4 * 1024 * 1024;
+        let pace = crate::engine::pace_for(&Arc::new(hya_net::polite::RateLimiter::unlimited()));
+        set_global_limit(CAP);
+        let (plugin_transfer, _) = NativeRateGuard::register(9_414_001, 0);
+
+        let reopened = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            drop(plugin_transfer);
+        });
+        let t0 = std::time::Instant::now();
+        pace.wait(1024).await;
+        pace.wait(1024).await;
+        let asleep = t0.elapsed();
+        reopened.await.unwrap();
+        set_global_limit(0);
+
+        assert!(
+            asleep < std::time::Duration::from_secs(5),
+            "{asleep:?} asleep on a debt priced while the lane was parked"
+        );
+    }
+
     #[test]
     fn native_caps_share_the_budget_and_reserve_bandwidth_for_http() {
         let first = Arc::new(std::sync::atomic::AtomicU64::new(0));
