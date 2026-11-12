@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
   <meta name="author" content="Javad Rajabzadeh">
-  <meta name="theme-color" content="#0a0e13">
+  <meta name="theme-color" content="#09090b">
 <title>Changelog — Hydra Download Manager (HDM)</title>
 <meta name="description" content="All notable changes, new features, bug fixes, and improvements across every Hydra Download Manager (HDM) release.">
 <link rel="canonical" href="https://hydra.javad.dev/changelog.html">
-<link rel="icon" type="image/png" href="logo.png">
+<link rel="icon" type="image/png" href="logo-64.png">
+<link rel="apple-touch-icon" href="logo.png">
 <meta property="og:title" content="Changelog — Hydra Download Manager (HDM)">
 <meta property="og:description" content="All notable changes, new features, bug fixes, and improvements across every Hydra Download Manager (HDM) release.">
 <meta property="og:image" content="https://hydra.javad.dev/img/screenshot.jpg">
@@ -23,273 +24,8 @@
 <meta property="og:site_name" content="Hydra Download Manager">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0a0e13;
-    --bg-raised: #0f151d;
-    --line: rgba(148, 197, 222, 0.12);
-    --line-strong: rgba(148, 197, 222, 0.22);
-    --text: #e7edf3;
-    --text-dim: #93a4b4;
-    --text-faint: #64778a;
-    --accent: #2dd4d4;
-    --accent-ink: #06282e;
-    --grad: linear-gradient(100deg, #2dd4d4, #2596e8);
-    --radius: 16px;
-    --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-sans);
-    font-size: 16px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
-  }
-
-  a { color: inherit; text-decoration: none; }
-
-  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
-
-  /* Navigation Header */
-  .nav {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 40;
-    background: rgba(10, 14, 19, 0.85);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--line);
-  }
-  .nav-inner {
-    height: 68px; display: flex; align-items: center; justify-content: space-between;
-  }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: 0.01em; }
-  .brand img { width: 30px; height: 30px; }
-  .nav-links { display: flex; align-items: center; gap: 24px; font-size: 14.5px; color: var(--text-dim); }
-  .nav-links a { transition: color 0.15s ease; }
-  .nav-links a:hover, .nav-links a.active { color: var(--text); }
-  .nav-links a.active { color: var(--accent); font-weight: 600; }
-  .nav-gh { display: inline-flex; align-items: center; }
-  .nav-gh svg { width: 21px; height: 21px; }
-
-  .nav-toggle {
-    display: none;
-    background: transparent;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    color: var(--text);
-    padding: 6px;
-    cursor: pointer;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s ease, border-color 0.15s ease;
-  }
-  .nav-toggle:hover {
-    background: rgba(148, 197, 222, 0.08);
-    border-color: var(--line-strong);
-  }
-  .nav-toggle svg { width: 22px; height: 22px; }
-
-  /* Hero Section */
-  .hero-section {
-    padding: 136px 0 48px;
-    position: relative;
-    text-align: center;
-  }
-  .hero-section::before {
-    content: ""; position: absolute; inset: 0; z-index: -1;
-    background: radial-gradient(600px 320px at 50% 10%, rgba(37, 150, 232, 0.12), transparent 70%);
-  }
-  .hero-section h1 {
-    font-size: clamp(34px, 4vw, 50px); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1;
-  }
-  .hero-section h1 .grad {
-    background: var(--grad);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  .hero-section p {
-    margin-top: 14px; font-size: 17px; color: var(--text-dim); max-width: 54ch; margin-left: auto; margin-right: auto;
-  }
-
-  /* Search & Filter Toolbar */
-  .toolbar {
-    margin: 36px 0 40px; display: flex; flex-direction: column; gap: 16px;
-  }
-  .search-wrap { position: relative; width: 100%; }
-  .search-wrap svg {
-    position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
-    width: 18px; height: 18px; color: var(--text-faint); pointer-events: none;
-  }
-  .search-input {
-    width: 100%; background: var(--bg-raised); border: 1px solid var(--line);
-    border-radius: 12px; padding: 13px 16px 13px 46px; font-family: var(--font-sans);
-    font-size: 15px; color: var(--text); outline: none;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  }
-  .search-input:focus {
-    border-color: rgba(45, 212, 212, 0.4);
-    box-shadow: 0 0 20px rgba(45, 212, 212, 0.12);
-  }
-  .search-input::placeholder { color: var(--text-faint); }
-
-  .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .filter-label { font-size: 13px; color: var(--text-faint); margin-right: 4px; }
-  .filter-chip {
-    font-family: var(--font-sans); font-size: 13px; font-weight: 500;
-    color: var(--text-dim); background: rgba(148, 197, 222, 0.04);
-    border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px;
-    cursor: pointer; transition: all 0.15s ease;
-  }
-  .filter-chip:hover { color: var(--text); border-color: var(--line-strong); }
-  .filter-chip.active {
-    color: var(--accent); border-color: rgba(45, 212, 212, 0.35);
-    background: rgba(45, 212, 212, 0.08); font-weight: 600;
-  }
-
-  /* Release Cards */
-  .releases-list { display: flex; flex-direction: column; gap: 32px; padding-bottom: 96px; }
-
-  .release-card {
-    border: 1px solid var(--line); border-radius: var(--radius);
-    background: var(--bg-raised); padding: 32px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  }
-  .release-card:hover { border-color: var(--line-strong); }
-
-  .release-header {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 16px; flex-wrap: wrap; padding-bottom: 20px;
-    border-bottom: 1px solid var(--line);
-  }
-  .release-title-group { display: flex; align-items: center; gap: 12px; }
-  .release-version {
-    font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: var(--text);
-  }
-  .release-date {
-    font-family: var(--font-mono); font-size: 13px; color: var(--text-faint);
-    background: rgba(148, 197, 222, 0.06); border: 1px solid var(--line);
-    padding: 3px 10px; border-radius: 999px;
-  }
-  .release-actions { display: flex; align-items: center; gap: 10px; }
-  .release-link {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 13px; font-weight: 500; color: var(--accent);
-    background: rgba(45, 212, 212, 0.08); border: 1px solid rgba(45, 212, 212, 0.2);
-    padding: 5px 12px; border-radius: 8px; transition: all 0.15s ease;
-  }
-  .release-link:hover { background: rgba(45, 212, 212, 0.15); border-color: rgba(45, 212, 212, 0.35); }
-  .release-link svg { width: 14px; height: 14px; }
-
-  /* Sections inside a release */
-  .change-section { margin-top: 24px; }
-  .section-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 12.5px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.04em; padding: 4px 10px; border-radius: 6px; margin-bottom: 14px;
-  }
-  .section-badge.added {
-    background: rgba(45, 212, 212, 0.12); color: #2dd4d4; border: 1px solid rgba(45, 212, 212, 0.25);
-  }
-  .section-badge.fixed {
-    background: rgba(245, 158, 11, 0.12); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.25);
-  }
-  .section-badge.changed {
-    background: rgba(168, 85, 247, 0.12); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.25);
-  }
-
-  .change-list { list-style: none; display: flex; flex-direction: column; gap: 12px; padding-left: 4px; }
-  .change-item {
-    position: relative; padding-left: 20px; font-size: 15px; color: var(--text-dim); line-height: 1.6;
-  }
-  .change-item::before {
-    content: "•"; position: absolute; left: 4px; top: 0; color: var(--text-faint); font-size: 18px;
-  }
-  .change-item strong { color: var(--text); font-weight: 600; }
-  .change-item code {
-    font-family: var(--font-mono); font-size: 13px; color: var(--accent);
-    background: rgba(45, 212, 212, 0.06); border: 1px solid rgba(45, 212, 212, 0.15);
-    padding: 1px 6px; border-radius: 4px;
-  }
-
-  /* Empty state */
-  .no-results {
-    display: none; text-align: center; padding: 64px 20px;
-    border: 1px dashed var(--line-strong); border-radius: var(--radius);
-    color: var(--text-dim);
-  }
-  .no-results p { margin-top: 8px; font-size: 14.5px; color: var(--text-faint); }
-
-  /* Footer */
-  footer { border-top: 1px solid var(--line); padding: 40px 0; }
-  .foot {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 20px; flex-wrap: wrap;
-  }
-  .foot-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
-  .foot-brand img { width: 24px; height: 24px; }
-  .foot p { font-size: 13.5px; color: var(--text-faint); }
-  .foot p a { color: var(--text-dim); }
-  .foot p a:hover { color: var(--accent); }
-  .foot-social { display: flex; gap: 14px; }
-  .foot-social a { color: var(--text-dim); display: inline-flex; transition: color 0.15s ease; }
-  .foot-social a:hover { color: var(--text); }
-  .foot-social svg { width: 20px; height: 20px; }
-
-  @media (max-width: 768px) {
-    .nav-toggle { display: flex; }
-    .nav-links {
-      display: none;
-      position: absolute;
-      top: 68px;
-      left: 0;
-      right: 0;
-      background: rgba(10, 14, 19, 0.96);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--line-strong);
-      flex-direction: column;
-      align-items: stretch;
-      padding: 16px 24px 24px;
-      gap: 12px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
-    }
-    .nav-links.open { display: flex; }
-    .nav-links a {
-      font-size: 15.5px;
-      padding: 10px 0;
-      border-bottom: 1px solid rgba(148, 197, 222, 0.08);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .nav-links a:last-child { border-bottom: none; }
-    .nav-gh { justify-content: flex-start; gap: 8px; }
-    .nav-gh::after { content: "GitHub Repository"; font-weight: 500; font-size: 15px; }
-
-    .hero-section { padding: 110px 0 36px; }
-    .hero-section h1 { font-size: clamp(28px, 7vw, 42px); }
-    .release-card { padding: 24px 18px; }
-    .release-header { flex-direction: column; align-items: flex-start; gap: 12px; }
-    .release-actions { width: 100%; }
-    .release-link { width: 100%; justify-content: center; padding: 8px 14px; }
-    .change-item { font-size: 14px; word-break: break-word; overflow-wrap: anywhere; }
-    .change-item code { word-break: break-all; }
-  }
-
-  @media (max-width: 540px) {
-    .wrap { padding: 0 16px; }
-    .toolbar { margin: 24px 0 28px; }
-    .filter-row { gap: 6px; }
-    .filter-chip { padding: 5px 10px; font-size: 12px; }
-    .release-version { font-size: 20px; }
-    .release-date { font-size: 12px; }
-  }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -359,27 +95,27 @@
 }
   </script>
 </head>
-<body>
+<body class="page-changelog">
 
-<nav class="nav">
-  <div class="wrap nav-inner">
+<nav class="nav" id="nav" aria-label="Main navigation">
+  <div class="nav-inner wrap">
     <a class="brand" href="index.html">
-      <img src="logo.png" alt="Hydra logo" width="30" height="30">
-      HYDRA
+      <img src="logo.png" alt="Hydra logo" width="28" height="28">
+      Hydra
     </a>
     <div class="nav-links" id="nav-links">
+      <a href="index.html#how">How it works</a>
       <a href="index.html#engine">Engine</a>
+      <a href="index.html#benchmark">Benchmark</a>
+      <a href="index.html#app">App</a>
+      <a href="index.html#cli">CLI</a>
       <a href="features.html">Features</a>
       <a href="plugins.html">Plugins</a>
-      <a href="index.html#app">Desktop App</a>
-      <a href="index.html#cli">CLI</a>
-      <a href="index.html#download">Download</a>
-      <a href="changelog.html" class="active">Changelog</a>
-      <a class="nav-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-      </a>
+      <a href="changelog.html" class="active" aria-current="page">Changelog</a>
+      <a class="nav-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg><span class="gh-stars" hidden><svg class="gh-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.6l-5.9 3.1 1.2-6.6L2.5 9.5l6.6-.9L12 2.5z" /></svg><b data-gh-stars></b></span></a>
+      <a class="nav-cta" href="index.html#download">Download</a>
     </div>
-    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation menu" aria-expanded="false">
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation menu" aria-controls="nav-links" aria-expanded="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path id="nav-toggle-icon-open" d="M4 6h16M4 12h16M4 18h16"/>
         <path id="nav-toggle-icon-close" d="M18 6L6 18M6 6l12 12" style="display:none;"/>
@@ -389,8 +125,9 @@
 </nav>
 
 <div class="wrap">
-  <section class="hero-section">
-    <h1>Hydra <span class="grad">Changelog</span></h1>
+  <section class="page-head hero-section">
+    <p class="eyebrow">Release notes</p>
+    <h1>Hydra Download Manager <span class="grad">Changelog</span></h1>
     <p>All notable features, bug fixes, performance enhancements, and architectural changes across every Hydra release.</p>
 
     <div class="toolbar">
@@ -567,16 +304,39 @@
 </div>
 
 <footer>
-  <div class="wrap foot">
-    <a class="foot-brand" href="index.html">
-      <img src="logo.png" alt="" width="24" height="24">
-      HYDRA
-    </a>
-    <p>GPL-3.0-or-later (CLI) with MIT / Apache-2.0 core libraries. See <a href="https://github.com/ja7ad/hydra/blob/main/LICENSING.md">LICENSING.md</a>. · <a href="features.html">Features</a> · <a href="privacy.html">Privacy Policy</a></p>
-    <div class="foot-social">
-      <a href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-      </a>
+  <div class="wrap">
+    <div class="foot">
+      <div class="foot-about">
+        <a class="foot-brand" href="index.html">
+          <img src="logo-64.png" alt="" width="28" height="28">
+          Hydra
+        </a>
+        <p>Free, open-source download manager and accelerator for Windows, macOS, and Linux.</p>
+      </div>
+      <nav class="foot-col" aria-label="Product">
+        <h2>Product</h2>
+        <a href="index.html#download">Download</a>
+        <a href="features.html">Features</a>
+        <a href="plugins.html">Plugins</a>
+        <a href="changelog.html">Changelog</a>
+        <a href="index.html#faq">FAQ</a>
+      </nav>
+      <nav class="foot-col" aria-label="Project">
+        <h2>Project</h2>
+        <a href="https://github.com/ja7ad/hydra">GitHub</a>
+        <a href="https://github.com/ja7ad/hydra/releases">Releases</a>
+        <a href="https://github.com/ja7ad/hydra#benchmark">Benchmark</a>
+      </nav>
+      <nav class="foot-col" aria-label="Legal">
+        <h2>Legal</h2>
+        <a href="https://github.com/ja7ad/hydra/blob/main/LICENSING.md">Licensing</a>
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="https://github.com/ja7ad/hydra#code-signing-policy">Code signing policy</a>
+      </nav>
+    </div>
+    <div class="foot-base">
+      <p>GPL-3.0-or-later (CLI) with MIT / Apache-2.0 core libraries.</p>
+      <a class="foot-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg></a>
     </div>
   </div>
 </footer>
@@ -816,5 +576,6 @@
   })();
 </script>
 
+<script src="assets/stars.js" defer></script>
 </body>
 </html>

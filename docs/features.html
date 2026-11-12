@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
   <meta name="author" content="Javad Rajabzadeh">
-  <meta name="theme-color" content="#0a0e13">
+  <meta name="theme-color" content="#09090b">
 <title>Feature Deep Dive — Hydra Download Manager (HDM)</title>
 <meta name="description" content="Explore Hydra's high-performance download architecture: adaptive concurrency, intelligent range stealing, statistical stall detection, direct disk I/O, and cross-platform native FFI embedding.">
 <link rel="canonical" href="https://hydra.javad.dev/features.html">
-<link rel="icon" type="image/png" href="logo.png">
+<link rel="icon" type="image/png" href="logo-64.png">
+<link rel="apple-touch-icon" href="logo.png">
 <meta property="og:title" content="Feature Deep Dive — Hydra Download Manager (HDM)">
 <meta property="og:description" content="Explore Hydra's high-performance download architecture: adaptive concurrency, intelligent range stealing, statistical stall detection, direct disk I/O, and cross-platform native FFI embedding.">
 <meta property="og:image" content="https://hydra.javad.dev/img/screenshot.jpg">
@@ -23,400 +24,8 @@
 <meta name="twitter:image" content="https://hydra.javad.dev/img/screenshot.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0a0e13;
-    --bg-raised: #0f151d;
-    --bg-card: #131b24;
-    --bg-card-hover: #17222e;
-    --line: rgba(148, 197, 222, 0.12);
-    --line-strong: rgba(148, 197, 222, 0.24);
-    --text: #e7edf3;
-    --text-dim: #93a4b4;
-    --text-faint: #64778a;
-    --accent: #2dd4d4;
-    --accent-blue: #2596e8;
-    --accent-ink: #06282e;
-    --grad: linear-gradient(100deg, #2dd4d4, #2596e8);
-    --grad-glow: linear-gradient(135deg, rgba(45, 212, 212, 0.15), rgba(37, 150, 232, 0.05));
-    --radius: 16px;
-    --radius-sm: 10px;
-    --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; max-width: 100vw; overflow-x: hidden; }
-  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-sans);
-    font-size: 16px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
-    max-width: 100vw;
-    width: 100%;
-  }
-
-  a { color: inherit; text-decoration: none; }
-  img { max-width: 100%; display: block; }
-  svg { max-width: 100%; height: auto; }
-  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; width: 100%; box-sizing: border-box; }
-
-  /* Navigation Bar */
-  .nav {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
-    border-bottom: 1px solid transparent;
-    transition: background 0.25s ease, border-color 0.25s ease;
-    width: 100%;
-  }
-  .nav.scrolled {
-    background: rgba(10, 14, 19, 0.88);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-bottom-color: var(--line);
-  }
-  .nav-inner {
-    height: 68px; display: flex; align-items: center; justify-content: space-between;
-  }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: 0.01em; }
-  .brand img { width: 30px; height: 30px; }
-  .nav-links { display: flex; align-items: center; gap: 26px; font-size: 14.5px; color: var(--text-dim); }
-  .nav-links a { transition: color 0.15s ease; }
-  .nav-links a:hover { color: var(--text); }
-  .nav-links a.active { color: var(--accent); font-weight: 600; }
-  .nav-gh { display: inline-flex; align-items: center; }
-  .nav-gh svg { width: 21px; height: 21px; }
-
-  .nav-toggle {
-    display: none; background: transparent; border: 1px solid var(--line);
-    border-radius: 8px; color: var(--text); padding: 6px; cursor: pointer;
-  }
-  .nav-toggle svg { width: 22px; height: 22px; }
-
-  /* Hero Section */
-  .hero-feat {
-    padding: 130px 0 60px;
-    position: relative;
-    text-align: center;
-    width: 100%;
-  }
-  .hero-feat::before {
-    content: ""; position: absolute; inset: 0; z-index: -1;
-    background:
-      radial-gradient(850px 480px at 50% 0%, rgba(37, 150, 232, 0.15), transparent 70%),
-      radial-gradient(700px 380px at 80% 25%, rgba(45, 212, 212, 0.10), transparent 60%);
-  }
-  .hero-badge {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 5px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
-    color: var(--accent); background: rgba(45, 212, 212, 0.08);
-    border: 1px solid rgba(45, 212, 212, 0.25); margin-bottom: 20px;
-    font-family: var(--font-mono); letter-spacing: 0.03em;
-  }
-  .hero-feat h1 {
-    font-size: clamp(32px, 4.8vw, 56px);
-    line-height: 1.1; letter-spacing: -0.03em; font-weight: 800;
-    max-width: 22ch; margin: 0 auto;
-    word-break: break-word;
-  }
-  .hero-feat h1 .grad {
-    background: var(--grad);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  .hero-feat p.lead {
-    margin: 20px auto 0; font-size: 18px; color: var(--text-dim);
-    max-width: 64ch; line-height: 1.65;
-  }
-
-  /* Architectural Difference Pillars (Top Hero Section) */
-  .difference-sec {
-    padding: 40px 0 70px;
-    width: 100%;
-  }
-  .diff-grid {
-    display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px;
-    margin-top: 32px; width: 100%;
-  }
-  .diff-card {
-    background: var(--bg-raised);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 32px 28px;
-    display: flex; flex-direction: column; justify-content: space-between;
-    position: relative; overflow: hidden; min-width: 0; width: 100%;
-    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-  }
-  .diff-card::before {
-    content: ""; position: absolute; inset: 0;
-    background: var(--grad-glow); opacity: 0;
-    transition: opacity 0.3s ease; pointer-events: none;
-  }
-  .diff-card:hover {
-    border-color: var(--line-strong);
-    transform: translateY(-2px);
-    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
-  }
-  .diff-card:hover::before { opacity: 1; }
-  .diff-card-full { grid-column: 1 / -1; }
-  .diff-head {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; margin-bottom: 16px; position: relative; z-index: 1;
-    flex-wrap: wrap; width: 100%;
-  }
-  .diff-head-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
-  .diff-ico {
-    width: 44px; height: 44px; border-radius: 12px;
-    background: rgba(45, 212, 212, 0.1); border: 1px solid rgba(45, 212, 212, 0.25);
-    display: flex; align-items: center; justify-content: center; flex: none;
-    color: var(--accent);
-  }
-  .diff-ico svg { width: 22px; height: 22px; }
-  .diff-head h3 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); word-break: break-word; }
-  .diff-head .badge {
-    font-size: 11px; font-family: var(--font-mono); text-transform: uppercase;
-    padding: 3px 8px; border-radius: 6px; background: rgba(37, 150, 232, 0.15);
-    color: var(--accent-blue); border: 1px solid rgba(37, 150, 232, 0.3);
-    flex: none;
-  }
-  .diff-desc { font-size: 15px; color: var(--text-dim); line-height: 1.6; position: relative; z-index: 1; }
-  .diff-visual { margin-top: 24px; position: relative; z-index: 1; width: 100%; overflow: hidden; }
-  .diff-visual svg { width: 100%; max-width: 100%; height: auto; display: block; }
-
-  /* Interactive File Size vs RAM Footprint Simulator */
-  .ram-sim-box {
-    background: #090e14; border: 1px solid var(--line-strong);
-    border-radius: 12px; padding: 22px 24px; margin-top: 18px;
-    width: 100%; min-width: 0; box-sizing: border-box;
-  }
-  .ram-controls {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px;
-    flex-wrap: wrap; margin-bottom: 18px; width: 100%;
-  }
-  .ram-slider-wrap { flex: 1 1 220px; min-width: 0; width: 100%; }
-  .ram-slider-wrap label {
-    display: flex; justify-content: space-between; font-size: 13.5px;
-    font-weight: 600; color: var(--text); margin-bottom: 8px;
-  }
-  .ram-slider {
-    width: 100%; height: 6px; -webkit-appearance: none; appearance: none;
-    background: rgba(148, 197, 222, 0.15); border-radius: 4px; outline: none;
-  }
-  .ram-slider::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
-    background: var(--accent); cursor: pointer; box-shadow: 0 0 10px rgba(45, 212, 212, 0.8);
-  }
-  .ram-stats { display: flex; gap: 12px; flex-wrap: wrap; }
-  .ram-stat-pill {
-    padding: 8px 14px; border-radius: 8px; background: rgba(148, 197, 222, 0.05);
-    border: 1px solid var(--line); text-align: left; min-width: 0; flex: 1 1 auto;
-  }
-  .ram-stat-label { font-size: 11px; text-transform: uppercase; font-family: var(--font-mono); color: var(--text-faint); }
-  .ram-stat-val { font-size: 17px; font-weight: 700; font-family: var(--font-mono); color: var(--text); }
-  .ram-stat-val.flat { color: var(--accent); }
-
-  .ram-vis-bars {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; width: 100%;
-  }
-  .vis-bar-wrap { background: rgba(15, 21, 29, 0.8); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
-  .vis-bar-label { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; display: flex; justify-content: space-between; }
-  .vis-track { height: 16px; background: rgba(148, 197, 222, 0.08); border-radius: 4px; overflow: hidden; position: relative; width: 100%; }
-  .vis-fill-disk {
-    height: 100%; width: 50%; background: linear-gradient(90deg, #2596e8, #2dd4d4);
-    border-radius: 4px; transition: width 0.2s ease;
-  }
-  .vis-fill-ram {
-    height: 100%; width: 8px; background: #2dd4d4;
-    border-radius: 4px; box-shadow: 0 0 8px rgba(45, 212, 212, 0.8);
-    transition: width 0.2s ease;
-  }
-
-  /* Filter & Search Toolbar */
-  .toolbar-sec {
-    position: sticky; top: 68px; z-index: 40;
-    background: rgba(10, 14, 19, 0.94); backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
-    padding: 14px 0; margin-bottom: 40px; width: 100%;
-  }
-  .toolbar-inner {
-    display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%;
-  }
-  .filter-pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-  .pill-btn {
-    padding: 7px 15px; border-radius: 999px; font-size: 13px; font-weight: 600;
-    color: var(--text-dim); background: rgba(148, 197, 222, 0.05);
-    border: 1px solid var(--line); cursor: pointer;
-    transition: all 0.15s ease; white-space: nowrap; flex: none;
-  }
-  .pill-btn:hover { color: var(--text); border-color: var(--line-strong); }
-  .pill-btn.active {
-    color: var(--accent-ink); background: var(--grad); border-color: transparent;
-    box-shadow: 0 2px 12px rgba(45, 212, 212, 0.25);
-  }
-  .search-box {
-    position: relative; min-width: 0; flex: 1 1 240px; max-width: 320px; width: 100%;
-  }
-  .search-box input {
-    width: 100%; padding: 8px 14px 8px 36px; border-radius: 999px;
-    background: #0d131a; border: 1px solid var(--line);
-    color: var(--text); font-size: 13.5px; font-family: var(--font-sans);
-    outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    box-sizing: border-box;
-  }
-  .search-box input:focus {
-    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(45, 212, 212, 0.15);
-  }
-  .search-box svg {
-    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-    width: 15px; height: 15px; color: var(--text-faint); pointer-events: none;
-  }
-
-  /* 28 Deep Dive Features Grid */
-  .features-container {
-    padding-bottom: 96px; width: 100%;
-  }
-  .features-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-    gap: 24px; width: 100%;
-  }
-  .feat-card {
-    background: var(--bg-raised);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 24px;
-    display: flex; flex-direction: column; justify-content: space-between;
-    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-    position: relative; min-width: 0; width: 100%; overflow: hidden;
-  }
-  .feat-card:hover {
-    border-color: var(--line-strong);
-    transform: translateY(-2px);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
-  }
-  .feat-card.hidden { display: none !important; }
-
-  .feat-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; width: 100%; }
-  .feat-num {
-    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
-    color: var(--accent); background: rgba(45, 212, 212, 0.1);
-    padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(45, 212, 212, 0.2);
-    flex: none;
-  }
-  .feat-category {
-    font-size: 11px; font-weight: 600; text-transform: uppercase;
-    font-family: var(--font-mono); color: var(--text-faint);
-  }
-  .feat-title {
-    font-size: 18px; font-weight: 700; letter-spacing: -0.01em;
-    color: var(--text); margin-bottom: 8px; word-break: break-word;
-  }
-  .feat-desc {
-    font-size: 14px; color: var(--text-dim); line-height: 1.55; flex: 1;
-  }
-  .feat-canvas-wrap {
-    margin-top: 18px; border-radius: var(--radius-sm);
-    background: #090e14; border: 1px solid var(--line);
-    padding: 12px; overflow: hidden; position: relative;
-    display: flex; align-items: center; justify-content: center;
-    min-height: 120px; width: 100%;
-  }
-  .feat-canvas-wrap svg, .feat-canvas-wrap canvas {
-    width: 100%; max-width: 100%; height: auto; max-height: 140px; display: block;
-  }
-
-  /* Footer */
-  footer { border-top: 1px solid var(--line); padding: 48px 0; background: var(--bg); width: 100%; }
-  .foot {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 20px; flex-wrap: wrap; width: 100%;
-  }
-  .foot-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
-  .foot-brand img { width: 24px; height: 24px; }
-  .foot p { font-size: 13.5px; color: var(--text-faint); }
-  .foot p a { color: var(--text-dim); }
-  .foot p a:hover { color: var(--accent); }
-  .foot-social { display: flex; gap: 14px; }
-  .foot-social a { color: var(--text-dim); display: inline-flex; transition: color 0.15s ease; }
-  .foot-social a:hover { color: var(--text); }
-  .foot-social svg { width: 20px; height: 20px; }
-
-  /* Responsive Adjustments */
-  @media (max-width: 900px) {
-    .diff-grid { grid-template-columns: 1fr; }
-    .features-grid { grid-template-columns: 1fr; }
-    .toolbar-inner { flex-direction: column; align-items: stretch; gap: 12px; }
-    .search-box { max-width: 100%; width: 100%; }
-    .ram-vis-bars { grid-template-columns: 1fr; }
-  }
-
-  @media (max-width: 768px) {
-    .nav-toggle { display: flex; }
-    .nav-links {
-      display: none; position: absolute; top: 68px; left: 0; right: 0;
-      background: rgba(10, 14, 19, 0.96); backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--line-strong);
-      flex-direction: column; align-items: stretch; padding: 16px 24px 24px; gap: 12px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
-    }
-    .nav-links.open { display: flex; }
-    .nav-links a { font-size: 15.5px; padding: 10px 0; border-bottom: 1px solid rgba(148, 197, 222, 0.08); display: flex; align-items: center; justify-content: space-between; }
-    .nav-links a:last-child { border-bottom: none; }
-    .nav-gh { justify-content: flex-start; gap: 8px; }
-    .nav-gh::after { content: "GitHub Repository"; font-weight: 500; font-size: 15px; }
-
-    .hero-feat { padding: 108px 0 40px; }
-    .hero-feat h1 { font-size: clamp(28px, 7vw, 42px); }
-    .hero-feat p.lead { font-size: 16px; }
-    
-    .toolbar-sec { top: 68px; }
-    .filter-pills {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      padding-bottom: 4px;
-      width: 100%;
-      flex-wrap: nowrap;
-      scrollbar-width: none;
-    }
-    .filter-pills::-webkit-scrollbar { display: none; }
-
-    .diff-card { padding: 24px 20px; }
-  }
-
-  @media (max-width: 540px) {
-    .wrap { padding: 0 16px; }
-    .hero-feat { padding: 92px 0 32px; }
-    .hero-feat h1 { font-size: clamp(26px, 8vw, 34px); }
-    .hero-feat p.lead { font-size: 14.5px; margin-top: 14px; }
-    
-    .toolbar-sec { top: 68px; padding: 10px 0; margin-bottom: 28px; }
-    .pill-btn { font-size: 12px; padding: 6px 12px; }
-
-    .diff-card { padding: 20px 16px; border-radius: 14px; }
-    .diff-head h3 { font-size: 17.5px; }
-    .diff-desc { font-size: 13.5px; }
-
-    .ram-sim-box { padding: 16px 14px; }
-    .ram-controls { gap: 12px; }
-    .ram-stats { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 8px; }
-    .ram-stat-pill { padding: 8px 10px; width: 100%; }
-    .ram-stat-pill:last-child { grid-column: 1 / -1; }
-    .ram-stat-label { font-size: 10px; }
-    .ram-stat-val { font-size: 14px; }
-
-    .features-grid { grid-template-columns: 1fr; gap: 16px; }
-    .feat-card { padding: 18px 16px; border-radius: 14px; }
-    .feat-title { font-size: 16.5px; }
-    .feat-desc { font-size: 13.5px; }
-    .feat-canvas-wrap { padding: 8px; min-height: 105px; }
-
-    .foot { flex-direction: column; align-items: flex-start; gap: 14px; }
-  }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -486,30 +95,30 @@
 }
   </script>
 </head>
-<body>
+<body class="page-features">
 
 <div id="top-sentinel" style="position:absolute; top:0; left:0; width:1px; height:1px;" aria-hidden="true"></div>
 
 <!-- Navigation -->
-<nav class="nav" id="nav">
-  <div class="wrap nav-inner">
+<nav class="nav" id="nav" aria-label="Main navigation">
+  <div class="nav-inner wrap">
     <a class="brand" href="index.html">
-      <img src="logo.png" alt="Hydra logo" width="30" height="30">
-      HYDRA
+      <img src="logo.png" alt="Hydra logo" width="28" height="28">
+      Hydra
     </a>
     <div class="nav-links" id="nav-links">
+      <a href="index.html#how">How it works</a>
       <a href="index.html#engine">Engine</a>
-      <a href="features.html" class="active">Features</a>
-      <a href="plugins.html">Plugins</a>
-      <a href="index.html#app">Desktop App</a>
+      <a href="index.html#benchmark">Benchmark</a>
+      <a href="index.html#app">App</a>
       <a href="index.html#cli">CLI</a>
-      <a href="index.html#download">Download</a>
+      <a href="features.html" class="active" aria-current="page">Features</a>
+      <a href="plugins.html">Plugins</a>
       <a href="changelog.html">Changelog</a>
-      <a class="nav-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-      </a>
+      <a class="nav-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg><span class="gh-stars" hidden><svg class="gh-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.6l-5.9 3.1 1.2-6.6L2.5 9.5l6.6-.9L12 2.5z" /></svg><b data-gh-stars></b></span></a>
+      <a class="nav-cta" href="index.html#download">Download</a>
     </div>
-    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation menu" aria-expanded="false">
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation menu" aria-controls="nav-links" aria-expanded="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path id="nav-toggle-icon-open" d="M4 6h16M4 12h16M4 18h16"/>
         <path id="nav-toggle-icon-close" d="M18 6L6 18M6 6l12 12" style="display:none;"/>
@@ -519,7 +128,7 @@
 </nav>
 
 <!-- Hero Header -->
-<header class="hero-feat">
+<header class="page-head hero-feat">
   <div class="wrap">
     <div class="hero-badge">ARCHITECTURAL DEEP DIVE</div>
     <h1>Hydra Download Manager <span class="grad">Feature Deep Dive</span></h1>
@@ -549,26 +158,26 @@
         </div>
         <div class="diff-visual">
           <svg viewBox="0 0 460 140" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="170" y="35" width="120" height="70" rx="10" fill="#0f151d" stroke="#2dd4d4" stroke-width="1.5"/>
-            <text x="230" y="68" fill="#e7edf3" font-family="'Geist', sans-serif" font-size="13" font-weight="700" text-anchor="middle">Hydra Core</text>
+            <rect x="170" y="35" width="120" height="70" rx="10" fill="#0e0e11" stroke="#2dd4d4" stroke-width="1.5"/>
+            <text x="230" y="68" fill="#fafafa" font-family="Inter, sans-serif" font-size="13" font-weight="700" text-anchor="middle">Hydra Core</text>
             <text x="230" y="85" fill="#2dd4d4" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle">libhydra Engine</text>
             <!-- Interface Nodes -->
-            <g stroke="rgba(148, 197, 222, 0.25)" stroke-width="1.5" stroke-dasharray="3 3">
+            <g stroke="rgba(255, 255, 255, 0.25)" stroke-width="1.5" stroke-dasharray="3 3">
               <path d="M70 25 L170 55"/>
               <path d="M70 115 L170 85"/>
               <path d="M390 25 L290 55"/>
               <path d="M390 115 L290 85"/>
             </g>
             <!-- Left Nodes -->
-            <rect x="10" y="10" width="80" height="30" rx="6" fill="#131b24" stroke="rgba(148, 197, 222, 0.2)"/>
-            <text x="50" y="30" fill="#93a4b4" font-size="11" font-family="'Geist', sans-serif" text-anchor="middle">Desktop GUI</text>
-            <rect x="10" y="100" width="80" height="30" rx="6" fill="#131b24" stroke="rgba(148, 197, 222, 0.2)"/>
-            <text x="50" y="120" fill="#93a4b4" font-size="11" font-family="'Geist', sans-serif" text-anchor="middle">CLI &amp; TUI</text>
+            <rect x="10" y="10" width="80" height="30" rx="6" fill="#141417" stroke="rgba(255, 255, 255, 0.2)"/>
+            <text x="50" y="30" fill="#a1a1aa" font-size="11" font-family="Inter, sans-serif" text-anchor="middle">Desktop GUI</text>
+            <rect x="10" y="100" width="80" height="30" rx="6" fill="#141417" stroke="rgba(255, 255, 255, 0.2)"/>
+            <text x="50" y="120" fill="#a1a1aa" font-size="11" font-family="Inter, sans-serif" text-anchor="middle">CLI &amp; TUI</text>
             <!-- Right Nodes -->
-            <rect x="370" y="10" width="80" height="30" rx="6" fill="#131b24" stroke="rgba(148, 197, 222, 0.2)"/>
-            <text x="410" y="30" fill="#93a4b4" font-size="11" font-family="'Geist', sans-serif" text-anchor="middle">Web Extension</text>
-            <rect x="370" y="100" width="80" height="30" rx="6" fill="#131b24" stroke="rgba(148, 197, 222, 0.2)"/>
-            <text x="410" y="120" fill="#93a4b4" font-size="11" font-family="'Geist', sans-serif" text-anchor="middle">Mobile &amp; FFI</text>
+            <rect x="370" y="10" width="80" height="30" rx="6" fill="#141417" stroke="rgba(255, 255, 255, 0.2)"/>
+            <text x="410" y="30" fill="#a1a1aa" font-size="11" font-family="Inter, sans-serif" text-anchor="middle">Web Extension</text>
+            <rect x="370" y="100" width="80" height="30" rx="6" fill="#141417" stroke="rgba(255, 255, 255, 0.2)"/>
+            <text x="410" y="120" fill="#a1a1aa" font-size="11" font-family="Inter, sans-serif" text-anchor="middle">Mobile &amp; FFI</text>
           </svg>
         </div>
       </div>
@@ -601,8 +210,8 @@
             <path d="M230 72 Q 280 72 300 42" stroke="#2dd4d4" stroke-width="1.8" stroke-dasharray="4 3"/>
             <text x="250" y="95" fill="#f59e0b" font-size="9.5" font-family="'Geist Mono', monospace">Range Reassigned</text>
             <!-- Destination File -->
-            <rect x="365" y="15" width="75" height="90" rx="8" fill="#131b24" stroke="rgba(148, 197, 222, 0.3)"/>
-            <text x="402" y="55" fill="#e7edf3" font-size="11" font-family="'Geist', sans-serif" font-weight="600" text-anchor="middle">Unified</text>
+            <rect x="365" y="15" width="75" height="90" rx="8" fill="#141417" stroke="rgba(255, 255, 255, 0.3)"/>
+            <text x="402" y="55" fill="#fafafa" font-size="11" font-family="Inter, sans-serif" font-weight="600" text-anchor="middle">Unified</text>
             <text x="402" y="72" fill="#2dd4d4" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">Target File</text>
           </svg>
         </div>
@@ -712,20 +321,20 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="15" width="280" height="20" rx="4" fill="#131b24" stroke="rgba(148,197,222,0.2)"/>
+            <rect x="20" y="15" width="280" height="20" rx="4" fill="#141417" stroke="rgba(255,255,255,0.2)"/>
             <rect x="20" y="15" width="70" height="20" rx="3" fill="#2dd4d4" opacity="0.8"/>
             <rect x="95" y="15" width="85" height="20" rx="3" fill="#2596e8" opacity="0.8"/>
             <rect x="185" y="15" width="55" height="20" rx="3" fill="#3b82f6" opacity="0.8"/>
-            <circle cx="55" cy="80" r="10" fill="#0f151d" stroke="#2dd4d4" stroke-width="1.5"/>
+            <circle cx="55" cy="80" r="10" fill="#0e0e11" stroke="#2dd4d4" stroke-width="1.5"/>
             <text x="55" y="83" fill="#2dd4d4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">S1</text>
             <path d="M55 70 L55 40" stroke="#2dd4d4" stroke-width="1.5" stroke-dasharray="2 2"/>
-            <circle cx="137" cy="80" r="10" fill="#0f151d" stroke="#2596e8" stroke-width="1.5"/>
+            <circle cx="137" cy="80" r="10" fill="#0e0e11" stroke="#2596e8" stroke-width="1.5"/>
             <text x="137" y="83" fill="#2596e8" font-size="8" font-family="'Geist Mono'" text-anchor="middle">S2</text>
             <path d="M137 70 L137 40" stroke="#2596e8" stroke-width="1.5" stroke-dasharray="2 2"/>
-            <circle cx="212" cy="80" r="10" fill="#0f151d" stroke="#3b82f6" stroke-width="1.5"/>
+            <circle cx="212" cy="80" r="10" fill="#0e0e11" stroke="#3b82f6" stroke-width="1.5"/>
             <text x="212" y="83" fill="#3b82f6" font-size="8" font-family="'Geist Mono'" text-anchor="middle">S3</text>
             <path d="M212 70 L212 40" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="2 2"/>
-            <text x="160" y="103" fill="#93a4b4" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Dynamic Connection Attachment</text>
+            <text x="160" y="103" fill="#a1a1aa" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Dynamic Connection Attachment</text>
           </svg>
         </div>
       </article>
@@ -742,13 +351,13 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="15" width="280" height="14" rx="3" fill="#131b24" stroke="rgba(148,197,222,0.2)"/>
+            <rect x="20" y="15" width="280" height="14" rx="3" fill="#141417" stroke="rgba(255,255,255,0.2)"/>
             <rect x="20" y="15" width="180" height="14" rx="3" fill="#2dd4d4" opacity="0.9"/>
             <rect x="200" y="15" width="50" height="14" rx="3" fill="#ef4444" opacity="0.4"/>
             <text x="225" y="26" fill="#ffffff" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Lagging</text>
             <!-- Steal arrow -->
             <path d="M225 35 C 225 65, 120 65, 120 80" stroke="#2dd4d4" stroke-width="1.8" stroke-dasharray="3 3"/>
-            <rect x="60" y="75" width="120" height="24" rx="6" fill="#0f151d" stroke="#2dd4d4" stroke-width="1.2"/>
+            <rect x="60" y="75" width="120" height="24" rx="6" fill="#0e0e11" stroke="#2dd4d4" stroke-width="1.2"/>
             <text x="120" y="90" fill="#2dd4d4" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Fast Lane Steals Segment</text>
           </svg>
         </div>
@@ -770,8 +379,8 @@
             <path d="M20 75 L80 30 L150 35 L220 25 L280 20" stroke="#2dd4d4" stroke-width="2" fill="none"/>
             <circle cx="200" cy="55" r="4" fill="#f59e0b"/>
             <text x="200" y="48" fill="#f59e0b" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Stall Flagged</text>
-            <rect x="20" y="88" width="280" height="16" rx="4" fill="#0f151d"/>
-            <text x="160" y="99" fill="#93a4b4" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Healthy → Degraded → Reassigned in &lt;2.5s</text>
+            <rect x="20" y="88" width="280" height="16" rx="4" fill="#0e0e11"/>
+            <text x="160" y="99" fill="#a1a1aa" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Healthy → Degraded → Reassigned in &lt;2.5s</text>
           </svg>
         </div>
       </article>
@@ -788,17 +397,17 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="15" width="60" height="22" rx="4" fill="#131b24" stroke="#2dd4d4"/>
+            <rect x="20" y="15" width="60" height="22" rx="4" fill="#141417" stroke="#2dd4d4"/>
             <text x="50" y="29" fill="#2dd4d4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Mirror A</text>
-            <rect x="20" y="45" width="60" height="22" rx="4" fill="#131b24" stroke="#2596e8"/>
+            <rect x="20" y="45" width="60" height="22" rx="4" fill="#141417" stroke="#2596e8"/>
             <text x="50" y="59" fill="#2596e8" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Mirror B</text>
-            <rect x="20" y="75" width="60" height="22" rx="4" fill="#131b24" stroke="#3b82f6"/>
+            <rect x="20" y="75" width="60" height="22" rx="4" fill="#141417" stroke="#3b82f6"/>
             <text x="50" y="89" fill="#3b82f6" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Mirror C</text>
             <path d="M85 26 L200 55" stroke="#2dd4d4" stroke-width="1.5"/>
             <path d="M85 56 L200 55" stroke="#2596e8" stroke-width="1.5"/>
             <path d="M85 86 L200 55" stroke="#3b82f6" stroke-width="1.5"/>
-            <rect x="205" y="25" width="95" height="60" rx="6" fill="#0f151d" stroke="rgba(148,197,222,0.3)"/>
-            <text x="252" y="52" fill="#e7edf3" font-size="10" font-weight="600" text-anchor="middle">Single Object</text>
+            <rect x="205" y="25" width="95" height="60" rx="6" fill="#0e0e11" stroke="rgba(255,255,255,0.3)"/>
+            <text x="252" y="52" fill="#fafafa" font-size="10" font-weight="600" text-anchor="middle">Single Object</text>
             <text x="252" y="68" fill="#2dd4d4" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Parallel Assembly</text>
           </svg>
         </div>
@@ -816,12 +425,12 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="20" width="180" height="70" rx="6" fill="#131b24" stroke="rgba(148,197,222,0.2)"/>
-            <text x="110" y="45" fill="#e7edf3" font-size="12" font-weight="700" text-anchor="middle">1.5 TB Disk Object</text>
-            <text x="110" y="65" fill="#93a4b4" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Direct Offset Writes</text>
+            <rect x="20" y="20" width="180" height="70" rx="6" fill="#141417" stroke="rgba(255,255,255,0.2)"/>
+            <text x="110" y="45" fill="#fafafa" font-size="12" font-weight="700" text-anchor="middle">1.5 TB Disk Object</text>
+            <text x="110" y="65" fill="#a1a1aa" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Direct Offset Writes</text>
             <rect x="220" y="30" width="80" height="50" rx="6" fill="rgba(45,212,212,0.08)" stroke="#2dd4d4"/>
             <text x="260" y="52" fill="#2dd4d4" font-size="11" font-weight="700" font-family="'Geist Mono'" text-anchor="middle">~8 MB</text>
-            <text x="260" y="67" fill="#93a4b4" font-size="8" text-anchor="middle">Constant RAM</text>
+            <text x="260" y="67" fill="#a1a1aa" font-size="8" text-anchor="middle">Constant RAM</text>
           </svg>
         </div>
       </article>
@@ -838,14 +447,14 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="220" y="10" width="80" height="90" rx="4" fill="#0f151d" stroke="rgba(148,197,222,0.25)"/>
-            <text x="260" y="28" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Offset 0 MB</text>
-            <text x="260" y="58" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Offset 500 MB</text>
-            <text x="260" y="88" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Offset 2 GB</text>
+            <rect x="220" y="10" width="80" height="90" rx="4" fill="#0e0e11" stroke="rgba(255,255,255,0.25)"/>
+            <text x="260" y="28" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Offset 0 MB</text>
+            <text x="260" y="58" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Offset 500 MB</text>
+            <text x="260" y="88" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Offset 2 GB</text>
             <path d="M40 25 L215 25" stroke="#2dd4d4" stroke-width="2"/>
             <path d="M40 55 L215 55" stroke="#2596e8" stroke-width="2"/>
             <path d="M40 85 L215 85" stroke="#3b82f6" stroke-width="2"/>
-            <text x="120" y="47" fill="#e7edf3" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Simultaneous Non-Sequential I/O</text>
+            <text x="120" y="47" fill="#fafafa" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Simultaneous Non-Sequential I/O</text>
           </svg>
         </div>
       </article>
@@ -862,13 +471,13 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="40" width="45" height="30" rx="3" fill="#131b24" stroke="rgba(148,197,222,0.2)"/>
-            <text x="42" y="58" fill="#93a4b4" font-size="9" text-anchor="middle">10 MB</text>
-            <rect x="75" y="32" width="60" height="46" rx="4" fill="#131b24" stroke="#2596e8"/>
+            <rect x="20" y="40" width="45" height="30" rx="3" fill="#141417" stroke="rgba(255,255,255,0.2)"/>
+            <text x="42" y="58" fill="#a1a1aa" font-size="9" text-anchor="middle">10 MB</text>
+            <rect x="75" y="32" width="60" height="46" rx="4" fill="#141417" stroke="#2596e8"/>
             <text x="105" y="58" fill="#2596e8" font-size="10" font-weight="600" text-anchor="middle">10 GB</text>
-            <rect x="145" y="20" width="75" height="70" rx="6" fill="#131b24" stroke="#2dd4d4"/>
+            <rect x="145" y="20" width="75" height="70" rx="6" fill="#141417" stroke="#2dd4d4"/>
             <text x="182" y="58" fill="#2dd4d4" font-size="12" font-weight="700" text-anchor="middle">1 TB</text>
-            <rect x="230" y="10" width="75" height="90" rx="8" fill="#131b24" stroke="#38bdf8"/>
+            <rect x="230" y="10" width="75" height="90" rx="8" fill="#141417" stroke="#38bdf8"/>
             <text x="267" y="58" fill="#38bdf8" font-size="13" font-weight="800" text-anchor="middle">10 TB</text>
           </svg>
         </div>
@@ -886,10 +495,10 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="25" width="280" height="18" rx="4" fill="#131b24" stroke="rgba(148,197,222,0.2)"/>
+            <rect x="20" y="25" width="280" height="18" rx="4" fill="#141417" stroke="rgba(255,255,255,0.2)"/>
             <rect x="20" y="25" width="180" height="18" rx="4" fill="#2dd4d4"/>
             <text x="110" y="38" fill="#06282e" font-size="9" font-weight="700" font-family="'Geist Mono'" text-anchor="middle">64% Preserved on Disk</text>
-            <rect x="20" y="60" width="120" height="26" rx="6" fill="#0f151d" stroke="#f59e0b"/>
+            <rect x="20" y="60" width="120" height="26" rx="6" fill="#0e0e11" stroke="#f59e0b"/>
             <text x="80" y="76" fill="#f59e0b" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Paused / Restart</text>
             <path d="M145 73 L185 73" stroke="#2dd4d4" stroke-width="1.5"/>
             <text x="240" y="76" fill="#2dd4d4" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Resumes at 64%</text>
@@ -909,18 +518,18 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="100" y="15" width="120" height="34" rx="8" fill="#131b24" stroke="#2dd4d4" stroke-width="1.5"/>
-            <text x="160" y="32" fill="#e7edf3" font-size="10" font-weight="700" text-anchor="middle">UUID: 7f3a9b-44c1</text>
+            <rect x="100" y="15" width="120" height="34" rx="8" fill="#141417" stroke="#2dd4d4" stroke-width="1.5"/>
+            <text x="160" y="32" fill="#fafafa" font-size="10" font-weight="700" text-anchor="middle">UUID: 7f3a9b-44c1</text>
             <text x="160" y="44" fill="#2dd4d4" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">Immutable Job ID</text>
-            <path d="M120 52 L50 78" stroke="rgba(148,197,222,0.3)" stroke-width="1.2"/>
-            <path d="M160 52 L160 78" stroke="rgba(148,197,222,0.3)" stroke-width="1.2"/>
-            <path d="M200 52 L270 78" stroke="rgba(148,197,222,0.3)" stroke-width="1.2"/>
-            <rect x="15" y="80" width="70" height="20" rx="4" fill="#0f151d"/>
-            <text x="50" y="93" fill="#93a4b4" font-size="8" text-anchor="middle">Desktop UI</text>
-            <rect x="125" y="80" width="70" height="20" rx="4" fill="#0f151d"/>
-            <text x="160" y="93" fill="#93a4b4" font-size="8" text-anchor="middle">CLI Daemon</text>
-            <rect x="235" y="80" width="70" height="20" rx="4" fill="#0f151d"/>
-            <text x="270" y="93" fill="#93a4b4" font-size="8" text-anchor="middle">Mobile Service</text>
+            <path d="M120 52 L50 78" stroke="rgba(255,255,255,0.3)" stroke-width="1.2"/>
+            <path d="M160 52 L160 78" stroke="rgba(255,255,255,0.3)" stroke-width="1.2"/>
+            <path d="M200 52 L270 78" stroke="rgba(255,255,255,0.3)" stroke-width="1.2"/>
+            <rect x="15" y="80" width="70" height="20" rx="4" fill="#0e0e11"/>
+            <text x="50" y="93" fill="#a1a1aa" font-size="8" text-anchor="middle">Desktop UI</text>
+            <rect x="125" y="80" width="70" height="20" rx="4" fill="#0e0e11"/>
+            <text x="160" y="93" fill="#a1a1aa" font-size="8" text-anchor="middle">CLI Daemon</text>
+            <rect x="235" y="80" width="70" height="20" rx="4" fill="#0e0e11"/>
+            <text x="270" y="93" fill="#a1a1aa" font-size="8" text-anchor="middle">Mobile Service</text>
           </svg>
         </div>
       </article>
@@ -937,8 +546,8 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="110" y="35" width="100" height="40" rx="6" fill="#131b24" stroke="#2dd4d4"/>
-            <text x="160" y="55" fill="#e7edf3" font-size="10" font-weight="700" text-anchor="middle">Event Bus</text>
+            <rect x="110" y="35" width="100" height="40" rx="6" fill="#141417" stroke="#2dd4d4"/>
+            <text x="160" y="55" fill="#fafafa" font-size="10" font-weight="700" text-anchor="middle">Event Bus</text>
             <text x="160" y="67" fill="#2dd4d4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Push Pipeline</text>
             <!-- Outward event pulses -->
             <path d="M110 45 L30 25" stroke="#2596e8" stroke-width="1.5" stroke-dasharray="3 3"/>
@@ -965,17 +574,17 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="15" width="55" height="24" rx="4" fill="#0f151d" stroke="rgba(148,197,222,0.2)"/>
-            <text x="47" y="30" fill="#93a4b4" font-size="9" text-anchor="middle">HTTPS</text>
-            <rect x="85" y="15" width="55" height="24" rx="4" fill="#0f151d" stroke="rgba(148,197,222,0.2)"/>
-            <text x="112" y="30" fill="#93a4b4" font-size="9" text-anchor="middle">HTTP/2</text>
-            <rect x="150" y="15" width="50" height="24" rx="4" fill="#0f151d" stroke="rgba(148,197,222,0.2)"/>
-            <text x="175" y="30" fill="#93a4b4" font-size="9" text-anchor="middle">FTP</text>
-            <rect x="210" y="15" width="90" height="24" rx="4" fill="#0f151d" stroke="rgba(148,197,222,0.2)"/>
-            <text x="255" y="30" fill="#93a4b4" font-size="9" text-anchor="middle">SOCKS5 / Proxy</text>
+            <rect x="20" y="15" width="55" height="24" rx="4" fill="#0e0e11" stroke="rgba(255,255,255,0.2)"/>
+            <text x="47" y="30" fill="#a1a1aa" font-size="9" text-anchor="middle">HTTPS</text>
+            <rect x="85" y="15" width="55" height="24" rx="4" fill="#0e0e11" stroke="rgba(255,255,255,0.2)"/>
+            <text x="112" y="30" fill="#a1a1aa" font-size="9" text-anchor="middle">HTTP/2</text>
+            <rect x="150" y="15" width="50" height="24" rx="4" fill="#0e0e11" stroke="rgba(255,255,255,0.2)"/>
+            <text x="175" y="30" fill="#a1a1aa" font-size="9" text-anchor="middle">FTP</text>
+            <rect x="210" y="15" width="90" height="24" rx="4" fill="#0e0e11" stroke="rgba(255,255,255,0.2)"/>
+            <text x="255" y="30" fill="#a1a1aa" font-size="9" text-anchor="middle">SOCKS5 / Proxy</text>
             <path d="M47 42 L160 70 M112 42 L160 70 M175 42 L160 70 M255 42 L160 70" stroke="#2dd4d4" stroke-width="1.2"/>
-            <rect x="90" y="70" width="140" height="28" rx="6" fill="#131b24" stroke="#2dd4d4"/>
-            <text x="160" y="87" fill="#e7edf3" font-size="10" font-weight="600" text-anchor="middle">Unified Scheduler Core</text>
+            <rect x="90" y="70" width="140" height="28" rx="6" fill="#141417" stroke="#2dd4d4"/>
+            <text x="160" y="87" fill="#fafafa" font-size="10" font-weight="600" text-anchor="middle">Unified Scheduler Core</text>
           </svg>
         </div>
       </article>
@@ -992,11 +601,11 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="35" width="70" height="30" rx="4" fill="#131b24" stroke="rgba(148,197,222,0.3)"/>
-            <text x="55" y="53" fill="#93a4b4" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Raw Chunks</text>
+            <rect x="20" y="35" width="70" height="30" rx="4" fill="#141417" stroke="rgba(255,255,255,0.3)"/>
+            <text x="55" y="53" fill="#a1a1aa" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Raw Chunks</text>
             <path d="M95 50 L140 50" stroke="#2dd4d4" stroke-width="1.5"/>
             <!-- Gate -->
-            <polygon points="170,25 200,50 170,75 140,50" fill="#0f151d" stroke="#2dd4d4" stroke-width="1.5"/>
+            <polygon points="170,25 200,50 170,75 140,50" fill="#0e0e11" stroke="#2dd4d4" stroke-width="1.5"/>
             <text x="170" y="53" fill="#2dd4d4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">SHA/ECC</text>
             <!-- Valid / Corrupt Paths -->
             <path d="M200 45 L250 30" stroke="#2dd4d4" stroke-width="1.5"/>
@@ -1019,14 +628,14 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="20" width="85" height="30" rx="4" fill="#0f151d" stroke="rgba(148,197,222,0.2)"/>
-            <text x="62" y="38" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Remote Header</text>
+            <rect x="20" y="20" width="85" height="30" rx="4" fill="#0e0e11" stroke="rgba(255,255,255,0.2)"/>
+            <text x="62" y="38" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Remote Header</text>
             <path d="M110 35 L145 35" stroke="#2596e8" stroke-width="1.5"/>
-            <rect x="150" y="20" width="145" height="30" rx="4" fill="#131b24" stroke="#2dd4d4"/>
+            <rect x="150" y="20" width="145" height="30" rx="4" fill="#141417" stroke="#2dd4d4"/>
             <text x="222" y="38" fill="#2dd4d4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">sha256:e3b0c442...</text>
             <path d="M222 55 L222 75" stroke="#2dd4d4" stroke-width="1.5" stroke-dasharray="2 2"/>
-            <rect x="80" y="75" width="160" height="22" rx="4" fill="#0f151d"/>
-            <text x="160" y="89" fill="#e7edf3" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Local Hash Matches 100%</text>
+            <rect x="80" y="75" width="160" height="22" rx="4" fill="#0e0e11"/>
+            <text x="160" y="89" fill="#fafafa" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Local Hash Matches 100%</text>
           </svg>
         </div>
       </article>
@@ -1052,8 +661,8 @@
             <rect x="185" y="20" width="50" height="20" rx="3" fill="#64778a" opacity="0.5"/>
             <text x="210" y="33" fill="#ffffff" font-size="8" font-family="'Geist Mono'" text-anchor="middle">R4: Queued</text>
             <path d="M45 45 L45 75 M100 45 L100 75 M155 45 L155 75" stroke="#2dd4d4" stroke-width="1.2" stroke-dasharray="2 2"/>
-            <rect x="20" y="75" width="275" height="22" rx="4" fill="#0f151d" stroke="rgba(148,197,222,0.2)"/>
-            <text x="157" y="89" fill="#93a4b4" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Worker Pool: Assign → Execute → Re-balance</text>
+            <rect x="20" y="75" width="275" height="22" rx="4" fill="#0e0e11" stroke="rgba(255,255,255,0.2)"/>
+            <text x="157" y="89" fill="#a1a1aa" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Worker Pool: Assign → Execute → Re-balance</text>
           </svg>
         </div>
       </article>
@@ -1070,13 +679,13 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="15" width="280" height="80" rx="6" fill="#090e14" stroke="rgba(148,197,222,0.25)"/>
+            <rect x="20" y="15" width="280" height="80" rx="6" fill="#0b0b0d" stroke="rgba(255,255,255,0.25)"/>
             <circle cx="34" cy="27" r="3" fill="#ef4444"/>
             <circle cx="44" cy="27" r="3" fill="#f59e0b"/>
             <circle cx="54" cy="27" r="3" fill="#10b981"/>
-            <text x="32" y="52" fill="#e7edf3" font-size="9" font-family="'Geist Mono'">$ hydra --compat=wget -c https://example.com/iso</text>
+            <text x="32" y="52" fill="#fafafa" font-size="9" font-family="'Geist Mono'">$ hydra --compat=wget -c https://example.com/iso</text>
             <text x="32" y="70" fill="#2dd4d4" font-size="8.5" font-family="'Geist Mono'">[8 streams] [2 mirrors] 142.5 MB/s ETA 00:14</text>
-            <text x="32" y="86" fill="#93a4b4" font-size="8" font-family="'Geist Mono'">✔ 100% [====================] Checksum OK</text>
+            <text x="32" y="86" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'">✔ 100% [====================] Checksum OK</text>
           </svg>
         </div>
       </article>
@@ -1094,10 +703,10 @@
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="20" y="15" width="280" height="80" rx="4" fill="#0b1118" stroke="#2596e8" stroke-width="1"/>
-            <rect x="20" y="15" width="280" height="18" rx="2" fill="#131b24"/>
+            <rect x="20" y="15" width="280" height="18" rx="2" fill="#141417"/>
             <text x="30" y="27" fill="#2dd4d4" font-size="8" font-family="'Geist Mono'">HYDRA TUI QUEUE MANAGER</text>
-            <text x="30" y="48" fill="#e7edf3" font-size="8" font-family="'Geist Mono'">► ubuntu-24.04.iso  [84%]  112 MB/s  [Active]</text>
-            <text x="30" y="64" fill="#93a4b4" font-size="8" font-family="'Geist Mono'">❚❚ backup-db.tar.zst [42%]   0 MB/s  [Paused]</text>
+            <text x="30" y="48" fill="#fafafa" font-size="8" font-family="'Geist Mono'">► ubuntu-24.04.iso  [84%]  112 MB/s  [Active]</text>
+            <text x="30" y="64" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'">❚❚ backup-db.tar.zst [42%]   0 MB/s  [Paused]</text>
             <text x="30" y="80" fill="#64778a" font-size="8" font-family="'Geist Mono'">• dataset-v2.parquet [0%]    Queued</text>
           </svg>
         </div>
@@ -1115,17 +724,17 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="40" width="70" height="30" rx="4" fill="#131b24" stroke="rgba(148,197,222,0.25)"/>
-            <text x="55" y="58" fill="#e7edf3" font-size="9" font-family="'Geist Mono'" text-anchor="middle">stream_data</text>
+            <rect x="20" y="40" width="70" height="30" rx="4" fill="#141417" stroke="rgba(255,255,255,0.25)"/>
+            <text x="55" y="58" fill="#fafafa" font-size="9" font-family="'Geist Mono'" text-anchor="middle">stream_data</text>
             <path d="M95 55 L145 55" stroke="#2dd4d4" stroke-width="1.5"/>
             <!-- Router -->
-            <circle cx="165" cy="55" r="14" fill="#0f151d" stroke="#2dd4d4"/>
+            <circle cx="165" cy="55" r="14" fill="#0e0e11" stroke="#2dd4d4"/>
             <text x="165" y="58" fill="#2dd4d4" font-size="7" font-family="'Geist Mono'" text-anchor="middle">Magic</text>
             <!-- Paths -->
             <path d="M180 50 L230 25 M180 55 L230 55 M180 60 L230 85" stroke="#2596e8" stroke-width="1.2"/>
-            <text x="260" y="28" fill="#93a4b4" font-size="8">📁 Videos</text>
-            <text x="260" y="58" fill="#93a4b4" font-size="8">📁 Archives</text>
-            <text x="260" y="88" fill="#93a4b4" font-size="8">📁 Documents</text>
+            <text x="260" y="28" fill="#a1a1aa" font-size="8">📁 Videos</text>
+            <text x="260" y="58" fill="#a1a1aa" font-size="8">📁 Archives</text>
+            <text x="260" y="88" fill="#a1a1aa" font-size="8">📁 Documents</text>
           </svg>
         </div>
       </article>
@@ -1142,14 +751,14 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="20" width="100" height="70" rx="6" fill="#0f151d" stroke="rgba(148,197,222,0.25)"/>
-            <text x="70" y="45" fill="#93a4b4" font-size="9" text-anchor="middle">Web Browser</text>
+            <rect x="20" y="20" width="100" height="70" rx="6" fill="#0e0e11" stroke="rgba(255,255,255,0.25)"/>
+            <text x="70" y="45" fill="#a1a1aa" font-size="9" text-anchor="middle">Web Browser</text>
             <rect x="35" y="55" width="70" height="20" rx="3" fill="#2596e8"/>
             <text x="70" y="68" fill="#ffffff" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Extension</text>
             <path d="M125 55 L190 55" stroke="#2dd4d4" stroke-width="2" stroke-dasharray="4 2"/>
             <text x="157" y="45" fill="#2dd4d4" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">Native Msg</text>
-            <rect x="195" y="20" width="105" height="70" rx="6" fill="#131b24" stroke="#2dd4d4"/>
-            <text x="247" y="48" fill="#e7edf3" font-size="10" font-weight="700" text-anchor="middle">Hydra Core</text>
+            <rect x="195" y="20" width="105" height="70" rx="6" fill="#141417" stroke="#2dd4d4"/>
+            <text x="247" y="48" fill="#fafafa" font-size="10" font-weight="700" text-anchor="middle">Hydra Core</text>
             <text x="247" y="65" fill="#2dd4d4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Direct Acceleration</text>
           </svg>
         </div>
@@ -1167,14 +776,14 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="160" cy="55" r="26" fill="#131b24" stroke="#2dd4d4" stroke-width="1.8"/>
+            <circle cx="160" cy="55" r="26" fill="#141417" stroke="#2dd4d4" stroke-width="1.8"/>
             <text x="160" y="58" fill="#2dd4d4" font-size="9" font-weight="700" text-anchor="middle">Core</text>
             <!-- Surrounding Spokes -->
-            <path d="M160 29 L160 10 M160 81 L160 100 M134 55 L35 55 M186 55 L285 55" stroke="rgba(148,197,222,0.3)" stroke-width="1.2"/>
-            <text x="160" y="8" fill="#93a4b4" font-size="8" text-anchor="middle">Desktop GUI</text>
-            <text x="160" y="108" fill="#93a4b4" font-size="8" text-anchor="middle">Mobile Apps</text>
-            <text x="20" y="58" fill="#93a4b4" font-size="8" text-anchor="middle">CLI</text>
-            <text x="300" y="58" fill="#93a4b4" font-size="8" text-anchor="middle">FFI Lib</text>
+            <path d="M160 29 L160 10 M160 81 L160 100 M134 55 L35 55 M186 55 L285 55" stroke="rgba(255,255,255,0.3)" stroke-width="1.2"/>
+            <text x="160" y="8" fill="#a1a1aa" font-size="8" text-anchor="middle">Desktop GUI</text>
+            <text x="160" y="108" fill="#a1a1aa" font-size="8" text-anchor="middle">Mobile Apps</text>
+            <text x="20" y="58" fill="#a1a1aa" font-size="8" text-anchor="middle">CLI</text>
+            <text x="300" y="58" fill="#a1a1aa" font-size="8" text-anchor="middle">FFI Lib</text>
           </svg>
         </div>
       </article>
@@ -1191,13 +800,13 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="35" width="80" height="40" rx="4" fill="#0f151d" stroke="rgba(148,197,222,0.2)"/>
-            <text x="60" y="52" fill="#e7edf3" font-size="9" text-anchor="middle">Your App</text>
-            <text x="60" y="65" fill="#93a4b4" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">Go/Swift/Python</text>
+            <rect x="20" y="35" width="80" height="40" rx="4" fill="#0e0e11" stroke="rgba(255,255,255,0.2)"/>
+            <text x="60" y="52" fill="#fafafa" font-size="9" text-anchor="middle">Your App</text>
+            <text x="60" y="65" fill="#a1a1aa" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">Go/Swift/Python</text>
             <path d="M105 55 L160 55" stroke="#2dd4d4" stroke-width="1.8"/>
-            <rect x="165" y="25" width="135" height="60" rx="6" fill="#131b24" stroke="#2dd4d4"/>
+            <rect x="165" y="25" width="135" height="60" rx="6" fill="#141417" stroke="#2dd4d4"/>
             <text x="232" y="48" fill="#2dd4d4" font-size="10" font-weight="700" font-family="'Geist Mono'" text-anchor="middle">hydra.h (C ABI)</text>
-            <text x="232" y="66" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Zero Overhead FFI</text>
+            <text x="232" y="66" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Zero Overhead FFI</text>
           </svg>
         </div>
       </article>
@@ -1214,13 +823,13 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="40" y="15" width="80" height="80" rx="10" fill="#0f151d" stroke="#2596e8"/>
+            <rect x="40" y="15" width="80" height="80" rx="10" fill="#0e0e11" stroke="#2596e8"/>
             <text x="80" y="48" fill="#2596e8" font-size="10" font-weight="700" text-anchor="middle">Android</text>
-            <text x="80" y="64" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">jniLibs .so</text>
-            <rect x="200" y="15" width="80" height="80" rx="10" fill="#0f151d" stroke="#2dd4d4"/>
+            <text x="80" y="64" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">jniLibs .so</text>
+            <rect x="200" y="15" width="80" height="80" rx="10" fill="#0e0e11" stroke="#2dd4d4"/>
             <text x="240" y="48" fill="#2dd4d4" font-size="10" font-weight="700" text-anchor="middle">Apple iOS</text>
-            <text x="240" y="64" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">.xcframework</text>
-            <path d="M125 55 L195 55" stroke="rgba(148,197,222,0.3)" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <text x="240" y="64" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">.xcframework</text>
+            <path d="M125 55 L195 55" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" stroke-dasharray="3 3"/>
           </svg>
         </div>
       </article>
@@ -1237,15 +846,15 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="30" width="80" height="50" rx="6" fill="#131b24" stroke="rgba(148,197,222,0.2)"/>
-            <text x="60" y="55" fill="#e7edf3" font-size="10" font-weight="600" text-anchor="middle">Windows</text>
-            <text x="60" y="68" fill="#93a4b4" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">x64 / Arm64</text>
-            <rect x="120" y="30" width="80" height="50" rx="6" fill="#131b24" stroke="rgba(148,197,222,0.2)"/>
-            <text x="160" y="55" fill="#e7edf3" font-size="10" font-weight="600" text-anchor="middle">macOS</text>
-            <text x="160" y="68" fill="#93a4b4" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">Universal</text>
-            <rect x="220" y="30" width="80" height="50" rx="6" fill="#131b24" stroke="rgba(148,197,222,0.2)"/>
-            <text x="260" y="55" fill="#e7edf3" font-size="10" font-weight="600" text-anchor="middle">Linux</text>
-            <text x="260" y="68" fill="#93a4b4" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">x86/ARM/musl</text>
+            <rect x="20" y="30" width="80" height="50" rx="6" fill="#141417" stroke="rgba(255,255,255,0.2)"/>
+            <text x="60" y="55" fill="#fafafa" font-size="10" font-weight="600" text-anchor="middle">Windows</text>
+            <text x="60" y="68" fill="#a1a1aa" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">x64 / Arm64</text>
+            <rect x="120" y="30" width="80" height="50" rx="6" fill="#141417" stroke="rgba(255,255,255,0.2)"/>
+            <text x="160" y="55" fill="#fafafa" font-size="10" font-weight="600" text-anchor="middle">macOS</text>
+            <text x="160" y="68" fill="#a1a1aa" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">Universal</text>
+            <rect x="220" y="30" width="80" height="50" rx="6" fill="#141417" stroke="rgba(255,255,255,0.2)"/>
+            <text x="260" y="55" fill="#fafafa" font-size="10" font-weight="600" text-anchor="middle">Linux</text>
+            <text x="260" y="68" fill="#a1a1aa" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">x86/ARM/musl</text>
           </svg>
         </div>
       </article>
@@ -1262,11 +871,11 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="20" width="280" height="22" rx="4" fill="#0f151d" stroke="#2dd4d4"/>
+            <rect x="20" y="20" width="280" height="22" rx="4" fill="#0e0e11" stroke="#2dd4d4"/>
             <text x="160" y="35" fill="#2dd4d4" font-size="9" font-family="'Geist Mono'" text-anchor="middle">ABI 1.0 (Frozen Boundary)</text>
-            <rect x="20" y="55" width="280" height="35" rx="4" fill="#131b24" stroke="rgba(148,197,222,0.2)"/>
-            <text x="160" y="73" fill="#e7edf3" font-size="9" font-weight="600" text-anchor="middle">Engine Core Evolves Freely Internally</text>
-            <text x="160" y="84" fill="#93a4b4" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">Zero ABI Breaks for Host Embedders</text>
+            <rect x="20" y="55" width="280" height="35" rx="4" fill="#141417" stroke="rgba(255,255,255,0.2)"/>
+            <text x="160" y="73" fill="#fafafa" font-size="9" font-weight="600" text-anchor="middle">Engine Core Evolves Freely Internally</text>
+            <text x="160" y="84" fill="#a1a1aa" font-size="7.5" font-family="'Geist Mono'" text-anchor="middle">Zero ABI Breaks for Host Embedders</text>
           </svg>
         </div>
       </article>
@@ -1283,15 +892,15 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="110" y="15" width="100" height="30" rx="4" fill="#131b24" stroke="#2dd4d4"/>
+            <rect x="110" y="15" width="100" height="30" rx="4" fill="#141417" stroke="#2dd4d4"/>
             <text x="160" y="34" fill="#2dd4d4" font-size="9" font-family="'Geist Mono'" text-anchor="middle">libhydra Source</text>
-            <path d="M130 47 L60 70 M160 47 L160 70 M190 47 L260 70" stroke="rgba(148,197,222,0.3)" stroke-width="1.2"/>
-            <rect x="20" y="70" width="80" height="24" rx="4" fill="#0f151d"/>
-            <text x="60" y="85" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">libhydra.a</text>
-            <rect x="120" y="70" width="80" height="24" rx="4" fill="#0f151d"/>
-            <text x="160" y="85" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">.so / .dylib</text>
-            <rect x="220" y="70" width="80" height="24" rx="4" fill="#0f151d"/>
-            <text x="260" y="85" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">hydra.h</text>
+            <path d="M130 47 L60 70 M160 47 L160 70 M190 47 L260 70" stroke="rgba(255,255,255,0.3)" stroke-width="1.2"/>
+            <rect x="20" y="70" width="80" height="24" rx="4" fill="#0e0e11"/>
+            <text x="60" y="85" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">libhydra.a</text>
+            <rect x="120" y="70" width="80" height="24" rx="4" fill="#0e0e11"/>
+            <text x="160" y="85" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">.so / .dylib</text>
+            <rect x="220" y="70" width="80" height="24" rx="4" fill="#0e0e11"/>
+            <text x="260" y="85" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">hydra.h</text>
           </svg>
         </div>
       </article>
@@ -1308,13 +917,13 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="40" y="20" width="240" height="70" rx="8" fill="#090e14" stroke="rgba(148,197,222,0.3)"/>
-            <rect x="55" y="32" width="90" height="46" rx="4" fill="#131b24" stroke="#2dd4d4"/>
+            <rect x="40" y="20" width="240" height="70" rx="8" fill="#0b0b0d" stroke="rgba(255,255,255,0.3)"/>
+            <rect x="55" y="32" width="90" height="46" rx="4" fill="#141417" stroke="#2dd4d4"/>
             <text x="100" y="52" fill="#2dd4d4" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Headless Engine</text>
-            <text x="100" y="66" fill="#93a4b4" font-size="7.5" text-anchor="middle">No GUI / X11 Req</text>
+            <text x="100" y="66" fill="#a1a1aa" font-size="7.5" text-anchor="middle">No GUI / X11 Req</text>
             <path d="M150 55 L200 55" stroke="#2596e8" stroke-width="1.5" stroke-dasharray="3 2"/>
-            <text x="240" y="52" fill="#e7edf3" font-size="9" text-anchor="middle">REST / gRPC /</text>
-            <text x="240" y="65" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Custom Bus</text>
+            <text x="240" y="52" fill="#fafafa" font-size="9" text-anchor="middle">REST / gRPC /</text>
+            <text x="240" y="65" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Custom Bus</text>
           </svg>
         </div>
       </article>
@@ -1331,13 +940,13 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <line x1="30" y1="55" x2="290" y2="55" stroke="rgba(148,197,222,0.2)" stroke-width="2"/>
-            <circle cx="60" cy="55" r="8" fill="#131b24" stroke="#2dd4d4" stroke-width="1.5"/>
-            <text x="60" y="78" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">02:00 Start</text>
-            <circle cx="160" cy="55" r="8" fill="#131b24" stroke="#2596e8" stroke-width="1.5"/>
-            <text x="160" y="78" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Queue Batch</text>
-            <circle cx="260" cy="55" r="8" fill="#131b24" stroke="#38bdf8" stroke-width="1.5"/>
-            <text x="260" y="78" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">06:00 Stop</text>
+            <line x1="30" y1="55" x2="290" y2="55" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
+            <circle cx="60" cy="55" r="8" fill="#141417" stroke="#2dd4d4" stroke-width="1.5"/>
+            <text x="60" y="78" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">02:00 Start</text>
+            <circle cx="160" cy="55" r="8" fill="#141417" stroke="#2596e8" stroke-width="1.5"/>
+            <text x="160" y="78" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">Queue Batch</text>
+            <circle cx="260" cy="55" r="8" fill="#141417" stroke="#38bdf8" stroke-width="1.5"/>
+            <text x="260" y="78" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">06:00 Stop</text>
           </svg>
         </div>
       </article>
@@ -1354,14 +963,14 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="40" width="70" height="30" rx="4" fill="#0f151d" stroke="rgba(148,197,222,0.2)"/>
-            <text x="55" y="58" fill="#93a4b4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">v0.3.5</text>
+            <rect x="20" y="40" width="70" height="30" rx="4" fill="#0e0e11" stroke="rgba(255,255,255,0.2)"/>
+            <text x="55" y="58" fill="#a1a1aa" font-size="8" font-family="'Geist Mono'" text-anchor="middle">v0.3.5</text>
             <path d="M95 55 L130 55" stroke="#2dd4d4" stroke-width="1.5"/>
-            <rect x="135" y="35" width="80" height="40" rx="6" fill="#131b24" stroke="#2dd4d4"/>
+            <rect x="135" y="35" width="80" height="40" rx="6" fill="#141417" stroke="#2dd4d4"/>
             <text x="175" y="52" fill="#2dd4d4" font-size="8.5" font-weight="700" text-anchor="middle">Auto-Delta</text>
-            <text x="175" y="65" fill="#93a4b4" font-size="7" font-family="'Geist Mono'" text-anchor="middle">Sig Verified</text>
+            <text x="175" y="65" fill="#a1a1aa" font-size="7" font-family="'Geist Mono'" text-anchor="middle">Sig Verified</text>
             <path d="M220 55 L255 55" stroke="#2dd4d4" stroke-width="1.5"/>
-            <rect x="260" y="40" width="45" height="30" rx="4" fill="#0f151d" stroke="#2dd4d4"/>
+            <rect x="260" y="40" width="45" height="30" rx="4" fill="#0e0e11" stroke="#2dd4d4"/>
             <text x="282" y="58" fill="#2dd4d4" font-size="8" font-family="'Geist Mono'" text-anchor="middle">v0.3.6</text>
           </svg>
         </div>
@@ -1379,13 +988,13 @@
         </div>
         <div class="feat-canvas-wrap">
           <svg viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="15" width="280" height="24" rx="4" fill="#0f151d"/>
-            <text x="60" y="30" fill="#93a4b4" font-size="8">CLI</text>
-            <text x="120" y="30" fill="#93a4b4" font-size="8">GUI</text>
-            <text x="180" y="30" fill="#93a4b4" font-size="8">Browser</text>
-            <text x="245" y="30" fill="#93a4b4" font-size="8">Mobile</text>
+            <rect x="20" y="15" width="280" height="24" rx="4" fill="#0e0e11"/>
+            <text x="60" y="30" fill="#a1a1aa" font-size="8">CLI</text>
+            <text x="120" y="30" fill="#a1a1aa" font-size="8">GUI</text>
+            <text x="180" y="30" fill="#a1a1aa" font-size="8">Browser</text>
+            <text x="245" y="30" fill="#a1a1aa" font-size="8">Mobile</text>
             <path d="M60 40 L160 65 M120 40 L160 65 M180 40 L160 65 M245 40 L160 65" stroke="#2dd4d4" stroke-width="1.2"/>
-            <rect x="60" y="65" width="200" height="28" rx="6" fill="#131b24" stroke="#2dd4d4"/>
+            <rect x="60" y="65" width="200" height="28" rx="6" fill="#141417" stroke="#2dd4d4"/>
             <text x="160" y="82" fill="#2dd4d4" font-size="8.5" font-family="'Geist Mono'" text-anchor="middle">Job → Range Scheduler → Disk</text>
           </svg>
         </div>
@@ -1397,16 +1006,39 @@
 
 <!-- Footer -->
 <footer>
-  <div class="wrap foot">
-    <a class="foot-brand" href="index.html">
-      <img src="logo.png" alt="" width="24" height="24">
-      HYDRA
-    </a>
-    <p>GPL-3.0-or-later (CLI) with MIT / Apache-2.0 core libraries. See <a href="https://github.com/ja7ad/hydra/blob/main/LICENSING.md">LICENSING.md</a>. · <a href="features.html">Features</a> · <a href="changelog.html">Changelog</a> · <a href="privacy.html">Privacy Policy</a></p>
-    <div class="foot-social">
-      <a href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-      </a>
+  <div class="wrap">
+    <div class="foot">
+      <div class="foot-about">
+        <a class="foot-brand" href="index.html">
+          <img src="logo-64.png" alt="" width="28" height="28">
+          Hydra
+        </a>
+        <p>Free, open-source download manager and accelerator for Windows, macOS, and Linux.</p>
+      </div>
+      <nav class="foot-col" aria-label="Product">
+        <h2>Product</h2>
+        <a href="index.html#download">Download</a>
+        <a href="features.html">Features</a>
+        <a href="plugins.html">Plugins</a>
+        <a href="changelog.html">Changelog</a>
+        <a href="index.html#faq">FAQ</a>
+      </nav>
+      <nav class="foot-col" aria-label="Project">
+        <h2>Project</h2>
+        <a href="https://github.com/ja7ad/hydra">GitHub</a>
+        <a href="https://github.com/ja7ad/hydra/releases">Releases</a>
+        <a href="https://github.com/ja7ad/hydra#benchmark">Benchmark</a>
+      </nav>
+      <nav class="foot-col" aria-label="Legal">
+        <h2>Legal</h2>
+        <a href="https://github.com/ja7ad/hydra/blob/main/LICENSING.md">Licensing</a>
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="https://github.com/ja7ad/hydra#code-signing-policy">Code signing policy</a>
+      </nav>
+    </div>
+    <div class="foot-base">
+      <p>GPL-3.0-or-later (CLI) with MIT / Apache-2.0 core libraries.</p>
+      <a class="foot-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg></a>
     </div>
   </div>
 </footer>
@@ -1508,5 +1140,6 @@
     });
   }
 </script>
+<script src="assets/stars.js" defer></script>
 </body>
 </html>

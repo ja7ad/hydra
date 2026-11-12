@@ -4,112 +4,84 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="index, follow">
-<meta name="theme-color" content="#0a0e13">
-<title>Plugins — Hydra Download Manager</title>
-<meta name="description" content="Discover plugins for Hydra Download Manager. Download plugin packages or open Hydra to review and install them.">
+<meta name="theme-color" content="#09090b">
+<title>Plugins — Hydra Download Manager (HDM)</title>
+<meta name="description" content="Plugins for Hydra Download Manager (HDM): add YouTube, torrent and more to your download manager. Download a plugin package or install it straight into Hydra.">
 <link rel="canonical" href="https://hydra.javad.dev/plugins.html">
-<link rel="icon" type="image/png" href="logo.png">
-<meta property="og:title" content="Plugins — Hydra Download Manager">
-<meta property="og:description" content="Extend Hydra with plugins for video, audio and more.">
+<link rel="icon" type="image/png" href="logo-64.png">
+<link rel="apple-touch-icon" href="logo.png">
+<meta property="og:title" content="Plugins — Hydra Download Manager (HDM)">
+<meta property="og:description" content="Plugins for Hydra Download Manager (HDM): add YouTube, torrent and more to your download manager. Download a plugin package or install it straight into Hydra.">
 <meta property="og:url" content="https://hydra.javad.dev/plugins.html">
 <meta property="og:image" content="https://hydra.javad.dev/logo.png">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Hydra Download Manager">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Plugins — Hydra Download Manager (HDM)">
+<meta name="twitter:description" content="Plugins for Hydra Download Manager (HDM): add YouTube, torrent and more to your download manager. Download a plugin package or install it straight into Hydra.">
+<meta name="twitter:image" content="https://hydra.javad.dev/logo.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "CollectionPage",
+      "@id": "https://hydra.javad.dev/plugins.html#webpage",
+      "url": "https://hydra.javad.dev/plugins.html",
+      "name": "Plugins — Hydra Download Manager (HDM)",
+      "description": "Plugins for Hydra Download Manager (HDM): add YouTube, torrent and more to your download manager. Download a plugin package or install it straight into Hydra.",
+      "inLanguage": "en",
+      "isPartOf": { "@type": "WebSite", "@id": "https://hydra.javad.dev/#website", "url": "https://hydra.javad.dev/", "name": "Hydra Download Manager" },
+      "about": { "@id": "https://hydra.javad.dev/#software" }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Hydra Download Manager", "item": "https://hydra.javad.dev/" },
+        { "@type": "ListItem", "position": 2, "name": "Plugins", "item": "https://hydra.javad.dev/plugins.html" }
+      ]
+    }
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root { color-scheme: dark; --bg: #0a0e13; --card: #0f151d; --line: rgba(148,197,222,.16); --text: #e7edf3; --dim: #93a4b4; --accent: #2dd4d4; }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 "Geist", system-ui, sans-serif; }
-  a { color: inherit; text-decoration: none; }
-  a:hover { color: var(--accent); }
-  .wrap { max-width: 1200px; margin: auto; padding: 0 24px; }
-  .nav { background: rgba(10,14,19,.95); border-bottom: 1px solid var(--line); }
-  .nav-inner { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; }
-  .brand img { width: 30px; height: 30px; }
-  .nav-links { display: flex; align-items: center; gap: 24px; color: var(--dim); font-size: 14px; }
-  .nav-links .active { color: var(--accent); }
-  .nav-toggle { display: none; }
-  .hero { padding: 78px 0 48px; background: radial-gradient(ellipse at 50% 0, rgba(37,150,232,.13), transparent 70%); text-align: center; }
-  .eyebrow { color: var(--accent); font: 13px "Geist Mono", monospace; letter-spacing: .13em; text-transform: uppercase; }
-  h1 { font-size: clamp(36px, 5vw, 58px); line-height: 1.12; letter-spacing: -.04em; margin: 20px 0; }
-  h1 span { background: linear-gradient(100deg,#2dd4d4,#2596e8); background-clip: text; color: transparent; }
-  .lead { color: var(--dim); max-width: 55ch; margin: auto; font-size: 18px; }
-  .catalog { padding-bottom: 48px; }
-  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 8px 0 24px; }
-  .search { display: flex; flex-direction: column; gap: 8px; width: min(100%, 420px); font-size: 14px; }
-  input, .download-select { width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 13px 16px; color: var(--text); font: inherit; }
-  input::placeholder { color: var(--dim); }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-  #plugin-count { color: var(--dim); font: 13px "Geist Mono", monospace; white-space: nowrap; }
-  .plugin-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
-  .plugin-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px; display: flex; flex-direction: column; min-width: 0; }
-  .card-header { display: flex; gap: 18px; align-items: center; }
-  .plugin-image { border-radius: 16px; flex-shrink: 0; }
-  h2 { font-size: 23px; letter-spacing: -.02em; line-height: 1.3; margin: 8px 0 0; overflow-wrap: anywhere; }
-  .badge { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 6px; background: rgba(147,164,180,.1); color: var(--dim); }
-  .badge.official { color: var(--accent); background: rgba(45,212,212,.09); }
-  .description { color: var(--dim); font-size: 15px; margin: 24px 0; flex-grow: 1; }
-  .plugin-details { margin: 0; font-size: 14px; }
-  .detail-row { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-top: 1px solid var(--line); }
-  dt { color: var(--dim); }
-  dd { margin: 0; overflow-wrap: anywhere; text-align: right; }
-  .homepage { color: var(--accent); font-size: 14px; margin: 16px 0 24px; align-self: flex-start; }
-  .download-picker { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; color: var(--dim); font-size: 13px; }
-  .download-select { color-scheme: dark; font: 500 14px "Geist", system-ui, sans-serif; cursor: pointer; }
-  .card-actions { display: flex; gap: 12px; flex-wrap: wrap; }
-  .card-actions .button { flex: 1; }
-  .button { display: inline-flex; justify-content: center; align-items: center; border-radius: 8px; padding: 11px 15px; font: 600 13px "Geist",system-ui,sans-serif; cursor: pointer; border: 1px solid var(--line); }
-  .primary { background: linear-gradient(100deg,#2dd4d4,#2596e8); color: #06282e; border: 0; }
-  .primary:hover { color: #06282e; filter: brightness(1.1); }
-  .secondary { color: var(--text); background: transparent; }
-  .help, #install-status, #catalog-state { color: var(--dim); font-size: 14px; }
-  #install-status:empty { display: none; }
-  .index-panel { border: 1px solid var(--line); border-radius: 16px; padding: 28px; margin-bottom: 64px; background: var(--card); }
-  .index-panel h2 { margin-top: 0; font-size: 20px; }
-  .index-panel p { color: var(--dim); font-size: 14px; }
-  .index-url { color: var(--accent); font: 13px "Geist Mono", monospace; overflow-wrap: anywhere; }
-  footer { border-top: 1px solid var(--line); padding: 32px 0; color: var(--dim); font-size: 13px; }
-  [hidden] { display: none !important; }
-  @media (max-width: 800px) {
-    .nav-inner { flex-wrap: wrap; gap: 0; padding-top: 18px; padding-bottom: 18px; }
-    .nav-toggle { display: block; background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer; }
-    .nav-links { display: none; width: 100%; flex-direction: column; align-items: stretch; gap: 0; padding-top: 16px; }
-    .nav-links.open { display: flex; }
-    .nav-links a { padding: 10px 0; }
-    .plugin-grid { grid-template-columns: 1fr; }
-    .hero { padding: 48px 0 32px; }
-  }
-  @media (max-width: 480px) {
-    .wrap { padding-left: 18px; padding-right: 18px; }
-    .toolbar { flex-direction: column; align-items: stretch; }
-    .plugin-card, .index-panel { padding: 20px; }
-    .card-actions .button { flex: 1 1 100%; }
-  }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
 <script type="module" src="plugins/page.mjs"></script>
 </head>
-<body>
-<nav class="nav" aria-label="Main navigation">
-  <div class="wrap nav-inner">
-    <a class="brand" href="index.html"><img src="logo.png" alt="Hydra logo" width="30" height="30">HYDRA</a>
-    <button class="nav-toggle" id="nav-toggle" aria-controls="nav-links" aria-expanded="false">Menu</button>
+<body class="page-plugins">
+<nav class="nav" id="nav" aria-label="Main navigation">
+  <div class="nav-inner wrap">
+    <a class="brand" href="index.html">
+      <img src="logo.png" alt="Hydra logo" width="28" height="28">
+      Hydra
+    </a>
     <div class="nav-links" id="nav-links">
+      <a href="index.html#how">How it works</a>
+      <a href="index.html#engine">Engine</a>
+      <a href="index.html#benchmark">Benchmark</a>
+      <a href="index.html#app">App</a>
+      <a href="index.html#cli">CLI</a>
       <a href="features.html">Features</a>
-      <a href="index.html#app">Desktop App</a>
       <a href="plugins.html" class="active" aria-current="page">Plugins</a>
-      <a href="index.html#download">Download</a>
       <a href="changelog.html">Changelog</a>
-      <a href="https://github.com/ja7ad/hydra">GitHub ↗</a>
+      <a class="nav-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg><span class="gh-stars" hidden><svg class="gh-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.6l-5.9 3.1 1.2-6.6L2.5 9.5l6.6-.9L12 2.5z" /></svg><b data-gh-stars></b></span></a>
+      <a class="nav-cta" href="index.html#download">Download</a>
     </div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation menu" aria-controls="nav-links" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path id="nav-toggle-icon-open" d="M4 6h16M4 12h16M4 18h16"/>
+        <path id="nav-toggle-icon-close" d="M18 6L6 18M6 6l12 12" style="display:none;"/>
+      </svg>
+    </button>
   </div>
 </nav>
 <main>
-  <header class="hero">
+  <header class="page-head">
     <div class="wrap">
-      <div class="eyebrow">The plugin collection</div>
-      <h1>Do more with <span>Hydra.</span></h1>
+      
+      <h1><span class="eyebrow">Hydra Download Manager plugins</span>Do more with <span class="grad">Hydra.</span></h1>
       <p class="lead">Add new capabilities to your download manager. Find a plugin, review its permissions and make it yours.</p>
     </div>
   </header>
@@ -135,6 +107,43 @@
     </div>
   </section>
 </main>
-<footer><div class="wrap">Hydra Download Manager · <a href="features.html">Features</a> · <a href="privacy.html">Privacy Policy</a> · <a href="https://github.com/ja7ad/hydra">Source on GitHub</a></div></footer>
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div class="foot-about">
+        <a class="foot-brand" href="index.html">
+          <img src="logo-64.png" alt="" width="28" height="28">
+          Hydra
+        </a>
+        <p>Free, open-source download manager and accelerator for Windows, macOS, and Linux.</p>
+      </div>
+      <nav class="foot-col" aria-label="Product">
+        <h2>Product</h2>
+        <a href="index.html#download">Download</a>
+        <a href="features.html">Features</a>
+        <a href="plugins.html">Plugins</a>
+        <a href="changelog.html">Changelog</a>
+        <a href="index.html#faq">FAQ</a>
+      </nav>
+      <nav class="foot-col" aria-label="Project">
+        <h2>Project</h2>
+        <a href="https://github.com/ja7ad/hydra">GitHub</a>
+        <a href="https://github.com/ja7ad/hydra/releases">Releases</a>
+        <a href="https://github.com/ja7ad/hydra#benchmark">Benchmark</a>
+      </nav>
+      <nav class="foot-col" aria-label="Legal">
+        <h2>Legal</h2>
+        <a href="https://github.com/ja7ad/hydra/blob/main/LICENSING.md">Licensing</a>
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="https://github.com/ja7ad/hydra#code-signing-policy">Code signing policy</a>
+      </nav>
+    </div>
+    <div class="foot-base">
+      <p>GPL-3.0-or-later (CLI) with MIT / Apache-2.0 core libraries.</p>
+      <a class="foot-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg></a>
+    </div>
+  </div>
+</footer>
+<script src="assets/stars.js" defer></script>
 </body>
 </html>

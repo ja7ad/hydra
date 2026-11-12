@@ -6,24 +6,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
   <meta name="author" content="Javad Rajabzadeh">
-  <meta name="theme-color" content="#0a0e13">
-  <title>Hydra Download Manager (HDM) – Fast, Multi-Source Download Engine</title>
+  <meta name="theme-color" content="#09090b">
+  <title>Hydra Download Manager (HDM) – Free Open-Source Download Manager</title>
   <meta name="description"
-    content="Hydra Download Manager (HDM) is an open-source, high-performance download manager for Windows, macOS, and Linux featuring multi-connection acceleration, browser integration, and CLI support.">
+    content="Hydra Download Manager (HDM) is a free, open-source download manager and accelerator for Windows, macOS and Linux: multi-connection speed, browser extensions, CLI.">
   <link rel="canonical" href="https://hydra.javad.dev/">
-  <link rel="icon" type="image/png" href="logo.png">
-  <meta property="og:title" content="Hydra Download Manager (HDM) – Fast, Multi-Source Download Engine">
+  <link rel="icon" type="image/png" href="logo-64.png">
+  <link rel="apple-touch-icon" href="logo.png">
+  <meta property="og:title" content="Hydra Download Manager (HDM) – Free Open-Source Download Manager">
   <meta property="og:description"
-    content="Hydra Download Manager (HDM) is an open-source, high-performance download manager for Windows, macOS, and Linux featuring multi-connection acceleration, browser integration, and CLI support.">
+    content="Hydra Download Manager (HDM) is a free, open-source download manager and accelerator for Windows, macOS and Linux: multi-connection speed, browser extensions, CLI.">
   <meta property="og:image" content="https://hydra.javad.dev/img/screenshot.jpg">
   <meta property="og:url" content="https://hydra.javad.dev/">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="en_US">
   <meta property="og:site_name" content="Hydra Download Manager">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Hydra Download Manager (HDM) – Fast, Multi-Source Download Engine">
+  <meta name="twitter:title" content="Hydra Download Manager (HDM) – Free Open-Source Download Manager">
   <meta name="twitter:description"
-    content="Hydra Download Manager (HDM) is an open-source, high-performance download manager for Windows, macOS, and Linux featuring multi-connection acceleration, browser integration, and CLI support.">
+    content="Hydra Download Manager (HDM) is a free, open-source download manager and accelerator for Windows, macOS and Linux: multi-connection speed, browser extensions, CLI.">
   <meta name="twitter:image" content="https://hydra.javad.dev/img/screenshot.jpg">
   <script type="application/ld+json">
 {
@@ -53,6 +54,7 @@
       ],
       "applicationCategory": "UtilitiesApplication",
       "applicationSubCategory": "Download Manager",
+      "keywords": "download manager, HDM, Hydra Download Manager, open source download manager, download accelerator, free download manager, IDM alternative",
       "license": "https://github.com/ja7ad/hydra/blob/main/LICENSING.md",
       "isAccessibleForFree": true,
       "programmingLanguage": [
@@ -110,6 +112,68 @@
       ]
     },
     {
+      "@type": "FAQPage",
+      "@id": "https://hydra.javad.dev/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is Hydra Download Manager (HDM)?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Hydra Download Manager, or HDM, is a free, open-source download manager and download accelerator for Windows, macOS and Linux. It splits each file across parallel connections and mirror sources, hands byte ranges from slow connections to faster ones, and resumes interrupted downloads."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Hydra Download Manager free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. HDM is free and open source. The desktop app and CLI are licensed GPL-3.0-or-later and the core libraries are MIT / Apache-2.0. There is no paid tier, and the app contains no advertising, analytics or telemetry code."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How is HDM different from other download managers like IDM, FDM or JDownloader?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "HDM is an open-source alternative built around a download engine rather than around a window. The engine predicts stalling connections before their timeout fires and reassigns their remaining byte ranges, and the same engine powers the desktop app, the command line and the embeddable libhydra library. In our test of 1 GB over a 100 ms path, hydra reached 414 MB/s with 8 connections against 298 MB/s for aria2c, using 6.9 MiB of memory."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which platforms does the download manager support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The desktop download manager runs on Windows 10 and 11, macOS 11 or later, and Linux, on both x64 and Arm64. Linux packages are available as .deb, .rpm, an Ubuntu PPA, Fedora COPR and the Arch AUR. The libhydra engine can also be embedded in Android and iOS apps."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does HDM work with my browser?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Official extensions for Chrome, Edge, Firefox and Safari hand downloads to the Hydra app running on your own computer. Nothing is sent to a remote server."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I use Hydra Download Manager from the terminal?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. HDM ships a scriptable command-line download manager that accepts common wget and curl flags, plus a full-screen interactive queue manager for servers, containers and terminal users."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can HDM download videos and streams?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The desktop app can capture HLS / M3U8 video streams and record live streams, and plugins add YouTube and torrent downloads."
+          }
+        }
+      ]
+    },
+    {
       "@type": "Person",
       "@id": "https://hydra.javad.dev/#author",
       "name": "Javad Rajabzadeh",
@@ -155,1570 +219,534 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
     rel="stylesheet">
   <style>
+    @property --ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
     :root {
-      --bg: #0a0e13;
-      --bg-raised: #0f151d;
-      --line: rgba(148, 197, 222, 0.12);
-      --line-strong: rgba(148, 197, 222, 0.22);
-      --text: #e7edf3;
-      --text-dim: #93a4b4;
-      --text-faint: #64778a;
-      --accent: #2dd4d4;
-      --accent-ink: #06282e;
-      --grad: linear-gradient(100deg, #2dd4d4, #2596e8);
-      --radius: 14px;
-      --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --bg: #09090b;
+      --text: #fafafa;
+      --dim: #a1a1aa;
+      --faint: #71717a;
+      --glass: #0e0e11;
+      --glass-strong: rgba(9, 9, 11, 0.86);
+      --line: rgba(255, 255, 255, 0.09);
+      --line-strong: rgba(255, 255, 255, 0.18);
+      --h1: #2dd4d4;
+      --h2: #2dd4d4;
+      --h3: #2dd4d4;
+      --h4: #2dd4d4;
+      --h5: #2dd4d4;
+      --spectrum: linear-gradient(100deg, #2dd4d4, #2596e8);
+      --accent: var(--h1);
+      --radius: 18px;
+      --font-display: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
       --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
     }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
-      max-width: 100vw;
-      overflow-x: hidden;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      html {
-        scroll-behavior: auto;
-      }
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 90px; background: var(--bg); }
 
     body {
-      background: var(--bg);
       color: var(--text);
       font-family: var(--font-sans);
       font-size: 16px;
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
-      max-width: 100vw;
-      width: 100%;
+      overflow-x: clip;
     }
 
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    code { font-family: var(--font-mono); font-size: 0.88em; color: var(--h1); }
+    :focus-visible { outline: 2px solid var(--h1); outline-offset: 3px; border-radius: 6px; }
+    ::selection { background: var(--h3); color: #fff; }
 
-    img {
-      max-width: 100%;
-      display: block;
-    }
-
-    svg {
-      max-width: 100%;
-      height: auto;
-    }
-
-    .wrap {
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 0 24px;
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    .nav {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 40;
-      border-bottom: 1px solid transparent;
-      transition: background 0.25s ease, border-color 0.25s ease;
-      width: 100%;
-    }
-
-    .nav.scrolled {
-      background: rgba(10, 14, 19, 0.82);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border-bottom-color: var(--line);
-    }
-
-    .nav-inner {
-      height: 68px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 700;
-      font-size: 17px;
-      letter-spacing: 0.01em;
-    }
-
-    .brand img {
-      width: 30px;
-      height: 30px;
-    }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 28px;
-      font-size: 14.5px;
-      color: var(--text-dim);
-    }
-
-    .nav-links a {
-      transition: color 0.15s ease;
-    }
-
-    .nav-links a:hover {
-      color: var(--text);
-    }
-
-    .nav-gh {
-      display: inline-flex;
-      align-items: center;
-    }
-
-    .nav-gh svg {
-      width: 21px;
-      height: 21px;
-    }
-
-    .nav-toggle {
-      display: none;
-      background: transparent;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      color: var(--text);
-      padding: 6px;
-      cursor: pointer;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s ease, border-color 0.15s ease;
-    }
-
-    .nav-toggle:hover {
-      background: rgba(148, 197, 222, 0.08);
-      border-color: var(--line-strong);
-    }
-
-    .nav-toggle svg {
-      width: 22px;
-      height: 22px;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 9px;
-      font-weight: 600;
-      font-size: 15px;
-      white-space: nowrap;
-      border-radius: 999px;
-      padding: 12px 24px;
-      transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
-    }
-
-    .btn:active {
-      transform: translateY(1px) scale(0.99);
-    }
-
-    .btn-primary {
-      background: var(--grad);
-      color: var(--accent-ink);
-    }
-
-    .btn-primary:hover {
-      box-shadow: 0 6px 28px rgba(45, 200, 220, 0.28);
-    }
-
-    .btn-ghost {
-      border: 1px solid var(--line-strong);
-      color: var(--text);
-      background: rgba(148, 197, 222, 0.04);
-    }
-
-    .btn-ghost:hover {
-      border-color: rgba(148, 197, 222, 0.4);
-      background: rgba(148, 197, 222, 0.08);
-    }
-
-    .btn svg {
-      width: 17px;
-      height: 17px;
-      flex: none;
-    }
-
-    .hero {
-      padding: 140px 0 96px;
-      position: relative;
-    }
-
-    .hero::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
+    /* Live background: a WebGL colour field, with a CSS stand-in when WebGL is unavailable */
+    #bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -2; }
+    .no-gl body::before {
+      content: ""; position: fixed; inset: -20%; z-index: -2;
       background:
-        radial-gradient(780px 460px at 30% 0%, rgba(37, 150, 232, 0.14), transparent 65%),
-        radial-gradient(700px 420px at 78% 22%, rgba(45, 212, 212, 0.10), transparent 60%);
+        radial-gradient(40% 40% at 20% 25%, rgba(46, 240, 208, 0.34), transparent 70%),
+        radial-gradient(45% 45% at 80% 20%, rgba(91, 140, 255, 0.36), transparent 70%),
+        radial-gradient(45% 45% at 70% 80%, rgba(199, 125, 255, 0.32), transparent 70%),
+        radial-gradient(40% 40% at 20% 85%, rgba(255, 122, 168, 0.26), transparent 70%);
+      animation: drift 26s ease-in-out infinite alternate;
     }
+    @keyframes drift { to { transform: rotate(18deg) scale(1.15); } }
 
-    .hero-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
-      gap: 56px;
-      align-items: center;
+    .wrap { width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 28px; }
+    .grad { background: var(--spectrum); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    /* Nav: a floating glass capsule */
+    .nav { position: sticky; top: 14px; z-index: 50; padding: 0 14px; }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 1120px; height: 58px; padding: 0 10px 0 20px;
+      border: 1px solid var(--line); border-radius: 999px;
+      background: var(--glass); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4);
+      transition: background 0.3s, border-color 0.3s;
     }
+    .nav.scrolled .nav-inner { background: var(--glass-strong); border-color: var(--line-strong); }
+    .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
+    .nav-links { display: flex; align-items: center; gap: 2px; font-size: 14px; color: var(--dim); }
+    .nav-links a { padding: 7px 11px; border-radius: 999px; transition: color 0.15s, background 0.15s; }
+    .nav-links a:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+    .nav-gh svg { width: 18px; height: 18px; display: block; }
+    .nav-links a.nav-cta { margin-left: 8px; padding: 9px 18px; background: var(--text); color: var(--bg); font-weight: 600; }
+    .nav-links a.nav-cta:hover { background: var(--h1); color: var(--bg); }
+    .nav-toggle { display: none; width: 40px; height: 40px; border-radius: 50%; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.08); }
+    .nav-toggle svg { width: 20px; height: 20px; }
+
+    /* Buttons */
+    .btn {
+      position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      height: 54px; padding: 0 28px; border-radius: 999px; font-weight: 600; font-size: 16px; white-space: nowrap;
+      transition: transform 0.2s, box-shadow 0.3s, background 0.2s;
+    }
+    .btn svg { width: 18px; height: 18px; flex: none; }
+    .btn-primary { background: var(--text); color: var(--bg); }
+    .btn-primary::before {
+      content: ""; position: absolute; inset: -3px; z-index: -1; border-radius: inherit;
+      background: conic-gradient(from var(--ang), var(--h1), var(--h2), var(--h3), var(--h4), var(--h5), var(--h1));
+      filter: blur(14px); opacity: 0.75; animation: spin 6s linear infinite; transition: opacity 0.3s, inset 0.3s;
+    }
+    .btn-primary:hover { transform: translateY(-2px); }
+    .btn-primary:hover::before { opacity: 1; inset: -7px; }
+    .btn-ghost { border: 1px solid var(--line-strong); background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+    .btn-ghost:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-2px); }
+    @keyframes spin { to { --ang: 360deg; } }
+
+    /* Hero */
+    .hero { position: relative; margin-top: -72px; padding: 190px 0 0; }
+    #flow { position: absolute; top: 0; left: 0; width: 100%; height: min(100%, 125vh); -webkit-mask-image: linear-gradient(#000 72%, transparent); mask-image: linear-gradient(#000 72%, transparent); pointer-events: none; z-index: -1; }
+    .hero-copy { display: flex; flex-direction: column; align-items: center; text-align: center; }
+
+    .h1-name {
+      display: inline-flex; align-items: center; gap: 9px; padding: 6px 16px;
+      border: 1px solid var(--line-strong); border-radius: 999px; background: var(--glass);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; letter-spacing: 0.04em; line-height: 1.5; color: var(--dim);
+    }
+    .h1-name::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--h1); box-shadow: 0 0 12px var(--h1); animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.35; } }
 
     .hero h1 {
-      font-size: clamp(36px, 4.4vw, 56px);
-      line-height: 1.06;
-      letter-spacing: -0.03em;
-      font-weight: 700;
-    }
-
-    .hero h1 .grad {
-      background: var(--grad);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-
-    .hero p {
-      margin-top: 22px;
-      font-size: 18px;
-      color: var(--text-dim);
-      max-width: 52ch;
-    }
-
-    .hero-actions {
-      width: fit-content;
-      max-width: 100%;
-    }
-
-    .hero-ctas {
-      margin-top: 34px;
-      display: flex;
-      gap: 14px;
-      flex-wrap: wrap;
-    }
-
-    .extension-badges {
-      margin-top: 18px;
-      justify-content: center;
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .extension-badges a {
-      display: inline-flex;
-    }
-
-    .extension-badges img {
-      display: block;
-      height: 32px;
-      width: auto;
-    }
-
-    .shot {
-      position: relative;
-      display: flex;
-      justify-content: center;
-    }
-
-    .shot::before {
-      content: "";
-      position: absolute;
-      z-index: -1;
-      inset: -12% -14%;
-      background: radial-gradient(60% 55% at 55% 50%, rgba(37, 150, 232, 0.18), transparent 70%);
-      pointer-events: none;
-    }
-
-    .viz {
-      width: min(100%, 500px);
-    }
-
-    .viz canvas {
-      display: block;
-      width: 100%;
-      aspect-ratio: 5 / 4;
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-
-      .hero-copy,
-      .shot {
-        animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-      }
-
-      .shot {
-        animation-delay: 0.12s;
-      }
-    }
-
-    @keyframes rise {
-      from {
-        opacity: 0;
-        transform: translateY(18px);
-      }
-
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-
-    section {
-      padding: 96px 0;
-    }
-
-    .sec-head {
-      max-width: 62ch;
-      margin-bottom: 52px;
-    }
-
-    .sec-head h2 {
-      font-size: clamp(28px, 3.2vw, 40px);
-      letter-spacing: -0.025em;
-      line-height: 1.12;
-      font-weight: 700;
-    }
-
-    .sec-head p {
-      margin-top: 14px;
-      color: var(--text-dim);
-      font-size: 16.5px;
-      max-width: 58ch;
-    }
-
-    .ico {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(45, 212, 212, 0.1);
-      border: 1px solid rgba(45, 212, 212, 0.18);
-      margin-bottom: 14px;
-      flex: none;
-    }
-
-    .ico svg {
-      width: 20px;
-      height: 20px;
-      stroke: var(--accent);
-    }
-
-    /* Engine Showcase - 3 Column Layout with Center Canvas */
-    .engine-showcase {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1.32fr) minmax(0, 1fr);
-      gap: 20px;
-      align-items: stretch;
-    }
-
-    .engine-col {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      justify-content: space-between;
-    }
-
-    .engine-card {
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: var(--bg-raised);
-      padding: 20px 22px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      flex: 1;
-      transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .engine-card:hover {
-      border-color: var(--line-strong);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    }
-
-    .engine-card .ico {
-      margin-bottom: 10px;
-      width: 34px;
-      height: 34px;
-      border-radius: 8px;
-    }
-
-    .engine-card .ico svg {
-      width: 18px;
-      height: 18px;
-    }
-
-    .engine-card h3 {
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: var(--text);
-    }
-
-    .engine-card p {
-      margin-top: 5px;
-      font-size: 13.5px;
-      color: var(--text-dim);
-      line-height: 1.5;
-    }
-
-    .engine-card code {
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--accent);
-      background: rgba(45, 212, 212, 0.08);
-      padding: 1px 5px;
-      border-radius: 4px;
-    }
-
-    .engine-col-center {
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-      position: relative;
-      width: 100%;
-      height: 100%;
-      min-height: 520px;
-    }
-
-    #engine-canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      background: transparent;
-    }
-
-    .gui {
-      background: var(--bg-raised);
-      border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-    }
-
-    .gui-catalog-wrap {
-      margin-bottom: 48px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      width: 100%;
-    }
-
-    .gui-stage {
-      position: relative;
-      border-radius: var(--radius);
-      border: 1px solid var(--line-strong);
-      background: #0b1118;
-      overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
-      aspect-ratio: 16 / 9;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-    }
-
-    .gui-slide {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.35s ease, transform 0.35s ease;
-      transform: scale(0.985);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .gui-slide.active {
-      opacity: 1;
-      pointer-events: auto;
-      transform: scale(1);
-    }
-
-    .gui-slide img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-      background: #080d13;
-    }
-
-    .gui-nav-btn {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      z-index: 10;
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      background: rgba(10, 14, 19, 0.8);
-      border: 1px solid var(--line-strong);
-      color: var(--text);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      transition: all 0.2s ease;
-    }
-
-    .gui-nav-btn:hover {
-      background: rgba(45, 212, 212, 0.2);
-      border-color: var(--accent);
-      color: var(--accent);
-      transform: translateY(-50%) scale(1.08);
-    }
-
-    .gui-nav-prev {
-      left: 14px;
-    }
-
-    .gui-nav-next {
-      right: 14px;
-    }
-
-    .gui-nav-btn svg {
-      width: 22px;
-      height: 22px;
-      stroke: currentColor;
-      fill: none;
-    }
-
-    /* Thumbnails catalog strip */
-    .gui-thumbs {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 12px;
-      width: 100%;
-    }
-
-    .gui-thumb {
-      background: var(--bg);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 8px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      transition: all 0.2s ease;
-      text-align: left;
-      min-width: 0;
-    }
-
-    .gui-thumb:hover {
-      border-color: var(--line-strong);
-      background: rgba(148, 197, 222, 0.05);
-    }
-
-    .gui-thumb.active {
-      border-color: var(--accent);
-      background: rgba(45, 212, 212, 0.08);
-      box-shadow: 0 0 16px rgba(45, 212, 212, 0.18);
-    }
-
-    .gui-thumb-img {
-      width: 100%;
-      aspect-ratio: 16 / 9;
-      border-radius: 6px;
-      overflow: hidden;
-      background: #090e14;
-      border: 1px solid rgba(148, 197, 222, 0.1);
-    }
-
-    .gui-thumb-img img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-
-    .gui-thumb-label {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-dim);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      transition: color 0.2s ease;
-    }
-
-    .gui-thumb.active .gui-thumb-label {
-      color: var(--accent);
-    }
-
-    .gui-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px 40px;
-    }
-
-    .gui-item {
-      display: flex;
-      gap: 16px;
-      padding: 20px 18px;
-      border-radius: var(--radius);
-      border: 1px solid transparent;
-      transition: background 0.2s ease, border-color 0.2s ease;
-    }
-
-    .gui-item:hover {
-      background: rgba(148, 197, 222, 0.04);
-      border-color: var(--line);
-    }
-
-    .gui-item .ico {
-      margin-bottom: 0;
-      width: 38px;
-      height: 38px;
-    }
-
-    .gui-item .ico svg {
-      width: 20px;
-      height: 20px;
-    }
-
-    .gui-item h3 {
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-    }
-
-    .gui-item p {
-      font-size: 14px;
-      color: var(--text-dim);
-      margin-top: 4px;
-      line-height: 1.55;
-    }
-
-    .cli-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-      gap: 56px;
-      align-items: center;
-    }
-
-    .cli-points {
-      display: flex;
-      flex-direction: column;
-      gap: 22px;
-      margin-top: 34px;
-    }
-
-    .cli-point {
-      display: flex;
-      gap: 14px;
-    }
-
-    .cli-point .dotless {
-      flex: none;
-      margin-top: 3px;
-    }
-
-    .cli-point .dotless svg {
-      width: 19px;
-      height: 19px;
-      stroke: var(--accent);
-    }
-
-    .cli-point h3 {
-      font-size: 16px;
-      font-weight: 600;
-    }
-
-    .cli-point p {
-      font-size: 14px;
-      color: var(--text-dim);
-      margin-top: 3px;
-    }
-
-    .term {
-      border: 1px solid var(--line-strong);
-      border-radius: var(--radius);
-      background: #0b1118;
-      overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-      max-width: 100%;
-      min-width: 0;
-    }
-
-    .term-bar {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .term-bar i {
-      width: 11px;
-      height: 11px;
-      border-radius: 50%;
-      background: rgba(148, 197, 222, 0.16);
-    }
-
-    .term-bar span {
-      margin-left: 8px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--text-faint);
-    }
-
-    .term pre {
-      padding: 22px 20px;
-      font-family: var(--font-mono);
-      font-size: 13.5px;
-      line-height: 1.85;
-      overflow-x: auto;
-      color: var(--text-dim);
-      max-width: 100%;
-      min-width: 0;
-    }
-
-    .term .c-cmd {
-      color: var(--text);
-    }
-
-    .term .c-accent {
-      color: var(--accent);
-    }
-
-    .term .c-dim {
-      color: var(--text-faint);
-    }
-
-    /* Download Section - VS Code Style Redesign */
-    .dl-card {
-      border: 1px solid var(--line-strong);
-      border-radius: 24px;
-      background:
-        radial-gradient(900px 450px at 50% -20%, rgba(37, 150, 232, 0.14), transparent 70%),
-        var(--bg-raised);
-      padding: 64px 32px;
-      text-align: center;
-      max-width: 100%;
-      min-width: 0;
-      box-sizing: border-box;
-    }
-
-    .dl-card h2 {
-      font-size: clamp(32px, 3.6vw, 44px);
-      letter-spacing: -0.03em;
-      font-weight: 700;
-      word-break: break-word;
-    }
-
-    .dl-card>p.dl-subtitle {
-      margin: 12px auto 0;
-      color: var(--text-dim);
-      max-width: 58ch;
-      font-size: 17px;
-    }
-
-    .version-tag-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 14px;
-      padding: 4px 14px;
-      border-radius: 999px;
-      background: rgba(45, 212, 212, 0.1);
-      border: 1px solid rgba(45, 212, 212, 0.25);
-      font-family: var(--font-mono);
-      font-size: 13px;
-      color: var(--accent);
-    }
-
-    .vscode-dl-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 24px;
-      margin-top: 40px;
-      text-align: left;
-      width: 100%;
-      min-width: 0;
-    }
-
-    .vscode-dl-card {
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: rgba(10, 14, 19, 0.6);
-      padding: 32px 24px 28px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      position: relative;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-      min-width: 0;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-
-    .vscode-dl-card:hover {
-      border-color: var(--line-strong);
-      background: rgba(15, 21, 29, 0.85);
-    }
-
-    .vscode-dl-card.highlighted {
-      border-color: rgba(45, 212, 212, 0.5);
-      box-shadow: 0 0 35px rgba(45, 212, 212, 0.14);
-      background: rgba(15, 25, 36, 0.85);
-    }
-
-    .os-badge {
-      display: none;
-      position: absolute;
-      top: -13px;
-      background: var(--grad);
-      color: var(--accent-ink);
-      font-size: 11px;
-      font-weight: 700;
-      padding: 3px 12px;
-      border-radius: 999px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .vscode-dl-card.highlighted .os-badge {
-      display: block;
-    }
-
-    .platform-icon {
-      width: 68px;
-      height: 68px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 22px;
-      flex: none;
-    }
-
-    .platform-icon svg {
-      width: 56px;
-      height: 56px;
-    }
-
-    .primary-dl-group {
-      width: 100%;
-      margin-bottom: 24px;
-    }
-
-    .vscode-btn-primary {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      background: #007acc;
-      color: #ffffff;
-      width: 100%;
-      padding: 13px 16px;
-      border-radius: 10px;
-      font-weight: 600;
-      text-decoration: none;
-      transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.2s ease;
-    }
-
-    .vscode-btn-primary:hover {
-      background: #0098ff;
-      box-shadow: 0 6px 20px rgba(0, 122, 204, 0.4);
-      transform: translateY(-1px);
-      color: #ffffff;
-    }
-
-    .vscode-btn-primary svg {
-      width: 22px;
-      height: 22px;
-      flex: none;
-      stroke: #ffffff;
-      stroke-width: 2.2;
-    }
-
-    .btn-text {
-      text-align: left;
-    }
-
-    .btn-title {
-      font-size: 16.5px;
-      font-weight: 700;
-      display: block;
-      line-height: 1.15;
-    }
-
-    .btn-sub {
-      font-size: 11.5px;
-      opacity: 0.88;
-      font-weight: 400;
-      display: block;
-      margin-top: 1px;
-    }
-
-    .dual-btn {
-      display: flex;
-      gap: 8px;
-    }
-
-    .dual-btn .vscode-btn-primary {
-      padding: 11px 10px;
-      gap: 6px;
-    }
-
-    .dual-btn .btn-title {
-      font-size: 14.5px;
-    }
-
-    .dl-matrix {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 11px;
-      margin-top: 4px;
-      border-top: 1px solid var(--line);
-      padding-top: 18px;
-      min-width: 0;
-    }
-
-    .matrix-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      width: 100%;
-      min-width: 0;
-    }
-
-    .row-label {
-      font-size: 13.5px;
-      color: var(--text-dim);
-      font-weight: 500;
-    }
-
-    .pill-group {
-      display: flex;
-      gap: 5px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      min-width: 0;
-    }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      background: #007acc;
-      color: #ffffff;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 4px;
-      text-decoration: none;
-      transition: background 0.15s ease, transform 0.12s ease;
-      line-height: 1.2;
-    }
-
-    .pill:hover {
-      background: #0098ff;
-      transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba(0, 152, 255, 0.35);
-      color: #ffffff;
-    }
-
-    .terminal-opt-wrap {
-      margin-top: 36px;
-      text-align: center;
-      width: 100%;
-    }
-
-    .terminal-opt-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(148, 197, 222, 0.05);
-      border: 1px solid var(--line);
-      color: var(--text-dim);
-      padding: 9px 18px;
-      border-radius: 999px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-    }
-
-    .terminal-opt-btn:hover {
-      color: var(--text);
-      border-color: var(--line-strong);
-      background: rgba(148, 197, 222, 0.1);
-    }
-
-    .terminal-opt-btn svg {
-      width: 16px;
-      height: 16px;
-      transition: transform 0.2s ease;
-    }
-
-    .terminal-opt-btn.open svg {
-      transform: rotate(180deg);
-    }
-
-    .install-tabs {
-      max-width: 720px;
-      margin: 20px auto 0;
-      text-align: left;
-      width: 100%;
-      min-width: 0;
-      transition: opacity 0.25s ease, transform 0.25s ease;
-    }
-
-    .install-tabs.hidden {
-      display: none;
-    }
-
-    .tab-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-      width: 100%;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-    }
-
-    .tab-row::-webkit-scrollbar {
-      display: none;
-    }
-
-    .tab {
-      font-family: var(--font-sans);
-      font-size: 13.5px;
-      font-weight: 600;
-      color: var(--text-dim);
-      background: none;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 7px 16px;
-      cursor: pointer;
-      white-space: nowrap;
-      flex: none;
-      transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-    }
-
-    .tab:hover {
-      color: var(--text);
-    }
-
-    .tab.active {
-      color: var(--accent);
-      border-color: rgba(45, 212, 212, 0.35);
-      background: rgba(45, 212, 212, 0.08);
-    }
-
-    .cmd {
-      display: none;
-      align-items: center;
-      gap: 12px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #0b1118;
-      padding: 15px 18px;
-      width: 100%;
-      min-width: 0;
-    }
-
-    .cmd.active {
-      display: flex;
-    }
-
-    .cmd code {
-      font-family: var(--font-mono);
-      font-size: 13px;
-      color: var(--text-dim);
-      overflow-x: auto;
-      white-space: nowrap;
-      flex: 1;
-      min-width: 0;
-      scrollbar-width: none;
-    }
-
-    .cmd code::-webkit-scrollbar {
-      display: none;
-    }
-
-    .cmd code b {
-      color: var(--accent);
-      font-weight: 500;
-    }
-
-    .copy {
-      flex: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 34px;
-      height: 34px;
-      border-radius: 8px;
-      cursor: pointer;
-      background: rgba(148, 197, 222, 0.06);
-      border: 1px solid var(--line);
-      color: var(--text-dim);
-      transition: color 0.15s ease, border-color 0.15s ease;
-    }
-
-    .copy:hover {
-      color: var(--accent);
-      border-color: rgba(45, 212, 212, 0.35);
-    }
-
-    .copy svg {
-      width: 15px;
-      height: 15px;
-    }
-
-    .dl-note {
-      margin-top: 24px;
-      font-size: 13.5px;
-      color: var(--text-faint);
-      text-align: center;
-    }
-
-    .dl-note a {
-      color: var(--text-dim);
-      border-bottom: 1px solid var(--line-strong);
-    }
-
-    .dl-note a:hover {
-      color: var(--accent);
-    }
-
-    footer {
-      border-top: 1px solid var(--line);
-      padding: 40px 0;
-    }
-
-    .foot {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
-
-    .foot-brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 600;
-      font-size: 15px;
-    }
-
-    .foot-brand img {
-      width: 24px;
-      height: 24px;
-    }
-
-    .foot p {
-      font-size: 13.5px;
-      color: var(--text-faint);
-    }
-
-    .foot p a {
-      color: var(--text-dim);
-    }
-
-    .foot p a:hover {
-      color: var(--accent);
-    }
-
-    .foot-social {
-      display: flex;
-      gap: 14px;
-    }
-
-    .foot-social a {
-      color: var(--text-dim);
-      display: inline-flex;
-      transition: color 0.15s ease;
-    }
-
-    .foot-social a:hover {
-      color: var(--text);
-    }
-
-    .foot-social svg {
-      width: 20px;
-      height: 20px;
-    }
-
-    .tab-repo-links {
-      margin-top: 14px;
-      font-size: 13px;
-      color: var(--text-dim);
-      text-align: center;
-    }
-
-    .tab-repo-links a {
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    .tab-repo-links a:hover {
-      text-decoration: underline;
-    }
-
-    @media (max-width: 1060px) {
-      .engine-showcase {
-        grid-template-columns: 1fr;
-        gap: 20px;
-      }
-
-      .engine-col-center {
-        display: none !important;
-      }
-
-      .engine-col {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 14px;
-      }
-    }
-
-    @media (max-width: 900px) {
-      section {
-        padding: 64px 0;
-      }
-
-      .hero {
-        padding: 116px 0 64px;
-      }
-
-      .hero-grid {
-        grid-template-columns: 1fr;
-        gap: 48px;
-      }
-
-      .gui-grid {
-        grid-template-columns: 1fr;
-        gap: 8px;
-      }
-
-      .cli-grid {
-        grid-template-columns: 1fr;
-        gap: 40px;
-      }
-
-      .vscode-dl-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .dl-card {
-        padding: 48px 20px;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .nav-toggle {
-        display: flex;
-      }
-
-      .nav-links {
-        display: none;
-        position: absolute;
-        top: 68px;
-        left: 0;
-        right: 0;
-        background: rgba(10, 14, 19, 0.96);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-bottom: 1px solid var(--line-strong);
-        flex-direction: column;
-        align-items: stretch;
-        padding: 16px 24px 24px;
-        gap: 12px;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
-      }
-
-      .nav-links.open {
-        display: flex;
-      }
-
-      .nav-links a {
-        font-size: 15.5px;
-        padding: 10px 0;
-        border-bottom: 1px solid rgba(148, 197, 222, 0.08);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .nav-links a:last-child {
-        border-bottom: none;
-      }
-
-      .nav-gh {
-        justify-content: flex-start;
-        gap: 8px;
-      }
-
-      .nav-gh::after {
-        content: "GitHub Repository";
-        font-weight: 500;
-        font-size: 15px;
-      }
-
-      .sec-head h2 {
-        font-size: 26px;
-      }
-
-      .sec-head p {
-        font-size: 15px;
-      }
-
-      .gui-thumbs {
-        display: flex;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        padding-bottom: 4px;
-        gap: 10px;
-      }
-
-      .gui-thumbs::-webkit-scrollbar {
-        display: none;
-      }
-
-      .gui-thumb {
-        flex: 0 0 160px;
-        min-width: 160px;
-      }
-
-      .gui-nav-btn {
-        width: 36px;
-        height: 36px;
-      }
-
-      .gui-nav-prev {
-        left: 8px;
-      }
-
-      .gui-nav-next {
-        right: 8px;
-      }
-    }
-
-    @media (max-width: 540px) {
-      .hero-actions {
-        width: 100%;
-      }
-
-      .extension-badges {
-        display: none;
-      }
-
-      .wrap {
-        padding: 0 16px;
-      }
-
-      .hero {
-        padding: 92px 0 44px;
-      }
-
-      .hero h1 {
-        font-size: clamp(26px, 8vw, 36px);
-        word-break: break-word;
-      }
-
-      .hero p {
-        font-size: 15px;
-        margin-top: 14px;
-      }
-
-      .hero-ctas {
-        flex-direction: column;
-        width: 100%;
-        gap: 10px;
-      }
-
-      .hero-ctas .btn {
-        width: 100%;
-        justify-content: center;
-        padding: 13px 20px;
-      }
-
-      .engine-col {
-        grid-template-columns: 1fr;
-      }
-
-      .dual-btn {
-        flex-direction: column;
-        width: 100%;
-        gap: 10px;
-      }
-
-      .vscode-btn-primary {
-        width: 100%;
-        justify-content: center;
-      }
-
-      .matrix-row {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
-      }
-
-      .pill-group {
-        justify-content: flex-start;
-        width: 100%;
-        flex-wrap: wrap;
-      }
-
-      .row-label {
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--text);
-      }
-
-      .cell {
-        padding: 20px 16px;
-      }
-
-      .gui-item {
-        padding: 14px 10px;
-        gap: 12px;
-      }
-
-      .gui-item .ico {
-        width: 34px;
-        height: 34px;
-      }
-
-      .gui-item h3 {
-        font-size: 15px;
-      }
-
-      .gui-item p {
-        font-size: 13.5px;
-      }
-
-      .dl-card {
-        padding: 32px 14px;
-        border-radius: 18px;
-      }
-
-      .dl-card h2 {
-        font-size: 24px;
-      }
-
-      .dl-card>p.dl-subtitle {
-        font-size: 14.5px;
-      }
-
-      .terminal-opt-btn {
-        width: 100%;
-        justify-content: center;
-        font-size: 13px;
-        padding: 10px 14px;
-      }
-
-      .tab-row {
-        flex-wrap: nowrap;
-        gap: 6px;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-      }
-
-      .tab {
-        padding: 6px 12px;
-        font-size: 12px;
-        flex: none;
-      }
-
-      .cmd {
-        padding: 12px 14px;
-        gap: 8px;
-        width: 100%;
-      }
-
-      .cmd code {
-        font-size: 11.5px;
-      }
-
-      .term pre {
-        font-size: 12px;
-        padding: 16px 14px;
-      }
-
-      .foot {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 14px;
-      }
-    }
-  
-    .badge-row {
-      margin-top: 36px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-      gap: 14px 18px;
-    }
-
-    .badge-link {
-      display: inline-flex;
-      border-radius: 10px;
-    }
-
-    .badge-link:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 4px;
-    }
-
-    .badge-row img {
-      display: block;
-      height: 52px;
-      width: auto;
-      opacity: 0.82;
-      transition: opacity 0.18s ease, transform 0.18s ease;
-    }
-
-    .badge-link:hover img,
-    .badge-link:focus-visible img {
-      opacity: 1;
-      transform: translateY(-2px);
-    }
-
-    @media (max-width: 480px) {
-      .badge-row img {
-        height: 44px;
-      }
+      display: flex; flex-direction: column; align-items: center;
+      font-family: var(--font-display); font-weight: 800;
+      font-size: clamp(52px, 10.4vw, 168px); line-height: 0.88; letter-spacing: -0.055em;
+    }
+    .hero h1 .h1-name { margin-bottom: 36px; }
+    .hero h1 .line { display: block; overflow: hidden; padding-bottom: 0.08em; }
+    .hero h1 .line > span { display: inline-block; }
+    .js .hero h1 .line > span { transform: translateY(110%); animation: rise 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .js .hero h1 .line:nth-of-type(3) > span { animation-delay: 0.12s; }
+    @keyframes rise { to { transform: none; } }
+    .hero h1 .grad { background-size: 200% 100%; animation: sheen 9s ease-in-out infinite alternate; }
+    .js .hero h1 .line > span.grad { animation: rise 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.12s forwards, sheen 9s ease-in-out infinite alternate; }
+    @keyframes sheen { to { background-position: 100% 0; } }
+
+    .hero-lede { margin-top: 34px; max-width: 640px; font-size: 18.5px; color: var(--dim); text-wrap: pretty; }
+    .hero-ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 38px; }
+    .copy { flex: none; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; color: var(--faint); transition: background 0.15s, color 0.15s; }
+    .copy:hover { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+    .copy svg { width: 15px; height: 15px; }
+
+    .demo-stage { perspective: 1800px; margin-top: 84px; }
+    /* Hero: screen recording of the real app */
+    .demo { position: relative; }
+    .demo-video { display: block; width: 100%; height: auto; border-radius: 14px; background: #1f1f1f; box-shadow: 0 60px 120px -40px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.16); }
+    .demo-callout {
+      position: absolute; top: -20px; right: 26px; z-index: 5;
+      display: inline-flex; align-items: center; gap: 8px; max-width: calc(100% - 52px);
+      padding: 9px 18px; border-radius: 999px; font-size: 14.5px; font-weight: 500;
+      transition: opacity 0.25s, transform 0.25s;
+    }
+    .demo-callout::before { content: "✦"; }
+    .demo-callout.swap { opacity: 0; transform: translateY(-6px); }
+    .demo-note { margin-top: 12px; text-align: center; font-family: var(--font-mono); font-size: 11.5px; }
+
+    /* Demo window on the dark field: no stage box, a rotating spectrum halo instead */
+    .demo {
+      margin: 0; padding: 0; border: 0; border-radius: 0; background: none; overflow: visible;
+      transform-origin: 50% 0;
+      transform: rotateX(calc((1 - var(--k, 1)) * 16deg)) scale(calc(0.93 + var(--k, 1) * 0.07));
+      will-change: transform;
+    }
+    .demo::before {
+      content: ""; position: absolute; inset: -2px; z-index: -1; border-radius: 16px;
+      background: conic-gradient(from var(--ang), var(--h1), var(--h2), var(--h3), var(--h4), var(--h5), var(--h1));
+      filter: blur(38px); opacity: 0.6; animation: spin 10s linear infinite;
+    }
+    .app { border-radius: 14px; box-shadow: 0 60px 120px -40px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.22); }
+    .demo-callout { top: -20px; right: 26px; background: var(--bg); color: var(--text); border: 1px solid var(--line-strong); box-shadow: 0 14px 40px -10px rgba(0, 0, 0, 0.8); }
+    .demo-callout::before { color: var(--h1); }
+    .demo-note { color: var(--faint); margin-top: 18px; }
+    @media (max-width: 860px) { .demo { padding: 0; border-radius: 0; } .demo-callout { top: -18px; right: 12px; } }
+    @media (max-width: 560px) { .demo { margin: 0; padding: 0; } }
+
+    .extension-badges { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin-top: 30px; }
+    .extension-badges::before { content: "Browser extensions"; font-family: var(--font-mono); font-size: 12px; color: var(--faint); margin-right: 6px; }
+    .extension-badges img { height: 34px; width: auto; border-radius: 6px; }
+
+    /* Glass surface shared by every panel */
+    .glass, .stats, .card, .bench-panel, .gui-item, .vscode-dl-card, .terminal-opt-wrap, .cli-point {
+      background: var(--glass); border: 1px solid var(--line);
+      backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3);
+    }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 72px; border-radius: var(--radius); overflow: hidden; }
+    .stat { padding: 30px 30px 28px; border-left: 1px solid var(--line); }
+    .stat:first-child { border-left: 0; }
+    .stat b { display: block; font-family: var(--font-display); font-size: clamp(40px, 5vw, 64px); line-height: 1; letter-spacing: -0.045em; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .stat b small { font-family: var(--font-mono); font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--faint); margin-left: 6px; }
+    .stat span { display: block; margin-top: 10px; font-size: 14px; color: var(--dim); }
+
+    /* Scroll story: a pinned scene scrubbed by scroll position */
+    .story { height: 420vh; }
+    .story-pin { position: sticky; top: 0; height: 100vh; min-height: 560px; display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr); align-items: center; gap: 32px; max-width: 1320px; margin: 0 auto; padding: 90px 28px 40px; }
+    .story-copy .eyebrow { margin-bottom: 26px; }
+    .story-steps { list-style: none; display: grid; gap: 6px; }
+    .story-steps li { padding: 14px 0 14px 22px; border-left: 2px solid var(--line); opacity: 0.32; transition: opacity 0.4s, border-color 0.4s; }
+    .story-steps li.on { opacity: 1; border-left-color: var(--h1); }
+    .story-steps h3 { font-family: var(--font-display); font-size: clamp(22px, 2.4vw, 34px); font-weight: 700; line-height: 1.05; letter-spacing: -0.035em; }
+    .story-steps p { display: grid; grid-template-rows: 0fr; font-size: 15px; color: var(--dim); transition: grid-template-rows 0.45s, margin-top 0.45s; }
+    .story-steps p > span { overflow: hidden; }
+    .story-steps li.on p { grid-template-rows: 1fr; margin-top: 8px; }
+    .story-view { position: relative; height: min(70vh, 620px); border-radius: 26px; overflow: hidden; }
+    #story { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .story-bar { position: absolute; left: 28px; right: 28px; bottom: 18px; height: 2px; background: var(--line); border-radius: 2px; }
+    .story-bar i { display: block; height: 100%; width: calc(var(--sp, 0) * 100%); background: var(--spectrum); border-radius: 2px; }
+
+    /* Sections */
+    section > .wrap { padding-top: 130px; padding-bottom: 20px; }
+    .sec-head { display: grid; grid-template-columns: minmax(0, 1fr); margin-bottom: 56px; }
+    .sec-no { display: inline-flex; width: max-content; padding: 3px 12px; margin-bottom: 22px; border: 1px solid var(--line-strong); border-radius: 999px; font-family: var(--font-mono); font-size: 12px; color: var(--dim); background: var(--glass); }
+    .sec-no::before { content: "/ "; color: var(--h1); white-space: pre; }
+    .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--h1); }
+    .sec-head h2 { margin-top: 16px; max-width: 980px; font-family: var(--font-display); font-size: clamp(36px, 6vw, 88px); line-height: 0.94; letter-spacing: -0.05em; font-weight: 800; text-wrap: balance; }
+    .lede { margin-top: 26px; max-width: 660px; font-size: 17.5px; color: var(--dim); text-wrap: pretty; }
+
+    .ico { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); flex: none; }
+    .ico svg { width: 20px; height: 20px; stroke: var(--h1); }
+
+    /* Engine cards: a spectrum edge follows the pointer */
+    .bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+    .card { position: relative; grid-column: span 3; padding: 30px; border-radius: var(--radius); overflow: hidden; transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s; }
+    .card::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.35s;
+      background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), rgba(91, 140, 255, 0.3), rgba(199, 125, 255, 0.14) 40%, transparent 70%);
+    }
+    .card:hover { transform: translateY(-4px); border-color: var(--line-strong); }
+    .card:hover::before { opacity: 1; }
+    .card > * { position: relative; }
+    .card.wide { grid-column: span 6; }
+    .card:nth-child(4n + 2) .ico svg { stroke: var(--h2); }
+    .card:nth-child(4n + 3) .ico svg { stroke: var(--h3); }
+    .card:nth-child(4n + 4) .ico svg { stroke: var(--h4); }
+    .card h3 { margin-top: 26px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+    .card.wide h3 { font-family: var(--font-display); font-size: clamp(26px, 2.6vw, 36px); font-weight: 700; letter-spacing: -0.04em; line-height: 1.02; }
+    .card p { margin-top: 10px; font-size: 15px; color: var(--dim); }
+    .card.wide p { font-size: 16px; max-width: 460px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 20px; }
+    .chips span { font-family: var(--font-mono); font-size: 12px; padding: 4px 11px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--dim); }
+    .sec-more { margin-top: 32px; display: flex; }
+
+    /* Benchmark */
+    .bench { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; }
+    .bench-panel { padding: 34px; border-radius: var(--radius); }
+    .bench-panel h3 { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.035em; }
+    .bench-panel h3 small { display: block; margin-top: 4px; font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--faint); }
+    .bars { list-style: none; margin-top: 28px; display: grid; gap: 14px; }
+    .bars li { display: grid; grid-template-columns: 118px minmax(0, 1fr); align-items: center; gap: 14px; font-family: var(--font-mono); font-size: 12.5px; color: var(--dim); white-space: nowrap; }
+    .bars .track { display: flex; align-items: center; gap: 10px; }
+    .bars .bar { height: 22px; width: calc((100% - 46px) * var(--v) / 100); border-radius: 6px; background: rgba(255, 255, 255, 0.16); transform-origin: left; }
+    .bars .hydra { color: var(--text); font-weight: 500; }
+    .bars .hydra .bar { background: var(--spectrum); box-shadow: 0 0 26px -4px var(--h2); }
+    .bars .val { color: var(--text); font-variant-numeric: tabular-nums; }
+    .js .bars .bar { transform: scaleX(0); transition: transform 1.3s cubic-bezier(0.16, 1, 0.3, 1); }
+    .js .in-view .bars .bar { transform: none; }
+    .bars li:nth-child(2) .bar { transition-delay: 0.08s; }
+    .bars li:nth-child(3) .bar { transition-delay: 0.16s; }
+    .bars li:nth-child(4) .bar { transition-delay: 0.24s; }
+    .bars li:nth-child(5) .bar { transition-delay: 0.32s; }
+    .bars li:nth-child(6) .bar { transition-delay: 0.4s; }
+    .bench-note { margin-top: 20px; font-size: 13.5px; color: var(--dim); max-width: 780px; }
+    .bench-note a, .dl-sub a, .dl-note a, .tab-repo-links a, footer p a { color: var(--text); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+    .bench-note a:hover, .dl-sub a:hover, .dl-note a:hover, .tab-repo-links a:hover, footer p a:hover { color: var(--h1); text-decoration-color: var(--h1); }
+
+    /* Kinetic band: two rows that slide against each other as the page scrolls */
+    .band { padding: 130px 0 0; overflow: hidden; }
+    .band div { display: flex; gap: 0.5em; width: max-content; font-family: var(--font-display); font-weight: 800; font-size: clamp(54px, 9vw, 140px); line-height: 1; letter-spacing: -0.05em; white-space: nowrap; will-change: transform; }
+    .band div:first-child { transform: translateX(calc(var(--sx, 0) * -1px)); }
+    .band div:last-child { transform: translateX(calc(var(--sx, 0) * 1px - 40%)); color: transparent; -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.4); }
+    .band i { font-style: normal; color: var(--h1); -webkit-text-stroke: 0; }
+
+    /* Desktop app gallery */
+    .gui-catalog-wrap { padding: 16px 16px 14px; border-radius: 26px; background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); }
+    .gui-stage { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #0b1820; }
+    .gui-slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transform: scale(1.03); transition: opacity 0.5s, visibility 0.5s, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+    .gui-slide.active { opacity: 1; visibility: visible; transform: none; }
+    .gui-slide img { width: 100%; height: 100%; object-fit: cover; }
+    .gui-nav-btn { position: absolute; top: 50%; z-index: 2; width: 46px; height: 46px; margin-top: -23px; display: grid; place-items: center; border-radius: 50%; background: var(--text); color: var(--bg); box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.8); transition: transform 0.2s; }
+    .gui-nav-btn:hover { transform: scale(1.1); }
+    .gui-nav-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; }
+    .gui-nav-prev { left: 16px; }
+    .gui-nav-next { right: 16px; }
+    .gui-thumbs { display: flex; gap: 6px; margin-top: 14px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+    .gui-thumbs::-webkit-scrollbar { display: none; }
+    .gui-thumb { flex: none; padding: 8px 15px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--dim); transition: color 0.15s, border-color 0.15s, background 0.15s; }
+    .gui-thumb-img { display: none; }
+    .gui-thumb:hover { color: var(--text); border-color: var(--line-strong); }
+    .gui-thumb.active { color: var(--bg); background: var(--text); border-color: var(--text); }
+    .gui-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 14px; }
+    .gui-item { padding: 26px; border-radius: var(--radius); }
+    .gui-item h3 { margin-top: 20px; font-size: 16.5px; font-weight: 600; letter-spacing: -0.01em; }
+    .gui-item p { margin-top: 8px; font-size: 14px; color: var(--dim); }
+    .gui-item:nth-child(4n + 2) .ico svg { stroke: var(--h2); }
+    .gui-item:nth-child(4n + 3) .ico svg { stroke: var(--h3); }
+    .gui-item:nth-child(4n + 4) .ico svg { stroke: var(--h4); }
+
+    /* CLI */
+    .cli-grid { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 14px; align-items: stretch; }
+    .cli-points { display: grid; gap: 14px; }
+    .cli-point { display: flex; gap: 18px; padding: 24px; border-radius: var(--radius); }
+    .cli-point h3 { font-size: 17px; font-weight: 600; }
+    .cli-point p { margin-top: 4px; font-size: 14.5px; color: var(--dim); }
+    .cli-point:nth-child(2) .ico svg { stroke: var(--h2); }
+    .cli-point:nth-child(3) .ico svg { stroke: var(--h3); }
+    .term { position: relative; border-radius: var(--radius); background: rgba(5, 4, 9, 0.86); border: 1px solid var(--line-strong); overflow: hidden; }
+    .term-bar { display: flex; align-items: center; gap: 6px; padding: 14px 20px; border-bottom: 1px solid var(--line); color: var(--faint); font-family: var(--font-mono); font-size: 12.5px; }
+    .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); }
+    .term-bar span { margin-left: 10px; }
+    .term pre { padding: 26px; font-family: var(--font-mono); font-size: 13.5px; line-height: 1.85; overflow-x: auto; }
+    .c-dim { color: var(--faint); }
+    .c-accent { color: var(--h1); }
+
+    /* Download */
+    .dl-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+    .dl-sub { font-size: 13.5px; color: var(--dim); max-width: 640px; }
+    .version-tag-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--glass); font-family: var(--font-mono); font-size: 12.5px; color: var(--dim); }
+    .version-tag-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--h1); box-shadow: 0 0 10px var(--h1); }
+    .version-tag-pill span { color: var(--text); font-weight: 500; }
+    .vscode-dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+    .vscode-dl-card { position: relative; padding: 32px 26px 20px; border-radius: var(--radius); }
+    .vscode-dl-card.highlighted { border-color: transparent; background: linear-gradient(var(--glass-strong), var(--glass-strong)) padding-box, conic-gradient(from var(--ang), var(--h1), var(--h2), var(--h3), var(--h4), var(--h1)) border-box; animation: spin 8s linear infinite; }
+    .os-badge { display: none; position: absolute; top: -12px; left: 26px; padding: 3px 12px; border-radius: 999px; background: var(--text); color: var(--bg); font-family: var(--font-mono); font-size: 11px; font-weight: 500; }
+    .vscode-dl-card.highlighted .os-badge { display: block; }
+    .platform-icon svg { width: 40px; height: 40px; }
+    #card-linux .platform-icon svg path:first-child { fill: #3a3550; }
+    .primary-dl-group { display: grid; gap: 8px; margin-top: 24px; }
+    .primary-dl-group.dual-btn { grid-template-columns: 1fr 1fr; }
+    .vscode-btn-primary { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 13px 16px; border-radius: 14px; border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.06); transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.2s; }
+    .vscode-btn-primary:hover { background: rgba(255, 255, 255, 0.14); transform: translateY(-2px); }
+    .highlighted .vscode-btn-primary { background: var(--text); border-color: var(--text); color: var(--bg); }
+    .highlighted .vscode-btn-primary:hover { background: var(--h1); border-color: var(--h1); }
+    .vscode-btn-primary svg { width: 18px; height: 18px; flex: none; stroke-width: 2; }
+    .btn-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+    .btn-title { font-weight: 600; font-size: 15px; }
+    .btn-sub { font-size: 12px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dl-matrix { margin-top: 20px; }
+    .matrix-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+    .row-label { color: var(--dim); }
+    .pill-group { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .pill { padding: 3px 11px; border: 1px solid var(--line-strong); border-radius: 999px; font-family: var(--font-mono); font-size: 12px; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+    .pill:hover { background: var(--text); border-color: var(--text); color: var(--bg); }
+    .terminal-opt-wrap { margin-top: 14px; border-radius: var(--radius); }
+    .terminal-opt-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 20px 26px; font-size: 15px; font-weight: 500; text-align: left; }
+    .chevron-icon { width: 16px; height: 16px; flex: none; color: var(--h1); transition: transform 0.2s; }
+    .terminal-opt-btn.open .chevron-icon { transform: rotate(180deg); }
+    .install-tabs { padding: 0 26px 24px; }
+    .install-tabs.hidden { display: none; }
+    .tab-row { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); }
+    .tab { flex: none; padding: 9px 12px; font-size: 13.5px; color: var(--dim); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); font-weight: 500; border-bottom-color: var(--h1); }
+    .cmd { display: none; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 12px 12px 12px 18px; border-radius: 12px; background: rgba(5, 4, 9, 0.8); border: 1px solid var(--line); }
+    .cmd.active { display: flex; }
+    .cmd code { color: var(--dim); font-size: 13px; overflow-x: auto; white-space: nowrap; }
+    .cmd code b { color: var(--h1); font-weight: 500; }
+    .tab-repo-links, .dl-note { margin-top: 16px; font-size: 13.5px; color: var(--dim); }
+
+    /* Footer */
+    footer { margin-top: 110px; border-top: 1px solid var(--line); background: var(--glass-strong); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); }
+    footer .wrap { padding-top: 34px; padding-bottom: 46px; }
+    .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; }
+    .foot-brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: -0.02em; }
+    footer p { flex: 1 1 420px; font-size: 13px; color: var(--dim); }
+    .foot-social a { display: block; color: var(--dim); }
+    .foot-social a:hover { color: var(--text); }
+    .foot-social svg { width: 20px; height: 20px; display: block; }
+
+    /* Scroll reveal: armed only once the script has confirmed it can un-hide */
+    .js .reveal { opacity: 0; transform: translateY(40px); filter: blur(8px); transition: opacity 0.9s, transform 1.1s cubic-bezier(0.16, 1, 0.3, 1), filter 0.9s; }
+    .js .reveal.in-view { opacity: 1; transform: none; filter: none; }
+    .js .reveal .card, .js .reveal .gui-item, .js .reveal .cli-point { opacity: 0; transform: translateY(30px) scale(0.97); transition: opacity 0.7s, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s; transition-delay: calc(var(--i, 0) * 70ms); }
+    .js .reveal.in-view .card, .js .reveal.in-view .gui-item, .js .reveal.in-view .cli-point { opacity: 1; transform: none; }
+
+    @media (max-width: 1040px) {
+      .story-pin { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-items: stretch; gap: 18px; padding-top: 96px; }
+      .story-view { height: auto; min-height: 280px; }
+      .story-steps li:not(.on) { display: none; }
+      .story-steps li { border-left-color: var(--h1); padding: 4px 0 4px 16px; }
+      .card, .card.wide { grid-column: span 6; }
+      .bench, .cli-grid, .vscode-dl-grid { grid-template-columns: minmax(0, 1fr); }
+      .gui-grid { grid-template-columns: repeat(2, 1fr); }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .stat:nth-child(3) { border-left: 0; }
+      .stat:nth-child(n + 3) { border-top: 1px solid var(--line); }
+    }
+
+    @media (max-width: 860px) {
+      .nav-toggle { display: inline-flex; }
+      .nav-links { position: absolute; top: 68px; left: 14px; right: 14px; display: none; flex-direction: column; align-items: stretch; padding: 10px; border: 1px solid var(--line-strong); border-radius: 22px; background: rgba(13, 11, 22, 0.96); }
+      .nav-links.open { display: flex; }
+      .nav-links a.nav-cta { margin: 6px 0 0; text-align: center; }
+      .hero { padding-top: 150px; }
+      section > .wrap { padding-top: 90px; }
+      .band { padding-top: 90px; }
+      .demo-stage { margin-top: 64px; }
+    }
+
+    @media (max-width: 560px) {
+      .wrap { padding: 0 16px; }
+      .stat { padding: 22px 18px; }
+      .hero-ctas { width: 100%; }
+      .btn { flex: 1 1 100%; }
+      .extension-badges::before { flex: 1 1 100%; text-align: center; margin: 0; }
+      .card, .card.wide { grid-column: span 12; }
+      .gui-grid { grid-template-columns: minmax(0, 1fr); }
+      .gui-nav-btn { display: none; }
+      .bars li { grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }
+      .bench-panel { padding: 22px; }
+      .primary-dl-group.dual-btn { grid-template-columns: minmax(0, 1fr); }
+      .story-pin { padding-left: 16px; padding-right: 16px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-
-      .badge-row img,
-      .badge-link:hover img,
-      .badge-link:focus-visible img {
-        transition: none;
-        transform: none;
-      }
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .demo { transform: none; }
+      .js .hero h1 .line > span { transform: none; }
     }
+
+    /* Minimal pass: one surface, one accent, hairlines instead of glass */
+    .glass, .stats, .card, .bench-panel, .gui-item, .vscode-dl-card, .terminal-opt-wrap, .cli-point, .gui-catalog-wrap, .btn-ghost, .h1-name, .sec-no, .version-tag-pill, footer {
+      backdrop-filter: none; -webkit-backdrop-filter: none;
+    }
+    .hero::before {
+      content: ""; position: absolute; left: 50%; top: -260px; width: min(1100px, 120vw); height: 760px; z-index: -2;
+      transform: translateX(-50%); pointer-events: none;
+      background: radial-gradient(closest-side, rgba(45, 212, 212, 0.16), rgba(45, 212, 212, 0.04) 55%, transparent);
+      animation: breathe 9s ease-in-out infinite alternate;
+    }
+    @keyframes breathe { to { opacity: 0.55; transform: translateX(-50%) scale(1.12); } }
+    #flow { -webkit-mask-image: radial-gradient(ellipse 62% 58% at 50% 42%, #000 30%, transparent 100%); mask-image: radial-gradient(ellipse 62% 58% at 50% 42%, #000 30%, transparent 100%); }
+    .hero h1 { font-weight: 700; font-size: clamp(48px, 8.8vw, 136px); letter-spacing: -0.05em; }
+    .hero h1 .mute { color: var(--faint); }
+    .sec-head h2 { font-weight: 700; font-size: clamp(34px, 5vw, 68px); line-height: 0.98; }
+    .btn-primary::before { display: none; }
+    .btn-primary:hover { background: var(--h1); }
+    .demo::before { inset: 6% 10% -4%; background: rgba(45, 212, 212, 0.5); filter: blur(90px); opacity: 0.28; animation: none; }
+    .card::before { background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 0%), rgba(255, 255, 255, 0.07), transparent 70%); }
+    .bento, .gui-grid { gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    .bento .card, .gui-grid .gui-item { border: 0; border-radius: 0; background: var(--bg); }
+    .card:hover { transform: none; }
+    .ico { background: none; border-color: var(--line-strong); }
+    .bars .hydra .bar { background: var(--text); box-shadow: none; }
+    .bars .bar { background: rgba(255, 255, 255, 0.14); border-radius: 3px; height: 18px; }
+    .vscode-dl-card.highlighted { animation: none; background: var(--glass); border-color: var(--text); }
+    .story-bar i { background: var(--text); }
+    .stats { background: none; border-left: 0; border-right: 0; border-radius: 0; margin-top: 96px; }
+    section > .wrap { padding-top: 160px; }
+    .js .reveal { filter: none; transform: translateY(28px); }
+    @media (max-width: 860px) { section > .wrap { padding-top: 100px; } }
+
+    /* Stats box */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 96px; background: var(--glass); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; }
+    .stat { position: relative; padding: 40px 36px 38px; border-left: 1px solid var(--line); }
+    .stat::before { content: ""; position: absolute; left: 36px; top: 0; width: 28px; height: 2px; background: var(--h1); }
+    .stat b { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-display); font-size: clamp(52px, 5.6vw, 80px); line-height: 1; letter-spacing: -0.05em; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+    .stat b > span { display: inline; margin: 0; font-size: inherit; color: inherit; }
+    .stat b small { margin: 0; font-family: var(--font-mono); font-size: 15px; font-weight: 500; letter-spacing: 0; color: var(--faint); }
+    .stat > span { display: block; margin-top: 16px; font-size: 15.5px; line-height: 1.45; color: var(--dim); }
+    @media (max-width: 1040px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .stat { padding: 30px 22px 26px; } .stat::before { left: 22px; } }
+
+    /* Primary actions carry the logo's teal-to-blue */
+    .btn-primary, .nav-links a.nav-cta, .highlighted .vscode-btn-primary {
+      background: linear-gradient(100deg, #2dd4d4, #2596e8); border-color: transparent; color: #03161c;
+      transition: filter 0.2s, transform 0.2s, box-shadow 0.3s;
+    }
+    .btn-primary:hover, .nav-links a.nav-cta:hover, .highlighted .vscode-btn-primary:hover {
+      background: linear-gradient(100deg, #2dd4d4, #2596e8); color: #03161c; filter: brightness(1.12);
+    }
+    .btn-primary { box-shadow: 0 10px 34px -12px rgba(37, 150, 232, 0.7); }
+    .btn-primary:hover { box-shadow: 0 14px 40px -10px rgba(45, 212, 212, 0.75); }
+
+    /* The product name stays in the h1 for search engines and screen readers, not on screen */
+    .hero h1 .h1-name { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .hero h1 .h1-name::before { display: none; }
+    .hero { padding-top: 200px; }
+
+    /* Download cards: equal height, one pill row per line */
+    .vscode-dl-grid { align-items: stretch; }
+    .vscode-dl-card { display: flex; flex-direction: column; padding: 32px 22px 20px; }
+    .os-badge { left: 22px; }
+    .matrix-row { gap: 8px; min-height: 47px; }
+    .pill-group { flex-wrap: nowrap; }
+    .pill { padding: 3px 9px; font-size: 11.5px; }
+
+    /* Footer */
+    footer { margin-top: 140px; background: none; }
+    footer .wrap { padding-top: 64px; padding-bottom: 36px; }
+    .foot { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); gap: 40px 32px; align-items: start; }
+    .foot-brand { font-size: 20px; gap: 10px; }
+    .foot-about p { flex: none; margin-top: 16px; max-width: 300px; font-size: 14.5px; line-height: 1.55; color: var(--dim); }
+    .foot-col { display: grid; gap: 12px; justify-items: start; }
+    .foot-col h2 { margin-bottom: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--faint); }
+    .foot-col a { font-size: 14.5px; color: var(--dim); transition: color 0.15s; }
+    .foot-col a:hover { color: var(--text); }
+    .foot-base { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--line); }
+    .foot-base p { flex: 1; font-size: 13px; color: var(--faint); }
+    .foot-gh { color: var(--faint); transition: color 0.15s; }
+    .foot-gh:hover { color: var(--text); }
+    .foot-gh svg { width: 20px; height: 20px; display: block; }
+    @media (max-width: 860px) { .foot { grid-template-columns: repeat(3, minmax(0, 1fr)); } .foot-about { grid-column: 1 / -1; } footer { margin-top: 90px; } }
+    @media (max-width: 560px) { .foot { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+    /* GitHub link with star count */
+    .nav-links a.nav-gh { display: inline-flex; align-items: center; gap: 8px; }
+    .gh-stars { display: inline-flex; align-items: center; gap: 5px; padding-left: 8px; border-left: 1px solid var(--line-strong); font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
+    .gh-stars b { font-weight: 500; }
+    .gh-star { width: 14px; height: 14px; color: #ffd166; }
+    [hidden] { display: none !important; }
+
+    .hero h1 { font-size: clamp(36px, 8.4vw, 128px); }
+    .hero h1 .line { padding-bottom: 0.2em; margin-bottom: -0.12em; }
+
+    /* Eyebrow inside a heading: keeps the keyword phrase in the h2 itself */
+    .sec-head h2 { margin-top: 0; }
+    .sec-head h2 .eyebrow { display: block; margin-bottom: 16px; font-weight: 400; line-height: 1.6; letter-spacing: 0.08em; }
+    .story-copy h2.eyebrow { font-weight: 400; }
+    .hero-lede strong { color: var(--text); font-weight: 500; }
+
+    /* FAQ */
+    .faq { max-width: 860px; border-top: 1px solid var(--line); }
+    .faq details { border-bottom: 1px solid var(--line); }
+    .faq summary { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 0; cursor: pointer; list-style: none; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary h3 { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; }
+    .faq summary::after { content: ""; flex: none; width: 12px; height: 12px; background: linear-gradient(var(--dim), var(--dim)) center / 100% 1.5px no-repeat, linear-gradient(var(--dim), var(--dim)) center / 1.5px 100% no-repeat; transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+    .faq details[open] summary::after { transform: rotate(45deg); }
+    .faq summary:hover h3 { color: var(--h1); }
+    .faq details p { max-width: 720px; padding: 0 0 26px; font-size: 16px; color: var(--dim); }
+
+    html { overflow-x: clip; }
   </style>
 </head>
 
@@ -1727,25 +755,28 @@
   <div id="top-sentinel" style="position:absolute; top:0; left:0; width:1px; height:1px;" aria-hidden="true"></div>
 
   <nav class="nav" id="nav">
-    <div class="wrap nav-inner">
+    <div class="nav-inner wrap">
       <a class="brand" href="#">
-        <img src="logo.png" alt="Hydra logo" width="30" height="30">
-        HYDRA
+        <img src="logo-64.png" alt="Hydra Download Manager logo" width="28" height="28">
+        Hydra
       </a>
       <div class="nav-links" id="nav-links">
+        <a href="#how">How it works</a>
         <a href="#engine">Engine</a>
-        <a href="features.html">Features</a>
-      <a href="plugins.html">Plugins</a>
-        <a href="#app">Desktop App</a>
+        <a href="#benchmark">Benchmark</a>
+        <a href="#app">App</a>
         <a href="#cli">CLI</a>
-        <a href="#download">Download</a>
+        <a href="features.html">Features</a>
+        <a href="plugins.html">Plugins</a>
         <a href="changelog.html">Changelog</a>
         <a class="nav-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path
               d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
           </svg>
+        <span class="gh-stars" hidden><svg class="gh-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.6l-5.9 3.1 1.2-6.6L2.5 9.5l6.6-.9L12 2.5z" /></svg><b data-gh-stars></b></span>
         </a>
+        <a class="nav-cta" href="#download">Download</a>
       </div>
       <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation menu" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1758,146 +789,172 @@
   </nav>
 
   <header class="hero">
-    <div class="wrap hero-grid">
+    <canvas id="flow" aria-hidden="true"></canvas>
+    <div class="wrap">
       <div class="hero-copy">
-        <h1>Hydra Download Manager <span class="grad">(HDM)</span></h1>
-        <p>An open-source, high-performance download manager and accelerator that splits every file across parallel
-          connections and mirror sources. Featuring dynamic range stealing and real-time stall recovery for Windows,
-          macOS, and Linux.</p>
-        <div class="hero-actions">
-          <div class="hero-ctas">
-            <a class="btn btn-primary" href="#download">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 3v13m0 0l-5-5m5 5l5-5M4 21h16" />
-              </svg>
-              Download HDM
-            </a>
-            <a class="btn btn-ghost" href="https://github.com/ja7ad/hydra">View on GitHub</a>
-          </div>
-          <div class="extension-badges" role="group" aria-label="Download browser extensions">
-            <a href="https://chromewebstore.google.com/detail/hydra-download-manager-in/oieelfilllghmbnhofajpgpmmilfihmo">
-              <img src="img/extension-badges/chrome.png" alt="Available in the Chrome Web Store" height="32">
-            </a>
-            <a href="https://microsoftedge.microsoft.com/addons/detail/hydra-download-manager-in/obemipfpeenmhkdpkobdkeedhdakaoai">
-              <img src="img/extension-badges/edge.png" alt="Get it from Microsoft Edge" height="32">
-            </a>
-            <a href="https://addons.mozilla.org/en-US/firefox/addon/hdm-integration/">
-              <img src="img/extension-badges/firefox.png" alt="Get the Firefox add-on" height="32">
-            </a>
-          </div>
+        <h1>
+          <span class="h1-name">Hydra Download Manager (HDM):</span>
+          <span class="line"><span>Every byte takes</span></span>
+          <span class="line"><span class="grad">the fastest path.</span></span>
+        </h1>
+        <p class="hero-lede"><strong>Hydra Download Manager (HDM)</strong> is a free, open-source download manager and accelerator that splits every file
+          across parallel connections and mirror sources, steals byte ranges from lagging peers, and recovers from
+          stalls before a timeout fires. For Windows, macOS, and Linux.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary" href="#download" id="hero-dl">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v13m0 0l-5-5m5 5l5-5M4 21h16" />
+            </svg>
+            <span id="hero-dl-label">Download HDM</span>
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/ja7ad/hydra">View on GitHub</a>
         </div>
       </div>
-      <div class="shot">
-        <div class="viz">
-          <canvas id="hero-canvas" role="img"
-            aria-label="Animation of Hydra Download Manager feeding one download from several mirror sources at once"></canvas>
-        </div>
+
+      <div class="demo-stage">
+      <figure class="demo" id="demo">
+        <div class="demo-callout" aria-hidden="true"><span id="demo-callout">The real app, recorded on a Mac</span></div>
+        <video class="demo-video" id="demo-video" width="1280" height="768" muted loop playsinline preload="none"
+          poster="img/hydra-demo-poster.jpg"
+          aria-label="Screen recording of Hydra Download Manager on macOS: a download of the Linux 6.12 source starts, the progress window shows eight connections being measured and the faster ones kept, and the download completes">
+          <source src="img/hydra-demo.mp4" type="video/mp4">
+        </video>
+      </figure>
+      <p class="demo-note">Screen recording of Hydra 1.2.1 on macOS downloading the Linux 6.12 source from kernel.org, sped up about 1.7×.</p>
+      </div>
+
+      <div class="extension-badges" role="group" aria-label="Download browser extensions">
+        <a href="https://chromewebstore.google.com/detail/hydra-download-manager-in/oieelfilllghmbnhofajpgpmmilfihmo">
+          <img src="img/extension-badges/chrome.png" width="120" loading="lazy" decoding="async" alt="Available in the Chrome Web Store" height="34">
+        </a>
+        <a href="https://microsoftedge.microsoft.com/addons/detail/hydra-download-manager-in/obemipfpeenmhkdpkobdkeedhdakaoai">
+          <img src="img/extension-badges/edge-small.png" width="128" loading="lazy" decoding="async" alt="Get it from Microsoft Edge" height="34">
+        </a>
+        <a href="https://addons.mozilla.org/en-US/firefox/addon/hdm-integration/">
+          <img src="img/extension-badges/firefox.png" width="97" loading="lazy" decoding="async" alt="Get the Firefox add-on" height="34">
+        </a>
+      </div>
+
+      <div class="stats reveal">
+        <div class="stat"><b><span data-count="414">414</span><small>MB/s</small></b><span>1 GB over a 100 ms path at <code>-x 8</code></span></div>
+        <div class="stat"><b><span data-count="6.9">6.9</span><small>MiB</small></b><span>Peak memory during that transfer</span></div>
+        <div class="stat"><b><span data-count="9">9</span></b><span>Language bindings over one C ABI</span></div>
+        <div class="stat"><b><span data-count="3">3</span></b><span>Desktop platforms, x64 and Arm64</span></div>
       </div>
     </div>
   </header>
 
+  <section class="story" id="how" aria-label="How Hydra downloads a file">
+    <div class="story-pin">
+      <div class="story-copy">
+        <h2 class="eyebrow">How Hydra Download Manager works · keep scrolling</h2>
+        <ol class="story-steps" id="story-steps">
+          <li class="on"><h3>One file, one connection.</h3><p><span>This is how most downloads run: a single stream, as fast as one server feels like going.</span></p></li>
+          <li><h3>Hydra cuts it into ranges.</h3><p><span>The file is partitioned into byte ranges and every range gets its own connection, across as many mirrors as you give it.</span></p></li>
+          <li><h3>One stalls. Nobody waits.</h3><p><span>A collapsing connection is flagged before its timeout fires, and faster peers take over the bytes it still owed.</span></p></li>
+          <li><h3>Every byte, exactly once.</h3><p><span>The ranges close with no gap and no overlap, the checksum is verified, and the file is whole.</span></p></li>
+        </ol>
+      </div>
+      <div class="story-view glass">
+        <canvas id="story" role="img" aria-label="Scroll-driven animation: one file is split into eight byte ranges, each fed by its own connection; one connection stalls and its neighbours take over its range; the ranges merge into a complete, verified file"></canvas>
+        <div class="story-bar" aria-hidden="true"><i></i></div>
+      </div>
+    </div>
+  </section>
+
   <section id="engine">
     <div class="wrap">
-      <div class="sec-head">
-        <h2>Multi-Source Acceleration &amp; Embedded Download Engine</h2>
-        <p>Hydra Download Manager core is a high-performance download accelerator and statistical scheduler for byte
-          ranges, wrapped with a frozen C ABI (<code>libhydra</code>). Embed multi-source downloads, dynamic range
-          stealing, and sub-timeout stall prediction into any application or platform.</p>
-      </div>
-
-      <div class="engine-showcase">
-        <!-- Left Column: Core Engine Features -->
-        <div class="engine-col engine-col-left">
-          <div class="engine-card">
-            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 17h-8m8-10h-8m-2 0H3m18 5H11m-2 5H3M13 5v4m-4 1v4m8 1v4" />
-              </svg></div>
-            <h3>Adaptive Concurrency</h3>
-            <p>Drains multiple mirrors and parallel HTTP/S/FTP streams simultaneously with per-server automatic ramp up.
-            </p>
-          </div>
-          <div class="engine-card">
-            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" aria-hidden="true">
-                <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-              </svg></div>
-            <h3>Dynamic Range Stealing</h3>
-            <p>Detects lagging connections mid-flight and transparently reclaims remaining byte ranges for faster peers.
-            </p>
-          </div>
-          <div class="engine-card">
-            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 12h4l2-7 4 14 2-7h6" />
-              </svg></div>
-            <h3>Sub-Timeout Stall Prediction</h3>
-            <p>Statistical CUSUM estimators flag collapsing connections seconds before standard socket timeouts trigger.
-            </p>
-          </div>
-          <div class="engine-card">
-            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 3l8 4v5c0 4.5-3.2 8.2-8 9-4.8-.8-8-4.5-8-9V7l8-4z M9 12l2 2 4-4" />
-              </svg></div>
-            <h3>End-to-End Integrity</h3>
-            <p>Per-chunk checksum manifests, Content-MD5 validation, and local Reed-Solomon erasure coding against
-              bitrot.</p>
-          </div>
-        </div>
-
-        <!-- Center Column: Interactive Canvas Hub -->
-        <div class="engine-col-center">
-          <canvas id="engine-canvas" role="img"
-            aria-label="Interactive architecture diagram of Hydra engine core connected to feature cards"></canvas>
-        </div>
-
-        <!-- Right Column: FFI & Cross-Platform Embedding -->
-        <div class="engine-col engine-col-right">
-          <div class="engine-card">
-            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M7 8h10M7 12h10M7 16h6" />
-              </svg></div>
-            <h3>Stable C ABI (<code>libhydra</code>)</h3>
-            <p>One static/shared library and header (<code>hydra.h</code>) with strict ABI 1 forward-compatibility CI
-              gates.</p>
-          </div>
-          <div class="engine-card">
-            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" aria-hidden="true">
-                <rect x="5" y="2" width="14" height="20" rx="3" />
-                <path d="M12 18h.01" />
-              </svg></div>
-            <h3>Android &amp; iOS Mobile</h3>
-            <p>Pre-packaged Android <code>jniLibs</code> and Apple <code>Hydra.xcframework</code> with background
-              execution policy support.</p>
-          </div>
-          <div class="engine-card">
-            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" aria-hidden="true">
-                <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
-              </svg></div>
-            <h3>Polyglot Language Bindings</h3>
-            <p>Drop-in examples for C, C++, Python, Swift, Go, Kotlin, Dart, C#, and Zig with non-blocking event queues.
-            </p>
-          </div>
-          <div class="engine-card">
-            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18" />
-              </svg></div>
-            <h3>Durable Persistence</h3>
-            <p>State persistence across process restarts, flat resident memory, and HTTP CONNECT / SOCKS5 proxies.</p>
-          </div>
+      <div class="sec-head reveal">
+        <span class="sec-no">01</span>
+        <div>
+          <h2><span class="eyebrow">Multi-source acceleration &amp; embedded download engine</span>A scheduler for byte ranges, not just more connections.</h2>
+          <p class="lede">Hydra Download Manager core is a high-performance download accelerator and statistical
+            scheduler, wrapped with a frozen C ABI (<code>libhydra</code>). Embed multi-source downloads, dynamic range
+            stealing, and sub-timeout stall prediction into any application or platform.</p>
         </div>
       </div>
-      <div style="margin-top: 36px; text-align: center;">
-        <a class="btn btn-ghost" href="features.html"
-          style="border-color: rgba(45, 212, 212, 0.35); background: rgba(45, 212, 212, 0.06);">
+
+      <div class="bento reveal">
+        <div class="card wide">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 17h-8m8-10h-8m-2 0H3m18 5H11m-2 5H3M13 5v4m-4 1v4m8 1v4" />
+            </svg></div>
+          <h3>Adaptive Concurrency</h3>
+          <p>Drains multiple mirrors and parallel HTTP/S/FTP streams simultaneously with per-server automatic ramp up.
+          </p>
+        </div>
+        <div class="card wide">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+            </svg></div>
+          <h3>Dynamic Range Stealing</h3>
+          <p>Detects lagging connections mid-flight and transparently reclaims remaining byte ranges for faster peers.
+          </p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 12h4l2-7 4 14 2-7h6" />
+            </svg></div>
+          <h3>Sub-Timeout Stall Prediction</h3>
+          <p>Statistical CUSUM estimators flag collapsing connections seconds before standard socket timeouts trigger.
+          </p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l8 4v5c0 4.5-3.2 8.2-8 9-4.8-.8-8-4.5-8-9V7l8-4z M9 12l2 2 4-4" />
+            </svg></div>
+          <h3>End-to-End Integrity</h3>
+          <p>Per-chunk checksum manifests, Content-MD5 validation, and local Reed-Solomon erasure coding against
+            bitrot.</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M7 8h10M7 12h10M7 16h6" />
+            </svg></div>
+          <h3>Stable C ABI (<code>libhydra</code>)</h3>
+          <p>One static/shared library and header (<code>hydra.h</code>) with strict ABI 1 forward-compatibility CI
+            gates.</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <rect x="5" y="2" width="14" height="20" rx="3" />
+              <path d="M12 18h.01" />
+            </svg></div>
+          <h3>Android &amp; iOS Mobile</h3>
+          <p>Pre-packaged Android <code>jniLibs</code> and Apple <code>Hydra.xcframework</code> with background
+            execution policy support.</p>
+        </div>
+        <div class="card wide">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
+            </svg></div>
+          <h3>Polyglot Language Bindings</h3>
+          <p>Drop-in examples with non-blocking event queues for every language you are likely to embed it in.</p>
+          <div class="chips">
+            <span>C</span><span>C++</span><span>Python</span><span>Swift</span><span>Go</span><span>Kotlin</span><span>Dart</span><span>C#</span><span>Zig</span>
+          </div>
+        </div>
+        <div class="card wide">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18" />
+            </svg></div>
+          <h3>Durable Persistence</h3>
+          <p>State persistence across process restarts, flat resident memory, and HTTP CONNECT / SOCKS5 proxies.</p>
+        </div>
+      </div>
+      <div class="sec-more">
+        <a class="btn btn-ghost" href="features.html">
           <span>Explore all 28 architecture features &amp; deep dives</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round" aria-hidden="true">
@@ -1908,13 +965,55 @@
     </div>
   </section>
 
+  <section id="benchmark">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="sec-no">02</span>
+        <div>
+          <h2><span class="eyebrow">Download manager benchmark</span>Ahead of aria2c at every matched concurrency, on a third of the memory.</h2>
+          <p class="lede">1 GB over a 100 ms path on a VPS test bed, mean of three runs, one client at a time. A bare
+            <code>hydra &lt;url&gt;</code> with no flags matches <code>aria2c -x 4</code>.</p>
+        </div>
+      </div>
+      <div class="bench reveal">
+        <div class="bench-panel">
+          <h3>Average speed <small>MB/s · higher is better</small></h3>
+          <ul class="bars">
+            <li class="hydra"><span>hydra -x 8</span><div class="track"><i class="bar" style="--v:100"></i><span class="val">414</span></div></li>
+            <li><span>aria2c -x 8</span><div class="track"><i class="bar" style="--v:72"></i><span class="val">298</span></div></li>
+            <li class="hydra"><span>hydra default</span><div class="track"><i class="bar" style="--v:72"></i><span class="val">298</span></div></li>
+            <li><span>aria2c -x 4</span><div class="track"><i class="bar" style="--v:68.8"></i><span class="val">285</span></div></li>
+            <li><span>wget</span><div class="track"><i class="bar" style="--v:25.6"></i><span class="val">106</span></div></li>
+            <li><span>curl</span><div class="track"><i class="bar" style="--v:25.1"></i><span class="val">104</span></div></li>
+          </ul>
+        </div>
+        <div class="bench-panel">
+          <h3>Peak memory <small>MiB · lower is better</small></h3>
+          <ul class="bars">
+            <li class="hydra"><span>hydra -x 8</span><div class="track"><i class="bar" style="--v:27.3"></i><span class="val">6.9</span></div></li>
+            <li><span>aria2c -x 8</span><div class="track"><i class="bar" style="--v:100"></i><span class="val">25.3</span></div></li>
+            <li><span>aria2c -x 4</span><div class="track"><i class="bar" style="--v:83.4"></i><span class="val">21.1</span></div></li>
+            <li><span>curl</span><div class="track"><i class="bar" style="--v:43.1"></i><span class="val">10.9</span></div></li>
+            <li><span>wget</span><div class="track"><i class="bar" style="--v:19"></i><span class="val">4.8</span></div></li>
+          </ul>
+        </div>
+      </div>
+      <p class="bench-note">nginx serves from RAM in a network namespace with 50 ms of delay each way. Full table,
+        live-host runs and the scripts to reproduce them are in the
+        <a href="https://github.com/ja7ad/hydra#benchmark">README benchmark section</a>.</p>
+    </div>
+  </section>
+
   <section class="gui" id="app">
     <div class="wrap">
-      <div class="sec-head">
-        <h2>Open-Source Download Manager for Desktop (Windows, macOS, Linux)</h2>
-        <p>Hydra Download Manager (HDM) wraps the acceleration engine in a native, localized desktop interface for
-          Windows, macOS, and Linux — an open-source alternative to classic download managers like IDM, FDM, and
-          JDownloader.</p>
+      <div class="sec-head reveal">
+        <span class="sec-no">03</span>
+        <div>
+          <h2><span class="eyebrow">Open-source download manager for Windows, macOS, Linux</span>A native desktop app that feels like the one you already know.</h2>
+          <p class="lede">Hydra Download Manager (HDM) wraps the acceleration engine in a native, localized desktop
+            interface for Windows, macOS, and Linux — an open-source alternative to classic download managers like IDM,
+            FDM, and JDownloader.</p>
+        </div>
       </div>
       <div class="gui-catalog-wrap">
         <!-- Main Display Stage -->
@@ -1926,7 +1025,7 @@
           </button>
 
           <div class="gui-slide active" data-index="0">
-            <img src="img/screenshot.jpg" alt="Hydra Download Manager main window showing active and queued downloads list, category sidebar, and toolbar controls" loading="eager" width="1920" height="1080" decoding="async">
+            <img src="img/screenshot.jpg" alt="Hydra Download Manager main window showing active and queued downloads list, category sidebar, and toolbar controls" loading="lazy" width="1920" height="1080" decoding="async">
           </div>
           <div class="gui-slide" data-index="1">
             <img src="img/screenshot2.jpg" alt="Hydra Download Manager active download progress dialog with transfer speed, multi-connection segments, and speed limiter" loading="lazy" width="1920" height="1080" decoding="async">
@@ -2027,17 +1126,15 @@
           </button>
         </div>
       </div>
-      <div class="gui-grid">
+      <div class="gui-grid reveal">
         <div class="gui-item">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
               stroke-linejoin="round" aria-hidden="true">
               <path d="M4 4h16v11H4zM2 19h20M9 8l3 3 3-3" />
             </svg></div>
-          <div>
-            <h3>Browser Extension Integration</h3>
-            <p>Official browser integration for Chrome, Edge, Firefox, and Safari hands downloads to HDM over a local
-              WebSocket bridge, with a native-messaging fallback that can launch the app on demand.</p>
-          </div>
+          <h3>Browser Extension Integration</h3>
+          <p>Official browser integration for Chrome, Edge, Firefox, and Safari hands downloads to HDM over a local
+            WebSocket bridge, with a native-messaging fallback that can launch the app on demand.</p>
         </div>
         <div class="gui-item">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
@@ -2045,22 +1142,18 @@
               <circle cx="12" cy="12" r="9" />
               <path d="M12 7v5l3 3" />
             </svg></div>
-          <div>
-            <h3>Queues &amp; scheduler</h3>
-            <p>Group downloads into queues with scheduled start and stop times, retry tracking, and one-click start or
-              stop for the whole queue.</p>
-          </div>
+          <h3>Queues &amp; scheduler</h3>
+          <p>Group downloads into queues with scheduled start and stop times, retry tracking, and one-click start or
+            stop for the whole queue.</p>
         </div>
         <div class="gui-item">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
               stroke-linejoin="round" aria-hidden="true">
               <path d="M6 3h12l4 6-10 12L2 9l4-6zM2 9h20M9 3l3 6 3-6" />
             </svg></div>
-          <div>
-            <h3>Power save mode</h3>
-            <p>One toggle cuts interface wakeups: slower refresh, no progress animation, coarser transfer ticks.
-              Download speed is unchanged while your battery lasts longer.</p>
-          </div>
+          <h3>Power save mode</h3>
+          <p>One toggle cuts interface wakeups: slower refresh, no progress animation, coarser transfer ticks.
+            Download speed is unchanged while your battery lasts longer.</p>
         </div>
         <div class="gui-item">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
@@ -2068,11 +1161,9 @@
               <rect x="5" y="3" width="14" height="18" rx="2" />
               <path d="M9 3v4h6V3M9 12h6M9 16h4" />
             </svg></div>
-          <div>
-            <h3>Clipboard watching</h3>
-            <p>Copy a link and Hydra picks it up automatically, filtered by the file types you choose, with per-site
-              exceptions when you want it to stay out of the way.</p>
-          </div>
+          <h3>Clipboard watching</h3>
+          <p>Copy a link and Hydra picks it up automatically, filtered by the file types you choose, with per-site
+            exceptions when you want it to stay out of the way.</p>
         </div>
         <div class="gui-item">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
@@ -2081,22 +1172,18 @@
                 d="M12 6V3M12 21v-3M6 12H3m18 0h-3M7.8 7.8L5.6 5.6m12.8 12.8l-2.2-2.2m0-8.4l2.2-2.2M5.6 18.4l2.2-2.2" />
               <circle cx="12" cy="12" r="3" />
             </svg></div>
-          <div>
-            <h3>Speed limits &amp; connection caps</h3>
-            <p>Cap bandwidth to a fixed budget per interval and set the default connection count per download, so
-              background transfers never starve your video call.</p>
-          </div>
+          <h3>Speed limits &amp; connection caps</h3>
+          <p>Cap bandwidth to a fixed budget per interval and set the default connection count per download, so
+            background transfers never starve your video call.</p>
         </div>
         <div class="gui-item">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
               stroke-linejoin="round" aria-hidden="true">
               <path d="M3 7l4-4h10l4 4M3 7v12a2 2 0 002 2h14a2 2 0 002-2V7M3 7h18M10 12h4" />
             </svg></div>
-          <div>
-            <h3>Categories &amp; auto-sorting</h3>
-            <p>Compressed, Documents, Music, Programs, Video: incoming files are routed to the right category and folder
-              by type, each with its own default directory.</p>
-          </div>
+          <h3>Categories &amp; auto-sorting</h3>
+          <p>Compressed, Documents, Music, Programs, Video: incoming files are routed to the right category and folder
+            by type, each with its own default directory.</p>
         </div>
         <div class="gui-item">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
@@ -2104,11 +1191,9 @@
               <rect x="3" y="4" width="18" height="13" rx="2" />
               <path d="M8 21h8M12 17v4M12 8v5M9.5 10.5L12 13l2.5-2.5" />
             </svg></div>
-          <div>
-            <h3>Lives in your tray</h3>
-            <p>System tray with light and dark aware icons, launch on startup, minimize to tray, and optional hiding
-              from the Dock or taskbar for a fully background setup.</p>
-          </div>
+          <h3>Lives in your tray</h3>
+          <p>System tray with light and dark aware icons, launch on startup, minimize to tray, and optional hiding
+            from the Dock or taskbar for a fully background setup.</p>
         </div>
         <div class="gui-item">
           <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
@@ -2116,30 +1201,32 @@
               <circle cx="12" cy="12" r="9" />
               <path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18" />
             </svg></div>
-          <div>
-            <h3>Localized, with event sounds</h3>
-            <p>A translated interface, per-event sounds for completed or failed downloads, and a completion dialog with
-              Open and Open-folder shortcuts.</p>
-          </div>
+          <h3>Localized, with event sounds</h3>
+          <p>A translated interface, per-event sounds for completed or failed downloads, and a completion dialog with
+            Open and Open-folder shortcuts.</p>
         </div>
       </div>
     </div>
   </section>
 
   <section id="cli">
-    <div class="wrap cli-grid">
-      <div>
-        <div class="sec-head" style="margin-bottom:0">
-          <h2>Open-Source Download Manager for Desktop &amp; Terminal (CLI &amp; TUI)</h2>
-          <p>The same high-performance download accelerator engine drives a scriptable CLI and a full-screen interactive
-            queue manager, giving servers, containers, and terminal users multi-source download acceleration.</p>
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="sec-no">04</span>
+        <div>
+          <h2><span class="eyebrow">Download manager for the terminal · CLI &amp; TUI</span>The same engine, one command away.</h2>
+          <p class="lede">The same high-performance download accelerator engine drives a scriptable CLI and a
+            full-screen interactive queue manager, giving servers, containers, and terminal users multi-source download
+            acceleration.</p>
         </div>
+      </div>
+      <div class="cli-grid reveal">
         <div class="cli-points">
           <div class="cli-point">
-            <span class="dotless"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
                 stroke-linejoin="round" aria-hidden="true">
                 <path d="M5 7l5 5-5 5M12 19h7" />
-              </svg></span>
+              </svg></div>
             <div>
               <h3>wget and curl compatibility</h3>
               <p>Compat personalities accept common wget and curl flags as-is, so Hydra drops into existing scripts
@@ -2147,11 +1234,11 @@
             </div>
           </div>
           <div class="cli-point">
-            <span class="dotless"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
                 stroke-linejoin="round" aria-hidden="true">
                 <rect x="3" y="4" width="18" height="16" rx="2" />
                 <path d="M3 9h18M7 13h6M7 16h10" />
-              </svg></span>
+              </svg></div>
             <div>
               <h3>Interactive queue manager</h3>
               <p>A full-screen TUI for adding, pausing, resuming, and monitoring queued downloads without leaving the
@@ -2159,10 +1246,10 @@
             </div>
           </div>
           <div class="cli-point">
-            <span class="dotless"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"
                 stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 3l8 4v5c0 4.5-3.2 8.2-8 9-4.8-.8-8-4.5-8-9V7l8-4z M9 12l2 2 4-4" />
-              </svg></span>
+              </svg></div>
             <div>
               <h3>Remote checksum lookup</h3>
               <p>Inspect server-advertised digests before downloading, or verify the finished file against a target hash
@@ -2170,10 +1257,9 @@
             </div>
           </div>
         </div>
-      </div>
-      <div class="term">
-        <div class="term-bar"><i></i><i></i><i></i><span>hydra</span></div>
-        <pre><span class="c-dim"># saturate the link across two mirrors, 8 connections</span>
+        <div class="term">
+          <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>hydra</span></div>
+          <pre><span class="c-dim"># saturate the link across two mirrors, 8 connections</span>
 <span class="c-cmd">$ hydra <span class="c-accent">-x 8</span> https://mirror1.example.org/ubuntu.iso \
         https://mirror2.example.org/ubuntu.iso</span>
 
@@ -2185,18 +1271,25 @@
 
 <span class="c-dim"># open the interactive queue</span>
 <span class="c-cmd">$ hydra <span class="c-accent">interactive</span></span></pre>
+        </div>
       </div>
     </div>
   </section>
 
   <section id="download">
     <div class="wrap">
-      <div class="dl-card">
-        <h2>Download Hydra Download Manager (HDM)</h2>
-        <p class="dl-subtitle">Free, open-source download manager and accelerator for Windows, macOS, and Linux. Desktop
-          GUI, CLI, TUI, and browser integration included.</p>
-        <p class="dl-subtitle"><a href="https://github.com/ja7ad/hydra#code-signing-policy">Code signing policy</a>: free code signing provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+      <div class="sec-head reveal">
+        <span class="sec-no">05</span>
+        <div>
+          <h2><span class="eyebrow">Download Hydra Download Manager (HDM)</span>Get Hydra for your platform.</h2>
+          <p class="lede">Free, open-source download manager and accelerator for Windows, macOS, and Linux. Desktop
+            GUI, CLI, TUI, and browser integration included.</p>
+        </div>
+      </div>
+      <div class="dl-head">
+        <p class="dl-sub"><a href="https://github.com/ja7ad/hydra#code-signing-policy">Code signing policy</a>: free code signing provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
         <div class="version-tag-pill" id="latest-ver-badge">Latest release: <span id="ver-tag">v1.2.0</span></div>
+      </div>
 
         <div class="vscode-dl-grid">
           <!-- Windows Card -->
@@ -2561,39 +1654,85 @@
 
         <p class="dl-note">Looking for source code or earlier releases? View all assets on the <a
             href="https://github.com/ja7ad/hydra/releases">GitHub Releases page</a>.</p>
-      </div>
 
-      <div class="badge-row">
-        <a class="badge-link" href="https://smollaunch.com" target="_blank" rel="noopener">
-          <img src="img/badges/smol-launch.svg" alt="Hydra Download Manager — Featured on Smol Launch" width="250"
-            height="60" loading="lazy" decoding="async">
-        </a>
-        <a class="badge-link" href="https://saascity.io/live/hydra-download-manager" target="_blank" rel="noopener">
-          <img src="img/badges/saascity.svg" alt="Hydra Download Manager — Launched on SaaSCity.io" width="210"
-            height="80" loading="lazy" decoding="async">
-        </a>
-        <a class="badge-link"
-          href="https://launchigniter.com/product/hydra-download-manager?ref=badge-hydra-download-manager"
-          target="_blank" rel="noopener">
-          <img src="img/badges/launchigniter.svg" alt="Hydra Download Manager — Featured on LaunchIgniter" width="212"
-            height="55" loading="lazy" decoding="async">
-        </a>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="sec-no">06</span>
+        <div>
+          <h2><span class="eyebrow">Download manager FAQ</span>Questions about Hydra Download Manager.</h2>
+        </div>
+      </div>
+      <div class="faq reveal">
+        <details open>
+          <summary><h3>What is Hydra Download Manager (HDM)?</h3></summary>
+          <p>Hydra Download Manager, or HDM, is a free, open-source download manager and download accelerator for Windows, macOS and Linux. It splits each file across parallel connections and mirror sources, hands byte ranges from slow connections to faster ones, and resumes interrupted downloads.</p>
+        </details>
+        <details>
+          <summary><h3>Is Hydra Download Manager free?</h3></summary>
+          <p>Yes. HDM is free and open source. The desktop app and CLI are licensed GPL-3.0-or-later and the core libraries are MIT / Apache-2.0. There is no paid tier, and the app contains no advertising, analytics or telemetry code.</p>
+        </details>
+        <details>
+          <summary><h3>How is HDM different from other download managers like IDM, FDM or JDownloader?</h3></summary>
+          <p>HDM is an open-source alternative built around a download engine rather than around a window. The engine predicts stalling connections before their timeout fires and reassigns their remaining byte ranges, and the same engine powers the desktop app, the command line and the embeddable libhydra library. In our test of 1 GB over a 100 ms path, hydra reached 414 MB/s with 8 connections against 298 MB/s for aria2c, using 6.9 MiB of memory.</p>
+        </details>
+        <details>
+          <summary><h3>Which platforms does the download manager support?</h3></summary>
+          <p>The desktop download manager runs on Windows 10 and 11, macOS 11 or later, and Linux, on both x64 and Arm64. Linux packages are available as .deb, .rpm, an Ubuntu PPA, Fedora COPR and the Arch AUR. The libhydra engine can also be embedded in Android and iOS apps.</p>
+        </details>
+        <details>
+          <summary><h3>Does HDM work with my browser?</h3></summary>
+          <p>Yes. Official extensions for Chrome, Edge, Firefox and Safari hand downloads to the Hydra app running on your own computer. Nothing is sent to a remote server.</p>
+        </details>
+        <details>
+          <summary><h3>Can I use Hydra Download Manager from the terminal?</h3></summary>
+          <p>Yes. HDM ships a scriptable command-line download manager that accepts common wget and curl flags, plus a full-screen interactive queue manager for servers, containers and terminal users.</p>
+        </details>
+        <details>
+          <summary><h3>Can HDM download videos and streams?</h3></summary>
+          <p>The desktop app can capture HLS / M3U8 video streams and record live streams, and plugins add YouTube and torrent downloads.</p>
+        </details>
       </div>
     </div>
   </section>
 
   <footer>
-    <div class="wrap foot">
-      <a class="foot-brand" href="#">
-        <img src="logo.png" alt="" width="24" height="24">
-        HYDRA
-      </a>
-      <p>GPL-3.0-or-later (CLI) with MIT / Apache-2.0 core libraries. See <a
-          href="https://github.com/ja7ad/hydra/blob/main/LICENSING.md">LICENSING.md</a>. · <a
-          href="features.html">Features</a> · <a href="changelog.html">Changelog</a> · <a href="privacy.html">Privacy
-          Policy</a> · <a href="https://github.com/ja7ad/hydra#code-signing-policy">Code signing policy</a></p>
-      <div class="foot-social">
-        <a href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub">
+    <div class="wrap">
+      <div class="foot">
+        <div class="foot-about">
+          <a class="foot-brand" href="#">
+            <img src="logo-64.png" alt="" width="28" height="28">
+            Hydra
+          </a>
+          <p>Free, open-source download manager and accelerator for Windows, macOS, and Linux.</p>
+        </div>
+        <nav class="foot-col" aria-label="Product">
+          <h2>Product</h2>
+          <a href="#download">Download</a>
+          <a href="features.html">Features</a>
+          <a href="plugins.html">Plugins</a>
+          <a href="changelog.html">Changelog</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <nav class="foot-col" aria-label="Project">
+          <h2>Project</h2>
+          <a href="https://github.com/ja7ad/hydra">GitHub</a>
+          <a href="https://github.com/ja7ad/hydra/releases">Releases</a>
+          <a href="https://github.com/ja7ad/hydra#benchmark">Benchmark</a>
+        </nav>
+        <nav class="foot-col" aria-label="Legal">
+          <h2>Legal</h2>
+          <a href="https://github.com/ja7ad/hydra/blob/main/LICENSING.md">Licensing</a>
+          <a href="privacy.html">Privacy Policy</a>
+          <a href="https://github.com/ja7ad/hydra#code-signing-policy">Code signing policy</a>
+        </nav>
+      </div>
+      <div class="foot-base">
+        <p>GPL-3.0-or-later (CLI) with MIT / Apache-2.0 core libraries.</p>
+        <a class="foot-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path
               d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
@@ -2667,7 +1806,7 @@
         try {
           await navigator.clipboard.writeText(textToCopy);
           const originalSVG = btn.innerHTML;
-          btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+          btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
           setTimeout(() => {
             btn.innerHTML = originalSVG;
           }, 2000);
@@ -2734,220 +1873,6 @@
       }
     })();
 
-    (() => {
-      const canvas = document.getElementById("hero-canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx.roundRect) ctx.roundRect = function (x, y, w, h) { this.rect(x, y, w, h); };
-      const W = 500, H = 400;
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-      const TEAL = "45, 212, 212", BLUE = "37, 150, 232";
-      const target = { x: W / 2, y: 296 };
-      const sources = [
-        { x: 62, y: 84, cx: 96, cy: 210, speed: 1.05 },
-        { x: 152, y: 46, cx: 165, cy: 180, speed: 0.85 },
-        { x: 250, y: 34, cx: 250, cy: 170, speed: 1.25 },
-        { x: 348, y: 46, cx: 335, cy: 180, speed: 0.95 },
-        { x: 438, y: 84, cx: 404, cy: 210, speed: 1.15 },
-      ].map((s) => ({ ...s, particles: [], spawnAt: 0, stalledUntil: 0 }));
-
-      let scale = 1;
-      const resize = () => {
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const cssW = canvas.clientWidth || W;
-        canvas.width = cssW * dpr;
-        canvas.height = cssW * (H / W) * dpr;
-        scale = (cssW * dpr) / W;
-        if (reduce) drawFrame(0);
-      };
-
-      const pointAt = (s, t) => {
-        const a = 1 - t;
-        return {
-          x: a * a * s.x + 2 * a * t * s.cx + t * t * target.x,
-          y: a * a * s.y + 2 * a * t * s.cy + t * t * target.y,
-        };
-      };
-
-      let progress = 42, completeUntil = 0, nextStall = 2500;
-      let handoff = null;
-
-      function drawFrame(now) {
-        ctx.setTransform(scale, 0, 0, scale, 0, 0);
-        ctx.clearRect(0, 0, W, H);
-
-        for (const s of sources) {
-          const stalled = now < s.stalledUntil;
-
-          ctx.beginPath();
-          ctx.moveTo(s.x, s.y);
-          ctx.quadraticCurveTo(s.cx, s.cy, target.x, target.y);
-          ctx.strokeStyle = `rgba(${TEAL}, ${stalled ? 0.05 : 0.13})`;
-          ctx.lineWidth = 1;
-          ctx.stroke();
-
-          const pulse = 0.5 + 0.5 * Math.sin(now / 500 + s.x);
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, 7 + pulse * 1.5, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(${TEAL}, ${stalled ? 0.12 : 0.25 + pulse * 0.2})`;
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, 3.2, 0, Math.PI * 2);
-          ctx.fillStyle = stalled ? "rgba(100, 119, 138, 0.6)" : `rgba(${TEAL}, 0.95)`;
-          ctx.fill();
-
-          for (const p of s.particles) {
-            const head = pointAt(s, p.t);
-            const tail = pointAt(s, Math.max(0, p.t - 0.09));
-            const grad = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
-            grad.addColorStop(0, `rgba(${BLUE}, 0)`);
-            grad.addColorStop(1, `rgba(${TEAL}, 0.85)`);
-            ctx.beginPath();
-            ctx.moveTo(tail.x, tail.y);
-            ctx.lineTo(head.x, head.y);
-            ctx.strokeStyle = grad;
-            ctx.lineWidth = 2.4;
-            ctx.lineCap = "round";
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(head.x, head.y, 2.4, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${TEAL}, 1)`;
-            ctx.fill();
-          }
-        }
-
-        const done = now < completeUntil;
-        const tp = 0.5 + 0.5 * Math.sin(now / 350);
-        ctx.beginPath();
-        ctx.arc(target.x, target.y, 20 + (done ? tp * 3 : 0), 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${TEAL}, ${0.35 + (done ? tp * 0.3 : 0)})`;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(target.x, target.y, 13, 0, Math.PI * 2);
-        const g = ctx.createLinearGradient(target.x - 13, target.y, target.x + 13, target.y);
-        g.addColorStop(0, `rgba(${TEAL}, 0.9)`);
-        g.addColorStop(1, `rgba(${BLUE}, 0.9)`);
-        ctx.fillStyle = g;
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(target.x, target.y - 5.5);
-        ctx.lineTo(target.x, target.y + 4.5);
-        ctx.moveTo(target.x - 4, target.y + 0.5);
-        ctx.lineTo(target.x, target.y + 4.5);
-        ctx.lineTo(target.x + 4, target.y + 0.5);
-        ctx.strokeStyle = "#06282e";
-        ctx.lineWidth = 2;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.stroke();
-
-        if (handoff && now - handoff.start < 900) {
-          const k = (now - handoff.start) / 900;
-          const f = handoff.from, t2 = handoff.to;
-          const mx = (f.x + t2.x) / 2, my = Math.min(f.y, t2.y) - 34;
-          const a = 1 - k;
-          const hx = a * a * f.x + 2 * a * k * mx + k * k * t2.x;
-          const hy = a * a * f.y + 2 * a * k * my + k * k * t2.y;
-          ctx.setLineDash([3, 5]);
-          ctx.beginPath();
-          ctx.moveTo(f.x, f.y);
-          ctx.quadraticCurveTo(mx, my, t2.x, t2.y);
-          ctx.strokeStyle = `rgba(${TEAL}, ${0.3 * (1 - k)})`;
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.beginPath();
-          ctx.arc(hx, hy, 3, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${TEAL}, ${1 - k * 0.5})`;
-          ctx.fill();
-        }
-
-        const bx = 70, bw = W - 140, by = 352;
-        ctx.beginPath();
-        ctx.roundRect(bx, by, bw, 6, 3);
-        ctx.fillStyle = "rgba(148, 197, 222, 0.10)";
-        ctx.fill();
-        const pw = Math.max(6, bw * (progress / 100));
-        const pg = ctx.createLinearGradient(bx, 0, bx + pw, 0);
-        pg.addColorStop(0, `rgba(${TEAL}, 0.95)`);
-        pg.addColorStop(1, `rgba(${BLUE}, 0.95)`);
-        ctx.beginPath();
-        ctx.roundRect(bx, by, pw, 6, 3);
-        ctx.fillStyle = pg;
-        ctx.fill();
-        ctx.font = "12px 'Geist Mono', monospace";
-        ctx.textAlign = "right";
-        ctx.fillStyle = "rgba(147, 164, 180, 0.9)";
-        ctx.fillText(`${Math.floor(progress)}%`, bx + bw, by - 10);
-        ctx.textAlign = "left";
-        ctx.fillStyle = "rgba(100, 119, 138, 0.9)";
-        const anyStalled = sources.some((s) => now < s.stalledUntil);
-        ctx.fillText(
-          done ? "complete, checksum verified"
-            : anyStalled ? "slow mirror detected, ranges reassigned"
-              : "downloading from 5 mirrors",
-          bx, by - 10
-        );
-      }
-
-      function step(now, dt) {
-        const done = now < completeUntil;
-        const anyStalled = sources.some((s) => now < s.stalledUntil);
-        for (const s of sources) {
-          const stalled = now < s.stalledUntil;
-          const boost = anyStalled && !stalled ? 1.35 : 1;
-          if (!stalled && !done && now > s.spawnAt) {
-            s.particles.push({ t: 0 });
-            s.spawnAt = now + (260 / s.speed + Math.random() * 160) / boost;
-          }
-          for (let i = s.particles.length - 1; i >= 0; i--) {
-            const p = s.particles[i];
-            p.t += (dt / 1600) * s.speed * boost * (stalled ? 0.25 : 1);
-            if (p.t >= 1) {
-              s.particles.splice(i, 1);
-              if (!done) progress = Math.min(100, progress + 0.28);
-            }
-          }
-        }
-        if (!done && now > nextStall) {
-          const from = sources[Math.floor(Math.random() * sources.length)];
-          from.stalledUntil = now + 1600 + Math.random() * 900;
-          const peers = sources.filter((s) => s !== from);
-          const to = peers[Math.floor(Math.random() * peers.length)];
-          handoff = { from, to, start: now };
-          nextStall = now + 3800 + Math.random() * 2400;
-        }
-        if (!done && progress >= 100) completeUntil = now + 1600;
-        if (progress >= 100 && now >= completeUntil) progress = 0;
-      }
-
-      let last = 0, rafId = 0, running = false;
-      const loop = (now) => {
-        const dt = Math.min(50, now - last || 16);
-        last = now;
-        step(now, dt);
-        drawFrame(now);
-        if (running) rafId = requestAnimationFrame(loop);
-      };
-      const start = () => { if (!running && !reduce) { running = true; last = performance.now(); rafId = requestAnimationFrame(loop); } };
-      const stop = () => { running = false; cancelAnimationFrame(rafId); };
-
-      new ResizeObserver(resize).observe(canvas);
-      resize();
-
-      if (reduce) {
-        sources.forEach((s, i) => s.particles.push({ t: 0.25 + i * 0.14 }));
-        drawFrame(0);
-      } else {
-        new IntersectionObserver(([e]) => (e.isIntersecting ? start() : stop())).observe(canvas);
-        document.addEventListener("visibilitychange", () =>
-          document.hidden ? stop() : start()
-        );
-      }
-    })();
-
     // OS Auto-Detection & Highlighting
     (() => {
       const ua = navigator.userAgent || "";
@@ -2959,329 +1884,6 @@
       const card = document.getElementById(`card-${os}`);
       if (card) card.classList.add("highlighted");
     })();
-
-    // Engine Architecture & Connected Conduits Canvas Animation
-    (() => {
-      const canvas = document.getElementById("engine-canvas");
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-      const TEAL = "45, 212, 212";
-      const BLUE = "37, 150, 232";
-
-      // Load Hydra Logo
-      const logoImg = new Image();
-      logoImg.src = "logo.png";
-      let logoLoaded = false;
-      logoImg.onload = () => { logoLoaded = true; };
-
-      // 4 Conduits on Left (Connecting to 4 Left Feature Cards)
-      const leftConduits = [0, 1, 2, 3].map((idx) => ({
-        idx,
-        speed: 1.0 + (idx % 2) * 0.25,
-        particles: [
-          { t: 0.1 },
-          { t: 0.55 }
-        ]
-      }));
-
-      // 4 Conduits on Right (Connecting to 4 Right Feature Cards)
-      const rightConduits = [0, 1, 2, 3].map((idx) => ({
-        idx,
-        speed: 1.1 + ((idx + 1) % 2) * 0.2,
-        particles: [
-          { t: 0.25 },
-          { t: 0.75 }
-        ]
-      }));
-
-      let scale = 1, W = 460, H = 540;
-      const resize = () => {
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const rect = canvas.getBoundingClientRect();
-        W = rect.width || 460;
-        H = rect.height || 540;
-        canvas.width = W * dpr;
-        canvas.height = H * dpr;
-        scale = dpr;
-        if (reduce) drawEngineFrame(0);
-      };
-
-      const cubicPoint = (p0, p1, p2, p3, t) => {
-        const a = 1 - t;
-        const a2 = a * a;
-        const a3 = a2 * a;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        return {
-          x: a3 * p0.x + 3 * a2 * t * p1.x + 3 * a * t2 * p2.x + t3 * p3.x,
-          y: a3 * p0.y + 3 * a2 * t * p1.y + 3 * a * t2 * p2.y + t3 * p3.y
-        };
-      };
-
-      function drawEngineFrame(now) {
-        const canvasRect = canvas.getBoundingClientRect();
-        if (!canvasRect.width || !canvasRect.height) return;
-        const curW = canvasRect.width;
-        const curH = canvasRect.height;
-
-        ctx.setTransform(scale, 0, 0, scale, 0, 0);
-        ctx.clearRect(0, 0, curW, curH);
-
-        const cx = curW / 2;
-        const cy = curH / 2;
-        const coreRadius = 42;
-
-        // Query actual vertical centers of the 4 left feature cards
-        const leftCards = document.querySelectorAll(".engine-col-left .engine-card");
-        const yLeft = [];
-        leftCards.forEach((card, idx) => {
-          const cRect = card.getBoundingClientRect();
-          yLeft.push(cRect.top + cRect.height / 2 - canvasRect.top);
-        });
-        while (yLeft.length < 4) {
-          yLeft.push(curH * (0.125 + yLeft.length * 0.25));
-        }
-
-        // Query actual vertical centers of the 4 right feature cards
-        const rightCards = document.querySelectorAll(".engine-col-right .engine-card");
-        const yRight = [];
-        rightCards.forEach((card, idx) => {
-          const cRect = card.getBoundingClientRect();
-          yRight.push(cRect.top + cRect.height / 2 - canvasRect.top);
-        });
-        while (yRight.length < 4) {
-          yRight.push(curH * (0.125 + yRight.length * 0.25));
-        }
-
-        // Draw Left Conduits (4 Left Cards -> Hydra Logo)
-        for (const cond of leftConduits) {
-          const sy = yLeft[cond.idx];
-          const p0 = { x: 0, y: sy };
-          const p1 = { x: curW * 0.35, y: sy };
-          const p2 = { x: curW * 0.25, y: cy };
-          const p3 = { x: cx - coreRadius + 2, y: cy + (cond.idx - 1.5) * 8 };
-
-          // Base Conduit Glow Line
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-          ctx.strokeStyle = `rgba(${TEAL}, 0.22)`;
-          ctx.lineWidth = 1.6;
-          ctx.stroke();
-
-          // Socket Indicator Pin at Left Card Border
-          const pulse = 0.5 + 0.5 * Math.sin(now / 400 + cond.idx);
-          ctx.beginPath();
-          ctx.arc(0, sy, 4, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${TEAL}, 0.95)`;
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(0, sy, 7 + pulse * 2, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(${TEAL}, ${0.15 + pulse * 0.2})`;
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-
-          // Animated Flowing Packets (Left -> Center)
-          for (const p of cond.particles) {
-            const pt = cubicPoint(p0, p1, p2, p3, p.t);
-            const prevPt = cubicPoint(p0, p1, p2, p3, Math.max(0, p.t - 0.08));
-            const grad = ctx.createLinearGradient(prevPt.x, prevPt.y, pt.x, pt.y);
-            grad.addColorStop(0, `rgba(${BLUE}, 0)`);
-            grad.addColorStop(1, `rgba(${TEAL}, 0.95)`);
-            ctx.beginPath();
-            ctx.moveTo(prevPt.x, prevPt.y);
-            ctx.lineTo(pt.x, pt.y);
-            ctx.strokeStyle = grad;
-            ctx.lineWidth = 2.4;
-            ctx.lineCap = "round";
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(pt.x, pt.y, 2.4, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${TEAL}, 1)`;
-            ctx.fill();
-          }
-        }
-
-        // Draw Right Conduits (Hydra Logo -> 4 Right Cards)
-        for (const cond of rightConduits) {
-          const sy = yRight[cond.idx];
-          const p0 = { x: cx + coreRadius - 2, y: cy + (cond.idx - 1.5) * 8 };
-          const p1 = { x: curW * 0.75, y: cy };
-          const p2 = { x: curW * 0.65, y: sy };
-          const p3 = { x: curW, y: sy };
-
-          // Base Conduit Glow Line
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-          ctx.strokeStyle = `rgba(${BLUE}, 0.22)`;
-          ctx.lineWidth = 1.6;
-          ctx.stroke();
-
-          // Socket Indicator Pin at Right Card Border
-          const pulse = 0.5 + 0.5 * Math.sin(now / 400 + cond.idx + 2);
-          ctx.beginPath();
-          ctx.arc(curW, sy, 4, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${BLUE}, 0.95)`;
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(curW, sy, 7 + pulse * 2, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(${BLUE}, ${0.15 + pulse * 0.2})`;
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-
-          // Animated Flowing Packets (Center -> Right)
-          for (const p of cond.particles) {
-            const pt = cubicPoint(p0, p1, p2, p3, p.t);
-            const prevPt = cubicPoint(p0, p1, p2, p3, Math.max(0, p.t - 0.08));
-            const grad = ctx.createLinearGradient(prevPt.x, prevPt.y, pt.x, pt.y);
-            grad.addColorStop(0, `rgba(${TEAL}, 0)`);
-            grad.addColorStop(1, `rgba(${BLUE}, 0.95)`);
-            ctx.beginPath();
-            ctx.moveTo(prevPt.x, prevPt.y);
-            ctx.lineTo(pt.x, pt.y);
-            ctx.strokeStyle = grad;
-            ctx.lineWidth = 2.4;
-            ctx.lineCap = "round";
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(pt.x, pt.y, 2.4, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${BLUE}, 1)`;
-            ctx.fill();
-          }
-        }
-
-        // Draw Center Hydra Hub with Logo & Orbitals
-        const rot = (now / 3200) % (Math.PI * 2);
-
-        // Radial background glow
-        const aura = ctx.createRadialGradient(cx, cy, 10, cx, cy, coreRadius + 32);
-        aura.addColorStop(0, "rgba(45, 212, 212, 0.25)");
-        aura.addColorStop(0.6, "rgba(37, 150, 232, 0.09)");
-        aura.addColorStop(1, "rgba(9, 14, 20, 0)");
-        ctx.beginPath();
-        ctx.arc(cx, cy, coreRadius + 32, 0, Math.PI * 2);
-        ctx.fillStyle = aura;
-        ctx.fill();
-
-        // Outer Rotating Dashed Ring
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(rot);
-        ctx.beginPath();
-        ctx.arc(0, 0, coreRadius + 15, 0, Math.PI * 2);
-        ctx.setLineDash([5, 7]);
-        ctx.strokeStyle = `rgba(${TEAL}, 0.45)`;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Orbital Node Beads
-        for (let i = 0; i < 4; i++) {
-          const ang = (i * Math.PI) / 2;
-          const bx = Math.cos(ang) * (coreRadius + 15);
-          const by = Math.sin(ang) * (coreRadius + 15);
-          ctx.beginPath();
-          ctx.arc(bx, by, 3, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${TEAL}, 0.95)`;
-          ctx.fill();
-        }
-        ctx.restore();
-
-        // Inner Counter-Rotating Ring
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(-rot * 0.8);
-        ctx.beginPath();
-        ctx.arc(0, 0, coreRadius + 7, 0, Math.PI * 2);
-        ctx.setLineDash([2, 5]);
-        ctx.strokeStyle = `rgba(${BLUE}, 0.35)`;
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-        ctx.restore();
-
-        // Center Circle Base Badge
-        ctx.beginPath();
-        ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
-        const coreFill = ctx.createRadialGradient(cx, cy, 6, cx, cy, coreRadius);
-        coreFill.addColorStop(0, "rgba(20, 32, 46, 0.98)");
-        coreFill.addColorStop(1, "rgba(9, 14, 20, 0.98)");
-        ctx.fillStyle = coreFill;
-        ctx.fill();
-        ctx.strokeStyle = `rgba(${TEAL}, 0.7)`;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Draw Hydra Logo Image in Center
-        if (logoLoaded && logoImg.width > 0) {
-          const logoSize = 52;
-          ctx.drawImage(logoImg, cx - logoSize / 2, cy - logoSize / 2, logoSize, logoSize);
-        } else {
-          // Fallback Vector Logo
-          ctx.font = "bold 14px 'Geist', system-ui, sans-serif";
-          ctx.fillStyle = "#ffffff";
-          ctx.textAlign = "center";
-          ctx.fillText("HYDRA", cx, cy + 5);
-        }
-      }
-
-      function stepEngine(now, dt) {
-        // Step Left Conduits
-        for (const cond of leftConduits) {
-          for (const p of cond.particles) {
-            p.t += (dt / 1500) * cond.speed;
-            if (p.t >= 1) p.t = 0;
-          }
-        }
-
-        // Step Right Conduits
-        for (const cond of rightConduits) {
-          for (const p of cond.particles) {
-            p.t += (dt / 1500) * cond.speed;
-            if (p.t >= 1) p.t = 0;
-          }
-        }
-      }
-
-      let lastTime = 0, engineRafId = 0, engineRunning = false;
-      const engineLoop = (now) => {
-        const dt = Math.min(50, now - lastTime || 16);
-        lastTime = now;
-        stepEngine(now, dt);
-        drawEngineFrame(now);
-        if (engineRunning) engineRafId = requestAnimationFrame(engineLoop);
-      };
-
-      const startEngine = () => {
-        if (!engineRunning && !reduce) {
-          engineRunning = true;
-          lastTime = performance.now();
-          engineRafId = requestAnimationFrame(engineLoop);
-        }
-      };
-      const stopEngine = () => {
-        engineRunning = false;
-        cancelAnimationFrame(engineRafId);
-      };
-
-      new ResizeObserver(resize).observe(canvas);
-      window.addEventListener("resize", resize);
-      resize();
-
-      if (reduce) {
-        drawEngineFrame(0);
-      } else {
-        new IntersectionObserver(([e]) => (e.isIntersecting ? startEngine() : stopEngine())).observe(canvas);
-        document.addEventListener("visibilitychange", () =>
-          document.hidden ? stopEngine() : startEngine()
-        );
-      }
-    })();
-
-
 
     // Live Release & Download Asset Resolver from GitHub API
     (async () => {
@@ -3354,7 +1956,331 @@
         console.warn("Release asset resolution notice:", e);
       }
     })();
+
+    // Hero: OS-aware download label
+    (() => {
+      const ua = navigator.userAgent || "";
+      const platform = navigator.platform || "";
+      const isMac = /mac/i.test(platform) || /macintosh|mac os x/i.test(ua);
+      const isWin = !isMac && (/win/i.test(platform) || /windows/i.test(ua));
+      const isLinux = !isMac && !isWin && /linux|x11/i.test(platform + ua) && !/android/i.test(ua);
+
+      const label = document.getElementById("hero-dl-label");
+      const osName = isMac ? "macOS" : isWin ? "Windows" : isLinux ? "Linux" : "";
+      if (label && osName) label.textContent = `Download for ${osName}`;
+    })();
+
+    // Scroll reveal
+    (() => {
+      const targets = document.querySelectorAll(".reveal");
+      if (!("IntersectionObserver" in window)) return;
+      document.documentElement.classList.add("js");
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (!e.isIntersecting) return;
+          e.target.classList.add("in-view");
+          io.unobserve(e.target);
+        });
+      }, { rootMargin: "0px 0px -8% 0px" });
+      targets.forEach((t) => io.observe(t));
+    })();
+
+    // Hero recording: play only while on screen, and caption what is happening.
+    (() => {
+      const video = document.getElementById("demo-video");
+      const callout = document.getElementById("demo-callout");
+      if (!video) return;
+      const CAPTIONS = [
+        [0, "The real app, recorded on a Mac"],
+        [1.5, "Every connection measured, the fastest kept"],
+        [12.3, "141 MB in 18 seconds, saved and sorted"],
+      ];
+      let shown = 0;
+      video.addEventListener("timeupdate", () => {
+        let i = 0;
+        CAPTIONS.forEach(([at], k) => { if (video.currentTime >= at) i = k; });
+        if (i === shown) return;
+        shown = i;
+        callout.parentNode.classList.add("swap");
+        setTimeout(() => { callout.textContent = CAPTIONS[i][1]; callout.parentNode.classList.remove("swap"); }, 220);
+      });
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { video.controls = true; return; }
+      new IntersectionObserver(([e]) => {
+        if (e.isIntersecting) video.play().catch(() => { video.controls = true; });
+        else video.pause();
+      }, { threshold: 0.25 }).observe(video);
+    })();
+
+
+    const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+    const smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
+
+    const bgField = null;
+
+    // Hero dot field: a quiet grid that brightens under the pointer and as
+    // slow rings travel outward from the download button.
+    (() => {
+      const canvas = document.getElementById("flow");
+      const sinkEl = document.getElementById("hero-dl");
+      if (!canvas || !sinkEl) return;
+      const ctx = canvas.getContext("2d");
+      const STEP = 26, RING_EVERY = 3.4, RING_SPEED = 190, RING_WIDTH = 90;
+      let W = 0, H = 0, dpr = 1, sinkX = 0, sinkY = 0, pointerX = -999, pointerY = -999, raf = 0;
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        dpr = Math.min(2, devicePixelRatio || 1);
+        W = rect.width; H = rect.height;
+        canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+        const s = sinkEl.getBoundingClientRect();
+        sinkX = s.left + s.width / 2 - rect.left;
+        sinkY = s.top + s.height / 2 - rect.top;
+        if (REDUCED_MOTION) frame(0);
+      }
+      function frame(now) {
+        const t = now / 1000;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, W, H);
+        const offsetX = (W % STEP) / 2;
+        for (let y = STEP / 2; y < H; y += STEP) {
+          for (let x = offsetX; x < W; x += STEP) {
+            const d = Math.hypot(x - sinkX, y - sinkY);
+            let glow = 0;
+            if (!REDUCED_MOTION) {
+              const phase = ((d - t * RING_SPEED) % (RING_EVERY * RING_SPEED) + RING_EVERY * RING_SPEED) % (RING_EVERY * RING_SPEED);
+              const ring = Math.max(0, 1 - Math.min(phase, RING_EVERY * RING_SPEED - phase) / RING_WIDTH);
+              glow = ring * ring * Math.max(0, 1 - d / 900);
+            }
+            const near = Math.max(0, 1 - Math.hypot(x - pointerX, y - pointerY) / 150);
+            const a = 0.1 + glow * 0.6 + near * near * 0.7;
+            const size = 1.4 + glow * 1.2 + near * 1.4;
+            ctx.fillStyle = glow > 0.08 || near > 0.1 ? `rgba(45,212,212,${a})` : `rgba(255,255,255,${a})`;
+            ctx.fillRect(x - size / 2, y - size / 2, size, size);
+          }
+        }
+        if (!REDUCED_MOTION && raf !== -1) raf = requestAnimationFrame(frame);
+      }
+      const start = () => { if (REDUCED_MOTION) return; cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); };
+      const stop = () => { cancelAnimationFrame(raf); raf = 0; };
+      let visible = false;
+      new IntersectionObserver(([e]) => { visible = e.isIntersecting; visible ? start() : stop(); }).observe(canvas);
+      document.addEventListener("visibilitychange", () => (document.hidden || !visible ? stop() : start()));
+      addEventListener("resize", resize);
+      addEventListener("pointermove", (e) => { const r = canvas.getBoundingClientRect(); pointerX = e.clientX - r.left; pointerY = e.clientY - r.top; }, { passive: true });
+      document.fonts && document.fonts.ready.then(resize);
+      resize();
+    })();
+
+    // Scroll story: the pinned canvas is a pure function of scroll progress.
+    // Eight ranges partition the file; range 6 stalls at 38% and its remaining
+    // bytes are split between its two neighbours, so every byte is drawn once.
+    const story = (() => {
+      const canvas = document.getElementById("story");
+      const steps = [...document.querySelectorAll("#story-steps li")];
+      if (!canvas) return null;
+      const ctx = canvas.getContext("2d");
+      const K = 8, STALLER = 5, STALL_AT = 0.38;
+      const COLORS = ["#fafafa", "#fafafa", "#fafafa", "#fafafa", "#fafafa", "#63636b", "#fafafa", "#fafafa"], ACCENT = "#2dd4d4";
+      const RATES = [0.62, 1.35, 1.12, 1.5, 1.2, 1.2, 1.42, 1.08];
+      const state = { p: 0 };
+      let W = 0, H = 0, dpr = 1, raf = 0, visible = false;
+
+      const span = (a, b) => smooth((state.p - a) / (b - a));
+      const rgba = (hex, alpha) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${alpha})`;
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        dpr = Math.min(2, devicePixelRatio || 1);
+        W = rect.width; H = rect.height;
+        canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+        draw(0);
+      }
+      function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+
+      function draw(now) {
+        const p = state.p, time = now / 1000;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, W, H);
+        if (!W) return;
+
+        const merge = span(0.84, 0.95);
+        const split = span(0.14, 0.3) * (1 - merge);
+        const run = clamp01((p - 0.22) / 0.42);
+        const stalled = span(0.42, 0.5);
+        const steal = clamp01((p - 0.54) / 0.24);
+        const padX = Math.max(22, W * 0.07);
+        const barW = W - padX * 2, barH = Math.max(34, Math.min(62, H * 0.12)), barY = H * 0.7;
+        const gap = split * Math.min(12, W * 0.014);
+        const segW = (barW - gap * (K - 1)) / K;
+        const segX = (i) => padX + i * (segW + gap);
+        const nodeY = H * 0.4;
+        const nodeX = (i) => W / 2 + (segX(i) + segW / 2 - W / 2) * split;
+
+        const fill = [];
+        for (let i = 0; i < K; i++) {
+          const head = i === 0 ? span(0, 0.14) * 0.45 : 0;
+          fill.push(i === STALLER ? Math.min(STALL_AT, run * RATES[i]) : Math.min(1, head + run * RATES[i]));
+        }
+        const rest = 1 - STALL_AT;
+        const total = (fill.reduce((a, b) => a + b, 0) + steal * rest) / K;
+
+        // connections
+        ctx.lineWidth = 1.6; ctx.lineCap = "round";
+        const link = (fromI, toX, color, alpha, moving) => {
+          if (alpha <= 0.01) return;
+          const x0 = nodeX(fromI);
+          ctx.strokeStyle = rgba(color, alpha * (color === ACCENT ? 1 : 0.55));
+          ctx.setLineDash(moving ? [5, 9] : []);
+          ctx.lineDashOffset = REDUCED_MOTION ? 0 : -time * 46;
+          ctx.beginPath(); ctx.moveTo(x0, nodeY);
+          ctx.bezierCurveTo(x0, nodeY + (barY - nodeY) * 0.55, toX, barY - (barY - nodeY) * 0.55, toX, barY - 6);
+          ctx.stroke();
+        };
+        const linkAlpha = (1 - merge) * 0.9;
+        for (let i = 0; i < K; i++) {
+          const show = i === 0 ? 1 : span(0.16, 0.3);
+          if (i === STALLER) link(i, segX(i) + segW * 0.2, COLORS[i], show * linkAlpha * (1 - stalled * 0.82) * (stalled > 0.2 && !REDUCED_MOTION ? 0.6 + 0.4 * Math.sin(time * 14) : 1), stalled < 0.5);
+          else link(i, segX(i) + segW / 2, COLORS[i], show * linkAlpha * (fill[i] >= 1 ? 0.3 : 1), fill[i] < 1);
+        }
+        const stealIn = span(0.5, 0.58) * linkAlpha * (steal >= 1 ? 0.3 : 1);
+        link(STALLER - 1, segX(STALLER) + segW * (STALL_AT + rest * 0.25), ACCENT, stealIn, steal < 1);
+        link(STALLER + 1, segX(STALLER) + segW * (STALL_AT + rest * 0.75), ACCENT, stealIn, steal < 1);
+        ctx.setLineDash([]);
+
+        // sources
+        for (let i = 0; i < K; i++) {
+          const show = (i === 0 ? 1 : span(0.16, 0.3)) * (1 - merge);
+          if (show <= 0.01) continue;
+          const dead = i === STALLER ? stalled : 0;
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = rgba(COLORS[i], show * (1 - dead * 0.7));
+          ctx.beginPath(); ctx.arc(nodeX(i), nodeY, 5.5, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+          if (split > 0.7 && segW > 44) {
+            ctx.fillStyle = `rgba(161,161,170,${(split - 0.7) / 0.3 * 0.9})`;
+            ctx.font = "11px 'Geist Mono', ui-monospace, monospace"; ctx.textAlign = "center";
+            ctx.fillText(i === STALLER && stalled > 0.5 ? "stalled" : `conn ${i + 1}`, nodeX(i), nodeY - 16);
+          }
+        }
+
+        // ranges
+        for (let i = 0; i < K; i++) {
+          const x = segX(i), radius = 5 + split * 4;
+          roundRect(x, barY, segW + (split < 0.02 && i < K - 1 ? 1 : 0), barH, split < 0.02 ? 0 : radius);
+          ctx.fillStyle = "rgba(255,255,255,0.06)"; ctx.fill();
+          ctx.save(); ctx.clip();
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = COLORS[i];
+          ctx.fillRect(x, barY, segW * fill[i], barH);
+          if (i === STALLER && steal > 0) {
+            const half = segW * rest * 0.5;
+            ctx.fillStyle = ACCENT; ctx.fillRect(x + segW * STALL_AT, barY, half * steal, barH);
+            ctx.fillStyle = ACCENT; ctx.fillRect(x + segW - half * steal, barY, half * steal, barH);
+          }
+          ctx.restore();
+        }
+        if (merge > 0) {
+          const g = ctx.createLinearGradient(padX, 0, padX + barW, 0);
+          g.addColorStop(0, "#fafafa"); g.addColorStop(1, "#2dd4d4");
+          ctx.globalAlpha = merge; ctx.shadowColor = "#2dd4d4"; ctx.shadowBlur = 30 * merge;
+          roundRect(padX, barY, barW, barH, 10); ctx.fillStyle = g; ctx.fill();
+          ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        }
+
+        // readout
+        ctx.textAlign = "left"; ctx.fillStyle = "#fafafa";
+        const big = Math.max(40, Math.min(92, H * 0.16));
+        ctx.font = `700 ${big}px 'Inter', system-ui, sans-serif`;
+        ctx.fillText(`${Math.round(total * 100)}%`, padX - big * 0.04, 26 + big * 0.78);
+        ctx.font = "12px 'Geist Mono', ui-monospace, monospace"; ctx.fillStyle = "rgba(161,161,170,0.95)";
+        ctx.textAlign = "right";
+        const status = merge > 0.6 ? "sha256 verified · complete" : steal > 0 ? "range reassigned to connections 5 and 7" : stalled > 0.5 ? "connection 6 stalled at 38%" : split > 0.5 ? "8 ranges · 8 connections" : "1 connection";
+        ctx.fillText(status, padX + barW, barY + barH + 28);
+        if (W < 520) { ctx.textAlign = "left"; ctx.fillText("ubuntu-24.04-desktop-amd64.iso · 5.80 GB", padX, 26 + big * 0.78 + 24); }
+        else ctx.fillText("ubuntu-24.04-desktop-amd64.iso · 5.80 GB", padX + barW, 44);
+
+        if (visible && !REDUCED_MOTION) raf = requestAnimationFrame(draw);
+      }
+
+      new IntersectionObserver(([e]) => {
+        visible = e.isIntersecting;
+        cancelAnimationFrame(raf);
+        if (visible) raf = requestAnimationFrame(draw);
+      }).observe(canvas);
+      addEventListener("resize", resize);
+      document.fonts && document.fonts.ready.then(resize);
+      resize();
+
+      state.set = (p) => {
+        state.p = p;
+        const active = p < 0.16 ? 0 : p < 0.42 ? 1 : p < 0.84 ? 2 : 3;
+        steps.forEach((li, i) => li.classList.toggle("on", i === active));
+        canvas.parentNode.style.setProperty("--sp", p);
+        if (REDUCED_MOTION || !visible) draw(0);
+      };
+      return state;
+    })();
+
+    // One scroll pass feeds every scroll-linked effect.
+    (() => {
+      const storyEl = document.getElementById("how");
+      const demoStage = document.querySelector(".demo-stage");
+      const demo = document.getElementById("demo");
+      const band = document.querySelector(".band");
+      let queued = false;
+      function update() {
+        queued = false;
+        const vh = innerHeight;
+        if (bgField) bgField.scroll = scrollY / vh;
+        if (story && storyEl) {
+          const r = storyEl.getBoundingClientRect();
+          story.set(clamp01(-r.top / (r.height - vh)));
+        }
+        if (demo && demoStage && !REDUCED_MOTION) demo.style.setProperty("--k", smooth((vh * 0.98 - demoStage.getBoundingClientRect().top) / (vh * 0.62)).toFixed(3));
+        if (band && !REDUCED_MOTION) band.style.setProperty("--sx", ((vh - band.getBoundingClientRect().top) * 0.32).toFixed(1));
+      }
+      const onScroll = () => { if (!queued) { queued = true; requestAnimationFrame(update); } };
+      addEventListener("scroll", onScroll, { passive: true });
+      addEventListener("resize", onScroll);
+      update();
+    })();
+
+    // Card stagger order and the pointer-following edge light
+    document.querySelectorAll(".bento, .gui-grid, .cli-points").forEach((group) => {
+      [...group.children].forEach((el, i) => el.style.setProperty("--i", i));
+    });
+    document.querySelectorAll(".card").forEach((card) => {
+      card.addEventListener("pointermove", (e) => {
+        const r = card.getBoundingClientRect();
+        card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+        card.style.setProperty("--my", `${e.clientY - r.top}px`);
+      });
+    });
+
+    // Stat counters
+    (() => {
+      const nums = document.querySelectorAll("[data-count]");
+      if (REDUCED_MOTION || !("IntersectionObserver" in window)) return;
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (!e.isIntersecting) return;
+          io.unobserve(e.target);
+          const target = parseFloat(e.target.dataset.count);
+          const decimals = (e.target.dataset.count.split(".")[1] || "").length;
+          const t0 = performance.now();
+          const tick = (now) => {
+            const k = 1 - Math.pow(1 - clamp01((now - t0) / 1500), 4);
+            e.target.textContent = (target * k).toFixed(decimals);
+            if (k < 1) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        });
+      }, { threshold: 0.6 });
+      nums.forEach((n) => io.observe(n));
+    })();
   </script>
+  <script src="assets/stars.js" defer></script>
 
 </body>
 

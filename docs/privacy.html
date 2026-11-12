@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
   <meta name="author" content="Javad Rajabzadeh">
-  <meta name="theme-color" content="#0a0e13">
+  <meta name="theme-color" content="#09090b">
 <title>Privacy Policy — Hydra Download Manager (HDM)</title>
 <meta name="description" content="Privacy policy for Hydra Download Manager (HDM) browser extensions and desktop app: what data is processed, where it goes, and why.">
 <link rel="canonical" href="https://hydra.javad.dev/privacy.html">
-<link rel="icon" type="image/png" href="logo.png">
+<link rel="icon" type="image/png" href="logo-64.png">
+<link rel="apple-touch-icon" href="logo.png">
 <meta property="og:title" content="Privacy Policy — Hydra Download Manager (HDM)">
 <meta property="og:description" content="Privacy policy for Hydra Download Manager (HDM) browser extensions and desktop app: what data is processed, where it goes, and why.">
 <meta property="og:image" content="https://hydra.javad.dev/img/screenshot.jpg">
@@ -21,86 +22,10 @@
   <meta name="twitter:description" content="Privacy policy for Hydra Download Manager (HDM) browser extensions and desktop app: what data is processed, where it goes, and why.">
   <meta name="twitter:image" content="https://hydra.javad.dev/img/screenshot.jpg">
 <meta property="og:site_name" content="Hydra Download Manager">
-<style>
-  :root {
-    --bg: #0a0e13;
-    --bg-raised: #0f151d;
-    --line: rgba(148, 197, 222, 0.12);
-    --line-strong: rgba(148, 197, 222, 0.22);
-    --text: #e7edf3;
-    --text-dim: #93a4b4;
-    --text-faint: #64778a;
-    --accent: #2dd4d4;
-  }
-  * { box-sizing: border-box; }
-  html { color-scheme: dark; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.6;
-  }
-  a { color: var(--accent); }
-  header {
-    border-bottom: 1px solid var(--line);
-    padding: 20px 24px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  header img { width: 28px; height: 28px; border-radius: 6px; }
-  header .brand { font-weight: 600; color: var(--text); text-decoration: none; }
-  main {
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 48px 24px 96px;
-  }
-  h1 { font-size: 1.75rem; margin-bottom: 4px; }
-  .updated { color: var(--text-faint); font-size: 0.9rem; margin-bottom: 40px; }
-  h2 {
-    font-size: 1.15rem;
-    margin-top: 40px;
-    border-top: 1px solid var(--line);
-    padding-top: 24px;
-  }
-  p, li { color: var(--text-dim); }
-  ul { padding-left: 1.2em; }
-  li { margin-bottom: 8px; }
-  code {
-    background: var(--bg-raised);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 0.9em;
-    color: var(--text);
-  }
-  .callout {
-    background: var(--bg-raised);
-    border: 1px solid var(--line-strong);
-    border-radius: 10px;
-    padding: 16px 20px;
-    margin: 24px 0;
-  }
-  .callout p:last-child { margin-bottom: 0; }
-  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.92rem; }
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 16px 0; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--text); font-weight: 600; }
-  footer {
-    border-top: 1px solid var(--line);
-    padding: 24px;
-    text-align: center;
-    color: var(--text-faint);
-    font-size: 0.85rem;
-  }
-  @media (max-width: 540px) {
-    header { padding: 14px 16px; }
-    main { padding: 32px 16px 64px; }
-    h1 { font-size: 1.4rem; }
-    .updated { margin-bottom: 24px; }
-  }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -170,20 +95,43 @@
 }
   </script>
 </head>
-<body>
-<header>
-  <img src="logo.png" alt="">
-  <a class="brand" href="index.html">Hydra</a>
-  <nav style="margin-left:auto; display:flex; gap:16px; font-size:0.9rem;">
-    <a href="index.html" style="color:var(--text-dim); text-decoration:none;">Home</a>
-    <a href="index.html#download" style="color:var(--text-dim); text-decoration:none;">Download</a>
-    <a href="plugins.html" style="color:var(--text-dim); text-decoration:none;">Plugins</a>
-    <a href="changelog.html" style="color:var(--text-dim); text-decoration:none;">Changelog</a>
-  </nav>
-</header>
+<body class="page-privacy">
+<nav class="nav" id="nav" aria-label="Main navigation">
+  <div class="nav-inner wrap">
+    <a class="brand" href="index.html">
+      <img src="logo.png" alt="Hydra logo" width="28" height="28">
+      Hydra
+    </a>
+    <div class="nav-links" id="nav-links">
+      <a href="index.html#how">How it works</a>
+      <a href="index.html#engine">Engine</a>
+      <a href="index.html#benchmark">Benchmark</a>
+      <a href="index.html#app">App</a>
+      <a href="index.html#cli">CLI</a>
+      <a href="features.html">Features</a>
+      <a href="plugins.html">Plugins</a>
+      <a href="changelog.html">Changelog</a>
+      <a class="nav-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg><span class="gh-stars" hidden><svg class="gh-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.6l-5.9 3.1 1.2-6.6L2.5 9.5l6.6-.9L12 2.5z" /></svg><b data-gh-stars></b></span></a>
+      <a class="nav-cta" href="index.html#download">Download</a>
+    </div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation menu" aria-controls="nav-links" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path id="nav-toggle-icon-open" d="M4 6h16M4 12h16M4 18h16"/>
+        <path id="nav-toggle-icon-close" d="M18 6L6 18M6 6l12 12" style="display:none;"/>
+      </svg>
+    </button>
+  </div>
+</nav>
 <main>
-  <h1>Privacy Policy</h1>
-  <p class="updated">Last updated: August 19, 2026 — applies to the Hydra desktop app and its browser extensions (Chrome, Edge, Firefox, Safari).</p>
+  <header class="page-head">
+    <div class="wrap">
+      <p class="eyebrow">Legal</p>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: August 19, 2026 — applies to the Hydra desktop app and its browser extensions (Chrome, Edge, Firefox, Safari).</p>
+    </div>
+  </header>
+  <div class="wrap">
+  <div class="prose">
 
   <div class="callout">
     <p><strong>Short version:</strong> Hydra does not collect, transmit, sell, or share any of your data. The browser extension only talks to the Hydra app running on your own computer, over your machine's local loopback address. Nothing leaves your device.</p>
@@ -222,10 +170,53 @@
 
   <h2>Contact</h2>
   <p>Questions about this policy can be filed via the <a href="https://github.com/ja7ad/hydra/issues">GitHub issue tracker</a>. Security concerns should go through <a href="https://github.com/ja7ad/hydra/security/advisories/new">GitHub security advisories</a> instead of a public issue.</p>
+  </div>
+  </div>
 </main>
 <footer>
-  Hydra is open source under GPL-3.0-or-later (CLI) with MIT / Apache-2.0 core libraries. · <a href="features.html">Features</a> · <a href="changelog.html">Changelog</a> ·
-  <a href="https://github.com/ja7ad/hydra">github.com/ja7ad/hydra</a>
+  <div class="wrap">
+    <div class="foot">
+      <div class="foot-about">
+        <a class="foot-brand" href="index.html">
+          <img src="logo-64.png" alt="" width="28" height="28">
+          Hydra
+        </a>
+        <p>Free, open-source download manager and accelerator for Windows, macOS, and Linux.</p>
+      </div>
+      <nav class="foot-col" aria-label="Product">
+        <h2>Product</h2>
+        <a href="index.html#download">Download</a>
+        <a href="features.html">Features</a>
+        <a href="plugins.html">Plugins</a>
+        <a href="changelog.html">Changelog</a>
+        <a href="index.html#faq">FAQ</a>
+      </nav>
+      <nav class="foot-col" aria-label="Project">
+        <h2>Project</h2>
+        <a href="https://github.com/ja7ad/hydra">GitHub</a>
+        <a href="https://github.com/ja7ad/hydra/releases">Releases</a>
+        <a href="https://github.com/ja7ad/hydra#benchmark">Benchmark</a>
+      </nav>
+      <nav class="foot-col" aria-label="Legal">
+        <h2>Legal</h2>
+        <a href="https://github.com/ja7ad/hydra/blob/main/LICENSING.md">Licensing</a>
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="https://github.com/ja7ad/hydra#code-signing-policy">Code signing policy</a>
+      </nav>
+    </div>
+    <div class="foot-base">
+      <p>GPL-3.0-or-later (CLI) with MIT / Apache-2.0 core libraries.</p>
+      <a class="foot-gh" href="https://github.com/ja7ad/hydra" aria-label="Hydra on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg></a>
+    </div>
+  </div>
 </footer>
+<script>
+  const navToggle = document.getElementById("nav-toggle");
+  const navLinks = document.getElementById("nav-links");
+  navToggle.addEventListener("click", () => {
+    navToggle.setAttribute("aria-expanded", String(navLinks.classList.toggle("open")));
+  });
+</script>
+<script src="assets/stars.js" defer></script>
 </body>
 </html>
