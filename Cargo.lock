@@ -2365,6 +2365,7 @@ dependencies = [
  "iced_runtime",
  "iced_tiny_skia",
  "ksni",
+ "libc",
  "md-5",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
@@ -2404,7 +2405,7 @@ dependencies = [
 
 [[package]]
 name = "hya-net"
-version = "0.6.4"
+version = "0.7.1"
 dependencies = [
  "aes",
  "aes-gcm",

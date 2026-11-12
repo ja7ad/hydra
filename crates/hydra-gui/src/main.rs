@@ -11,6 +11,7 @@
 mod app;
 mod autostart;
 mod dialog_parent;
+mod dl_indicator;
 mod engine;
 mod ext_info;
 mod extbus;
@@ -51,6 +52,8 @@ mod ui;
 mod update;
 mod window_close;
 mod windows;
+#[cfg(target_os = "windows")]
+mod windows_taskbar;
 
 use app::{App, Message, WinKind};
 use iced::{window, Subscription, Task, Theme};

@@ -425,6 +425,7 @@ async fn resolve_one(
     })?;
     let first = target_for(engine, job, creds, &u);
     let mut t = first.clone();
+    let mut guise = hya_net::Guise::default();
     for _ in 0..MAX_REDIRECTS {
         if cancel.load(Ordering::Relaxed) {
             return Err(cancelled());
@@ -434,9 +435,15 @@ async fn resolve_one(
         // empty reply (hetzner's speed-test hosts do) otherwise resolves to
         // "unknown size, no ranges" and sends the whole object down the
         // single-stream path — no size, no resume, no parallelism.
-        let p = probe_resilient(conn.as_ref(), &t)
+        let (p, admitted) =
+            hya_net::probe_admitted(
+                &t,
+                |t| async move { probe_resilient(conn.as_ref(), &t).await },
+            )
             .await
             .map_err(|e| err::from_io(&e))?;
+        t = t.in_guise(&admitted);
+        guise.absorb(admitted);
         if p.is_redirect() {
             let loc = p.location.clone().unwrap_or_default();
             u = u.join(&loc).map_err(|e| Detail {
@@ -444,7 +451,7 @@ async fn resolve_one(
                 message: format!("redirect to {loc:?}: {e}"),
                 ..Default::default()
             })?;
-            t = redirected_target(job, &first, &u);
+            t = redirected_target(job, &first, &u).in_guise(&guise);
             continue;
         }
         // A forward expressed in HTML rather than in a header: a referrer
@@ -459,7 +466,7 @@ async fn resolve_one(
                 .and_then(|loc| u.join(&loc).ok())
             {
                 u = next;
-                t = redirected_target(job, &first, &u);
+                t = redirected_target(job, &first, &u).in_guise(&guise);
                 continue;
             }
         }

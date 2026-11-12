@@ -23,6 +23,11 @@ fn rates() -> &'static Mutex<NativeRates> {
     RATES.get_or_init(|| Mutex::new(NativeRates::default()))
 }
 
+/// The rates are one per process, so a test that sets the cap waits out the
+/// tests with a transfer registered: sharing the bucket left it 1 B/s.
+#[cfg(test)]
+pub(super) static RATES_IN_USE: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
+
 fn distribute_rates(state: &NativeRates) {
     super::global_limiter().set_rate(distribute_native_rates(state));
 }
@@ -763,6 +768,8 @@ async fn run_transfer(
     root: std::path::PathBuf,
 ) {
     let started = std::time::Instant::now();
+    #[cfg(test)]
+    let _rates = RATES_IN_USE.read().await;
     let (_rate_guard, control) = NativeRateGuard::register(spec.id, spec.limit.unwrap_or(0));
     let authorization_plugin = plugin.to_owned();
     let program = transfer.engine.clone();
@@ -1124,6 +1131,34 @@ mod tests {
         assert_eq!(probes, 1);
         assert_eq!(bytes, [5, 10]);
         assert!(complete);
+    }
+
+    /// A plugin transfer running alone parks the HTTP lane at 1 B/s. A read
+    /// that reserves against it then, and is still asleep when the lane gets
+    /// its share back, used to sleep the parked price out: hours.
+    #[tokio::test]
+    async fn an_http_read_parked_behind_a_plugin_transfer_moves_when_the_lane_reopens() {
+        let _alone = RATES_IN_USE.write().await;
+        const CAP: u64 = 4 * 1024 * 1024;
+        let pace = crate::engine::pace_for(&Arc::new(hya_net::polite::RateLimiter::unlimited()));
+        set_global_limit(CAP);
+        let (plugin_transfer, _) = NativeRateGuard::register(9_414_001, 0);
+
+        let reopened = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            drop(plugin_transfer);
+        });
+        let t0 = std::time::Instant::now();
+        pace.wait(1024).await;
+        pace.wait(1024).await;
+        let asleep = t0.elapsed();
+        reopened.await.unwrap();
+        set_global_limit(0);
+
+        assert!(
+            asleep < std::time::Duration::from_secs(5),
+            "{asleep:?} asleep on a debt priced while the lane was parked"
+        );
     }
 
     #[test]

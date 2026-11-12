@@ -119,6 +119,11 @@ const BURST_WINDOW: Duration = Duration::from_millis(10);
 /// [`Pace::wait`].
 const MIN_PAUSE: Duration = Duration::from_millis(2);
 
+/// Longest a paced read sleeps before checking that its cap is still the one
+/// the sleep was priced at. `Pace::read_size` keeps an ordinary pause to an
+/// eighth of a second, so only a debt from a far lower rate is ever sliced.
+const REPRICE_EVERY: Duration = Duration::from_millis(250);
+
 /// Politeness configuration.
 #[derive(Clone, Copy, Debug)]
 pub struct Politeness {
@@ -351,6 +356,8 @@ pub struct RateLimiter {
     rate: AtomicU64,
     /// Monotonic cursor: the time by which everything granted has been sent.
     cursor: Mutex<Option<Instant>>,
+    /// How many times the rate has changed, for a sleeper to notice it by.
+    changes: AtomicU64,
 }
 
 impl RateLimiter {
@@ -358,6 +365,7 @@ impl RateLimiter {
         Self {
             rate: AtomicU64::new(bytes_per_sec),
             cursor: Mutex::new(None),
+            changes: AtomicU64::new(0),
         }
     }
 
@@ -386,6 +394,7 @@ impl RateLimiter {
         // most one read per connection. That is the right side to err on: the
         // cap binds from here, and a cap is not owed the bytes it did not stop.
         *self.cursor.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        self.changes.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Reserve `n` bytes and return how long the caller must wait first.
@@ -543,9 +552,31 @@ impl Pace {
         // the sleep happens once the debt is long enough to be timed accurately.
         // Sleeping every sub-millisecond debt is what pinned a single connection
         // to one read per tick — see `RateLimiter::reserve`.
-        if owed >= MIN_PAUSE {
-            tokio::time::sleep(owed).await;
+        if owed < MIN_PAUSE {
+            return;
         }
+        if owed <= REPRICE_EVERY {
+            tokio::time::sleep(owed).await;
+            return;
+        }
+        // A long debt was priced at a rate that may not last: `set_rate`
+        // forgives what the old rate accrued, and a sleep already under way is
+        // that same debt. Slept through in one piece, a reservation made while
+        // the bucket stood at 1 B/s held its transfer for hours after the cap
+        // was raised.
+        let priced = self.changes();
+        let mut left = owed;
+        while !left.is_zero() && self.changes() == priced {
+            let nap = left.min(REPRICE_EVERY);
+            tokio::time::sleep(nap).await;
+            left -= nap;
+        }
+    }
+
+    fn changes(&self) -> u64 {
+        self.limiters().fold(0, |sum, l| {
+            sum.wrapping_add(l.changes.load(Ordering::Relaxed))
+        })
     }
 }
 
@@ -860,6 +891,48 @@ mod tests {
     /// `hydra_engine_set_max_bytes_per_second` both wrote a rate that nothing
     /// downstream would ever read again, and an 8 MB/s transfer stayed at
     /// 8 MB/s under a 100 KB/s cap.
+    #[tokio::test]
+    async fn a_wait_priced_at_a_cap_that_is_then_raised_does_not_run_its_course() {
+        let limiter = Arc::new(RateLimiter::new(1));
+        let pace = Pace::shared(limiter.clone());
+        assert_eq!(limiter.reserve(64 * 1024), Duration::ZERO);
+
+        let raised = limiter.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            raised.set_rate(8 * 1024 * 1024);
+        });
+        let t0 = Instant::now();
+        pace.wait(64 * 1024).await;
+
+        assert!(
+            t0.elapsed() >= Duration::from_millis(100),
+            "the cap held while it stood"
+        );
+        assert!(
+            t0.elapsed() < Duration::from_secs(5),
+            "{:?} asleep on a debt of hours priced at 1 B/s",
+            t0.elapsed()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_long_wait_under_a_cap_that_stands_is_served_in_full() {
+        let limiter = Arc::new(RateLimiter::new(1024));
+        let pace = Pace::shared(limiter.clone());
+        assert_eq!(limiter.reserve(600), Duration::ZERO);
+
+        let t0 = Instant::now();
+        pace.wait(600).await;
+
+        // 600 B at 1 KiB/s, less the burst window: three slices' worth.
+        assert!(
+            t0.elapsed() >= Duration::from_millis(550),
+            "{:?}",
+            t0.elapsed()
+        );
+    }
+
     #[test]
     fn a_cap_set_after_the_pace_was_built_binds() {
         let limiter = Arc::new(RateLimiter::unlimited());
