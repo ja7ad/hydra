@@ -747,6 +747,20 @@
     .faq details p { max-width: 720px; padding: 0 0 26px; font-size: 16px; color: var(--dim); }
 
     html { overflow-x: clip; }
+
+    /* Plugins */
+    .sec-head h2 strong, .plug-card h3 strong { font-weight: inherit; background: var(--spectrum); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .plug-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .plug-card { display: flex; align-items: flex-start; gap: 24px; padding: 34px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--glass); transition: border-color 0.25s, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+    .plug-card:hover { border-color: var(--line-strong); transform: translateY(-3px); }
+    .plug-card img { flex: none; width: 72px; height: 72px; border-radius: 18px; }
+    .plug-tag { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+    .plug-card h3 { margin-top: 10px; font-size: clamp(24px, 2.6vw, 34px); font-weight: 700; letter-spacing: -0.04em; line-height: 1.05; }
+    .plug-card p { margin-top: 12px; font-size: 15.5px; color: var(--dim); }
+    .plug-points .gui-item h3 { margin-top: 0; }
+    .hero-lede strong { white-space: nowrap; }
+    @media (max-width: 860px) { .plug-grid { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 560px) { .plug-card { flex-direction: column; gap: 18px; padding: 24px; } }
   </style>
 </head>
 
@@ -799,7 +813,7 @@
         </h1>
         <p class="hero-lede"><strong>Hydra Download Manager (HDM)</strong> is a free, open-source download manager and accelerator that splits every file
           across parallel connections and mirror sources, steals byte ranges from lagging peers, and recovers from
-          stalls before a timeout fires. For Windows, macOS, and Linux.</p>
+          stalls before a timeout fires. Plugins add <strong>YouTube</strong> and <strong>torrent</strong> downloads. For Windows, macOS, and Linux.</p>
         <div class="hero-ctas">
           <a class="btn btn-primary" href="#download" id="hero-dl">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1209,10 +1223,75 @@
     </div>
   </section>
 
-  <section id="cli">
+  <section id="plugins">
     <div class="wrap">
       <div class="sec-head reveal">
         <span class="sec-no">04</span>
+        <div>
+          <h2><span class="eyebrow">Download manager plugins</span><strong>YouTube</strong> and <strong>torrents</strong>, one plugin away.</h2>
+          <p class="lede">Plugins teach Hydra how to reach content it cannot fetch on its own. The plugin works out
+            what to download; Hydra does the downloading, with the same scheduling, resume and verification as every
+            other file.</p>
+        </div>
+      </div>
+      <div class="plug-grid reveal">
+        <a class="plug-card" href="plugins.html">
+          <img src="plugins/img/hydra.youtube/icon.svg" alt="" width="72" height="72" loading="lazy" decoding="async">
+          <div>
+            <span class="plug-tag">Official plugin</span>
+            <h3><strong>YouTube</strong> videos and playlists</h3>
+            <p>Download YouTube videos and playlists with your choice of video quality, audio format and subtitles.
+              Uses yt-dlp for metadata and ffmpeg to combine tracks or convert audio.</p>
+          </div>
+        </a>
+        <a class="plug-card" href="plugins.html">
+          <img src="plugins/img/hydra.torrent/icon.svg" alt="" width="72" height="72" loading="lazy" decoding="async">
+          <div>
+            <span class="plug-tag">Official plugin</span>
+            <h3><strong>Torrents</strong> and magnet links</h3>
+            <p>Download magnet links and torrent files with the built-in libtorrent engine. Choose which files to
+              save, and set upload limits and seeding time.</p>
+          </div>
+        </a>
+      </div>
+      <div class="gui-grid plug-points reveal">
+        <div class="gui-item">
+          <h3>Permissions you approve</h3>
+          <p>Every capability a plugin wants is declared in its manifest, shown to you at install, and enforced by
+            Hydra on every request.</p>
+        </div>
+        <div class="gui-item">
+          <h3>Sandboxed by design</h3>
+          <p>A plugin is a WebAssembly module with no ambient access to your system. It resolves addresses; it never
+            carries the bulk bytes.</p>
+        </div>
+        <div class="gui-item">
+          <h3>Signed and checksummed</h3>
+          <p>Catalog entries can pin a package checksum and a publisher signing key, so what you install is what was
+            published.</p>
+        </div>
+        <div class="gui-item">
+          <h3>Updates on your terms</h3>
+          <p>Check for plugin updates in the app or with <code>hydra plugin update</code>. Nothing updates without
+            your approval.</p>
+        </div>
+      </div>
+      <div class="sec-more">
+        <a class="btn btn-ghost" href="plugins.html">
+          <span>Browse the plugin catalog</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section id="cli">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="sec-no">05</span>
         <div>
           <h2><span class="eyebrow">Download manager for the terminal · CLI &amp; TUI</span>The same engine, one command away.</h2>
           <p class="lede">The same high-performance download accelerator engine drives a scriptable CLI and a
@@ -1279,7 +1358,7 @@
   <section id="download">
     <div class="wrap">
       <div class="sec-head reveal">
-        <span class="sec-no">05</span>
+        <span class="sec-no">06</span>
         <div>
           <h2><span class="eyebrow">Download Hydra Download Manager (HDM)</span>Get Hydra for your platform.</h2>
           <p class="lede">Free, open-source download manager and accelerator for Windows, macOS, and Linux. Desktop
@@ -1661,7 +1740,7 @@
   <section id="faq">
     <div class="wrap">
       <div class="sec-head reveal">
-        <span class="sec-no">06</span>
+        <span class="sec-no">07</span>
         <div>
           <h2><span class="eyebrow">Download manager FAQ</span>Questions about Hydra Download Manager.</h2>
         </div>
