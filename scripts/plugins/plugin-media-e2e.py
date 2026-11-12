@@ -48,9 +48,15 @@ if '--version' in sys.argv:
     raise SystemExit(0)
 url=sys.argv[-1]
 if '--flat-playlist' in sys.argv:
-    print(json.dumps({'id':'PLfixture','title':'Fixture playlist','entries':[{'id':'one','title':'First video'},{'id':'two','title':'Second video'}]}))
+    entries=[{'id':'one','title':'First video'},{'id':'gone','title':'[Deleted video]'},{'id':'two','title':'Second video'}]
+    if 'PLbroken' in url:
+        entries.insert(1,{'id':'broken','title':'Unplayable video'})
+    print(json.dumps({'id':'PLfixture','title':'Fixture playlist','entries':entries}))
 else:
     video=parse_qs(urlparse(url).query).get('v',['one'])[0]
+    if video=='broken':
+        sys.stderr.write('ERROR: [youtube] broken: Video unavailable. This video has been removed\\n')
+        raise SystemExit(1)
     print(json.dumps({'id':video,'title':'Video '+video,'formats':[
         {'format_id':'low','url':BASE+'/low.mp4','vcodec':'avc1','acodec':'none','height':480,'ext':'mp4','protocol':'http'},
         {'format_id':'high','url':BASE+'/high.mp4','vcodec':'avc1','acodec':'none','height':720,'ext':'mp4','protocol':'http'},
@@ -94,6 +100,10 @@ try:
     run('--no-input', '--extract-audio', '--audio-format', 'mp3', '--output-dir', work / 'playlist-output', playlist)
     assert len(list((work / 'playlist-output').rglob('*.mp3'))) == 2
     run('--no-input', '-O', work / 'invalid.bin', playlist, success=False)
+    partial = run('--no-input', '--extract-audio', '--audio-format', 'mp3', '--output-dir', work / 'partial-output', 'https://www.youtube.com/playlist?list=PLbroken', success=False)
+    assert '1 of 3 playlist items failed' in partial.stderr, partial.stderr
+    assert 'reports this video as unavailable' in partial.stderr, partial.stderr
+    assert len(list((work / 'partial-output').rglob('*.mp3'))) == 2
     assert 'Resolved' in run('plugin', 'logs', 'hydra.youtube').stdout
     import pty
     pid, terminal = pty.fork()
@@ -135,7 +145,7 @@ try:
         assert any(stream['codec_type'] == 'audio' for stream in probe['streams'])
     finally:
         os.close(terminal)
-    print('PASS: official Wasm plugin, shared storage, welcome, logs, original video, MP3 extraction, playlists and interactive quality selection', flush=True)
+    print('PASS: official Wasm plugin, shared storage, welcome, logs, original video, MP3 extraction, playlists that survive a failed item, and interactive quality selection', flush=True)
     if args.serve_gui:
         gui = work / 'gui-profile'
         gui.mkdir()

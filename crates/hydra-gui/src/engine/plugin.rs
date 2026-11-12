@@ -307,7 +307,12 @@ async fn run_with_root(
         .zip(&saved)
         .map(|(&i, entry)| entry.size.or(plan.tracks[i].size))
         .collect();
-    let mut size = total(&sizes);
+    let sidecars: Vec<bool> = selected
+        .tracks
+        .iter()
+        .map(|&i| plan.tracks[i].kind == TrackKind::Subtitle)
+        .collect();
+    let mut size = total(&sizes, &sidecars);
     let ranges = selected
         .tracks
         .iter()
@@ -480,8 +485,8 @@ async fn run_with_root(
                     Event::Probed { size: Some(n), .. } => {
                         saved[ordinal].size = Some(n);
                         sizes[ordinal] = Some(n);
-                        if total(&sizes) != size {
-                            size = total(&sizes);
+                        if total(&sizes, &sidecars) != size {
+                            size = total(&sizes, &sidecars);
                             let _ = tx.send(Event::Probed {
                                 id: spec.id,
                                 size,
@@ -747,10 +752,16 @@ impl Drop for TrackDir {
     }
 }
 
-fn total(sizes: &[Option<u64>]) -> Option<u64> {
+/// The job's size once every media track's is known. Subtitle origins rarely
+/// declare a length and the files are tiny, so an unknown one counts as zero
+/// until its own probe reports it.
+fn total(sizes: &[Option<u64>], sidecars: &[bool]) -> Option<u64> {
     sizes
         .iter()
-        .try_fold(0u64, |n, size| size.and_then(|s| n.checked_add(s)))
+        .zip(sidecars)
+        .try_fold(0u64, |n, (size, sidecar)| {
+            size.or(sidecar.then_some(0)).and_then(|s| n.checked_add(s))
+        })
 }
 
 fn file_len(path: &std::path::Path) -> Option<u64> {
@@ -1392,8 +1403,18 @@ mod tests {
             !crate::model::track_dir(&part).exists(),
             "not kept this time"
         );
-        assert_eq!(total(&[Some(2), Some(3)]), Some(5));
-        assert_eq!(total(&[Some(2), None]), None);
+    }
+
+    #[test]
+    fn a_subtitle_of_unknown_size_does_not_hide_the_job_total() {
+        let media = [false, false];
+        assert_eq!(total(&[Some(2), Some(3)], &media), Some(5));
+        assert_eq!(total(&[Some(2), None], &media), None);
+        let with_subtitle = [false, false, true];
+        assert_eq!(total(&[Some(2), Some(3), None], &with_subtitle), Some(5));
+        assert_eq!(total(&[Some(2), Some(3), Some(1)], &with_subtitle), Some(6));
+        assert_eq!(total(&[Some(2), None, None], &with_subtitle), None);
+        assert_eq!(total(&[Some(u64::MAX), Some(1)], &media), None);
     }
 
     #[tokio::test]
