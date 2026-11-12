@@ -16,6 +16,8 @@ use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 thread_local! {
     static CURRENT: RefCell<Option<TrayIcon>> = const { RefCell::new(None) };
+    /// The second icon: present only while downloads run.
+    static PROGRESS: RefCell<Option<TrayIcon>> = const { RefCell::new(None) };
 }
 /// Readable from any thread, unlike `CURRENT` — `is_active` answers whether
 /// closing the last window may leave the app running.
@@ -33,8 +35,8 @@ fn mono_icon(white: bool) -> Option<tray_icon::Icon> {
     tray_icon::Icon::from_rgba(rgba, w, h).ok()
 }
 
-/// The download arrow for the frame in force, `None` while idle. In its own
-/// colours on every platform, so it is never a template or a tinted glyph.
+const PROGRESS_ID: &str = "hydra-progress";
+
 fn download_icon() -> Option<tray_icon::Icon> {
     const SIZE: u32 = 64;
     let (frame, animate) = FRAME.get();
@@ -46,32 +48,33 @@ fn download_icon() -> Option<tray_icon::Icon> {
     tray_icon::Icon::from_rgba(rgba, SIZE, SIZE).ok()
 }
 
-/// Put the icon for the current frame and phase on the tray, and keep the
-/// animation timer running exactly while there is an animated arrow on it.
+/// Create, redraw or remove the download icon for the current frame, and
+/// keep the animation timer running exactly while an animated one is up.
+/// Nothing happens before the main icon exists: that is the point at which
+/// the UI thread is known to be able to own status items.
 fn draw() {
-    let installed = CURRENT.with(|c| {
-        let current = c.borrow();
-        let Some(tray) = current.as_ref() else {
-            return false;
-        };
-        #[cfg(target_os = "macos")]
-        {
-            let (icon, template) = match download_icon() {
-                Some(icon) => (Some(icon), false),
-                None => (mono_icon(false), true),
-            };
-            if icon.is_some() {
-                let _ = tray.set_icon_with_as_template(icon, template);
+    if CURRENT.with(|c| c.borrow().is_none()) {
+        return;
+    }
+    let shown = PROGRESS.with_borrow_mut(|slot| {
+        match (download_icon(), slot.as_ref()) {
+            (None, _) => *slot = None,
+            (Some(icon), Some(tray)) => {
+                let _ = tray.set_icon(Some(icon));
+            }
+            (Some(icon), None) => {
+                *slot = TrayIconBuilder::new()
+                    .with_id(PROGRESS_ID)
+                    .with_icon(icon)
+                    .with_tooltip(crate::i18n::tr("Show Progress"))
+                    .build()
+                    .map_err(|e| crate::log::warn(&format!("download tray icon unavailable: {e}")))
+                    .ok();
             }
         }
-        #[cfg(target_os = "windows")]
-        if let Some(icon) = download_icon().or_else(|| mono_icon(taskbar_wants_white())) {
-            let _ = tray.set_icon(Some(icon));
-        }
-        true
+        slot.is_some()
     });
-    let (frame, animate) = FRAME.get();
-    ticker::run(installed && animate && frame != IconFrame::Idle);
+    ticker::run(shown && FRAME.get().1);
 }
 
 pub fn set_progress(frame: IconFrame, animate: bool) {
@@ -184,9 +187,6 @@ const THEME_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Pe
 /// [`super::THEME_CHANGED`] from the watcher below.
 #[cfg(target_os = "windows")]
 pub fn refresh_icon() {
-    if FRAME.get().0 != IconFrame::Idle {
-        return; // The download arrow carries its own colours.
-    }
     let white = taskbar_wants_white();
     CURRENT.with(|c| {
         if let Some(tray) = c.borrow().as_ref() {
@@ -335,12 +335,17 @@ fn install_with_menu(menu: Menu) {
     let tx = crate::menubus::sender();
     TrayIconEvent::set_event_handler(Some(move |ev: TrayIconEvent| {
         if let TrayIconEvent::Click {
+            id,
             button: tray_icon::MouseButton::Left,
             button_state: tray_icon::MouseButtonState::Up,
             ..
         } = ev
         {
-            let _ = tx.send(super::ICON_CLICKED.into());
+            let _ = tx.send(if id == PROGRESS_ID {
+                super::ICON_CLICKED.into()
+            } else {
+                "show_main".into()
+            });
         }
     }));
 
@@ -358,15 +363,13 @@ fn install_with_menu(menu: Menu) {
     // `watch_taskbar_theme` whenever the taskbar's own theme changes.
     #[cfg(target_os = "macos")]
     {
-        if let Some(icon) = download_icon() {
-            builder = builder.with_icon(icon);
-        } else if let Some(icon) = mono_icon(false) {
+        if let Some(icon) = mono_icon(false) {
             builder = builder.with_icon(icon).with_icon_as_template(true);
         }
     }
     #[cfg(target_os = "windows")]
     {
-        if let Some(icon) = download_icon().or_else(|| mono_icon(taskbar_wants_white())) {
+        if let Some(icon) = mono_icon(taskbar_wants_white()) {
             builder = builder.with_icon(icon);
         }
     }

@@ -51,13 +51,12 @@ static REFRESH: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 /// Current glyph color: white for dark panels. Kept current by the theme
 /// watcher; `icon_pixmap` reads it on every host request.
 static WHITE: AtomicBool = AtomicBool::new(true);
-/// The download arrow shown instead of the glyph; `icon_pixmap` reads it.
-/// With whether it is animated.
+/// The download icon's frame, and whether it is animated.
 static FRAME: Mutex<(IconFrame, bool)> = Mutex::new((IconFrame::Idle, false));
-/// Sheen position of the animated arrow, advanced by the animation thread.
+/// Sheen position of the animated arrow, advanced by the download-icon thread.
 static PHASE: AtomicU8 = AtomicU8::new(0);
-/// The animation thread, parked while there is nothing to animate.
-static ANIMATOR: OnceLock<Option<std::thread::Thread>> = OnceLock::new();
+/// The download-icon thread, parked while nothing is downloading.
+static PROGRESS_THREAD: OnceLock<Option<std::thread::Thread>> = OnceLock::new();
 
 struct HydraTray;
 
@@ -82,25 +81,7 @@ impl ksni::Tray for HydraTray {
         // and the color mark turns to mud at 22 px on a dark top bar. The
         // white/black choice tracks the panel (see `panel_wants_white`);
         // pixmap only — naming the themed color icon here would override it.
-        let white = WHITE.load(Ordering::Relaxed);
-        match FRAME.lock().map(|f| *f) {
-            // Panel sizes only: an animated arrow is re-sent several times
-            // a second, and a 256 px pixmap is a quarter megabyte on the bus.
-            Ok((frame, animate)) if frame != IconFrame::Idle => {
-                let sheen = animate.then(|| PHASE.load(Ordering::Relaxed));
-                [64u32, 32]
-                    .iter()
-                    .map(|&px| {
-                        pixmap(
-                            &crate::icons::download_rgba(frame, sheen, px, false),
-                            px,
-                            px,
-                        )
-                    })
-                    .collect()
-            }
-            _ => pixmaps(white).clone(),
-        }
+        pixmaps(WHITE.load(Ordering::Relaxed)).clone()
     }
 
     fn tool_tip(&self) -> ToolTip {
@@ -114,7 +95,7 @@ impl ksni::Tray for HydraTray {
     /// Left click: bring the window back, matching the Windows tray.
     fn activate(&mut self, _x: i32, _y: i32) {
         crate::log::debug("tray: activate (left click)");
-        let _ = crate::menubus::sender().send(super::ICON_CLICKED.into());
+        let _ = crate::menubus::sender().send("show_main".into());
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
@@ -257,42 +238,104 @@ fn notify() {
     }
 }
 
+/// The second item: the download arrow, registered only while downloads run.
+struct ProgressTray;
+
+impl ksni::Tray for ProgressTray {
+    fn id(&self) -> String {
+        "hydra-progress".into()
+    }
+
+    fn title(&self) -> String {
+        crate::i18n::tr("Show Progress")
+    }
+
+    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
+        let (frame, animate) = frame();
+        let sheen = animate.then(|| PHASE.load(Ordering::Relaxed));
+        // Panel sizes only: an animated arrow is re-sent several times a
+        // second, and a 256 px pixmap is a quarter megabyte on the bus.
+        [64u32, 32]
+            .iter()
+            .map(|&px| {
+                pixmap(
+                    &crate::icons::download_rgba(frame, sheen, px, false),
+                    px,
+                    px,
+                )
+            })
+            .collect()
+    }
+
+    fn tool_tip(&self) -> ToolTip {
+        ToolTip {
+            title: crate::i18n::tr("Show Progress"),
+            ..Default::default()
+        }
+    }
+
+    fn activate(&mut self, _x: i32, _y: i32) {
+        let _ = crate::menubus::sender().send(super::ICON_CLICKED.into());
+    }
+
+    fn watcher_offline(&self, _reason: OfflineReason) -> bool {
+        true
+    }
+}
+
+fn frame() -> (IconFrame, bool) {
+    FRAME.lock().map(|f| *f).unwrap_or((IconFrame::Idle, false))
+}
+
 pub fn set_progress(frame: IconFrame, animate: bool) {
     let changed = FRAME
         .lock()
         .map(|mut f| std::mem::replace(&mut *f, (frame, animate)) != (frame, animate))
         .unwrap_or(false);
-    if !changed {
-        return;
-    }
-    notify();
-    if animate && frame != IconFrame::Idle {
-        if let Some(animator) = ANIMATOR.get_or_init(spawn_animator) {
-            animator.unpark();
+    if changed && frame != IconFrame::Idle {
+        if let Some(thread) = PROGRESS_THREAD.get_or_init(spawn_progress_thread) {
+            thread.unpark();
         }
     }
 }
 
-/// Step the sheen while an animated arrow is up; parked otherwise. Its own
-/// thread, so a step is a D-Bus icon update and never an iced message.
-fn spawn_animator() -> Option<std::thread::Thread> {
-    let interval =
-        std::time::Duration::from_millis(u64::from(crate::dl_indicator::SHEEN_INTERVAL_MS));
+/// Owns the download item: registers it when a download starts, redraws it
+/// on a fixed beat while one runs (stepping the sheen when animated), and
+/// unregisters it when the last one stops. Its own thread, so a redraw is a
+/// D-Bus icon update and never an iced message.
+fn spawn_progress_thread() -> Option<std::thread::Thread> {
+    let beat = std::time::Duration::from_millis(u64::from(crate::dl_indicator::SHEEN_INTERVAL_MS));
     std::thread::Builder::new()
-        .name("hydra-tray-anim".into())
+        .name("hydra-tray-progress".into())
         .spawn(move || loop {
-            let moving = FRAME
-                .lock()
-                .map(|f| f.1 && f.0 != IconFrame::Idle)
-                .unwrap_or(false);
-            if !moving {
+            if frame().0 == IconFrame::Idle {
                 std::thread::park();
                 continue;
             }
-            std::thread::sleep(interval);
-            let next = (PHASE.load(Ordering::Relaxed) + 1) % crate::dl_indicator::SHEEN_PHASES;
-            PHASE.store(next, Ordering::Relaxed);
-            notify();
+            let handle = match ProgressTray.assume_sni_available(true).spawn() {
+                Ok(handle) => handle,
+                Err(e) => {
+                    crate::log::warn(&format!("download tray icon unavailable: {e}"));
+                    std::thread::park();
+                    continue;
+                }
+            };
+            let mut drawn = (frame(), 0);
+            while drawn.0 .0 != IconFrame::Idle {
+                std::thread::sleep(beat);
+                let now = frame();
+                let phase = if now.1 {
+                    (PHASE.load(Ordering::Relaxed) + 1) % crate::dl_indicator::SHEEN_PHASES
+                } else {
+                    0
+                };
+                PHASE.store(phase, Ordering::Relaxed);
+                if (now, phase) != drawn {
+                    drawn = (now, phase);
+                    let _ = handle.update(|_| {});
+                }
+            }
+            handle.shutdown().wait();
         })
         .ok()
         .map(|handle| handle.thread().clone())
