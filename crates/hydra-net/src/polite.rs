@@ -270,6 +270,17 @@ pub fn parse_http_date(s: &str) -> Option<u64> {
         hms[1].parse().ok()?,
         hms[2].parse().ok()?,
     );
+    // Out-of-range fields would underflow `days_from_civil` (day 0 in March
+    // reaches `doy - 1` below zero), so they are not a date at all.
+    if !(1..=31).contains(&day) || h > 23 || mi > 59 || sec > 60 {
+        return None;
+    }
+    // A date before the epoch has no `u64` timestamp, and `days_from_civil`
+    // would wrap to the far future. Servers send one to delete a cookie
+    // (`expires=Thu, 01 Jan 1900 00:00:00 GMT`), so it means "already past".
+    if year < 1970 {
+        return Some(0);
+    }
     Some(days_from_civil(year, month, day) * 86_400 + h * 3600 + mi * 60 + sec)
 }
 
@@ -583,6 +594,27 @@ mod tests {
             Duration::from_secs(480),
             "HTTP-date form must be honoured"
         );
+    }
+
+    #[test]
+    fn http_date_before_the_epoch_is_zero_not_the_far_future() {
+        assert_eq!(parse_http_date("Mon, 01 Jan 1900 00:00:00 GMT"), Some(0));
+        assert_eq!(parse_http_date("Wed, 31 Dec 1969 23:59:59 GMT"), Some(0));
+        assert_eq!(parse_http_date("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
+        assert_eq!(parse_http_date("Thu, 01 Jan 1970 00:00:01 GMT"), Some(1));
+        assert_eq!(
+            parse_retry_after("Mon, 01 Jan 1900 00:00:00 GMT", 1_445_412_000),
+            Some(Duration::ZERO)
+        );
+    }
+
+    #[test]
+    fn http_date_with_out_of_range_fields_is_rejected() {
+        assert_eq!(parse_http_date("Sun, 00 Mar 2015 07:28:00 GMT"), None);
+        assert_eq!(parse_http_date("Wed, 32 Oct 2015 07:28:00 GMT"), None);
+        assert_eq!(parse_http_date("Wed, 21 Oct 2015 24:00:00 GMT"), None);
+        assert_eq!(parse_http_date("Wed, 21 Oct 2015 07:60:00 GMT"), None);
+        assert_eq!(parse_http_date("Wed, 21 Oct 2015 07:28:61 GMT"), None);
     }
 
     #[test]
