@@ -1413,6 +1413,7 @@ where
     let mut current = u.clone();
     let mut chain = hya_net::polite::RedirectChain::new(&current.to_string());
     let mut via_html = false;
+    let mut guise = hya_net::Guise::default();
     // The jar travels with the chain, whether or not a cookie flag was given.
     // A login-gated CDN answers the first request with `Set-Cookie` and a `302`
     // and expects the cookie back on the second; without this the second hop
@@ -1428,14 +1429,28 @@ where
         // HEAD, then a ranged GET when it gives nothing usable — see
         // [`hya_net::probe_resilient`], which is also what the GUI and the engine
         // ask, so the three cannot drift apart on which servers they can read.
-        let probe = async {
-            if force_stream {
-                hya_net::probe(c, &target).await
-            } else {
-                probe_resilient(c, &target).await
-            }
-        };
-        let pr = within(probe_secs, "probe", probe).await?;
+        let (pr, admitted) = hya_net::probe_admitted(&target, |t| async move {
+            let probe = async {
+                if force_stream {
+                    hya_net::probe(c, &t).await
+                } else {
+                    probe_resilient(c, &t).await
+                }
+            };
+            within(probe_secs, "probe", probe).await
+        })
+        .await?;
+        if admitted != hya_net::Guise::default() {
+            log.push((
+                1,
+                format!(
+                    "{} refused the request as written; served as {admitted:?}",
+                    current.host
+                ),
+            ));
+            target = target.in_guise(&admitted);
+            guise.absorb(admitted);
+        }
         // Counted, never quoted: the value is a bearer credential and `-v` is
         // read in terminals, CI logs and bug reports.
         let set = jar.store_response(&pr.raw_head, &current.host, &current.path, now);
@@ -1466,6 +1481,7 @@ where
                 routed_target(&next, policy)
                     .map_err(|e| format!("redirect target unusable: {e}"))?
                     .with_headers_from(t, t.headers.clone(), t.agent.clone())
+                    .in_guise(&guise)
                     .with_jar(&jar, now),
                 &next,
                 policy,
@@ -1498,6 +1514,7 @@ where
                     routed_target(&next, policy)
                         .map_err(|e| format!("redirect target unusable: {e}"))?
                         .with_headers_from(t, t.headers.clone(), t.agent.clone())
+                        .in_guise(&guise)
                         .with_jar(&jar, now),
                     &next,
                     policy,
@@ -5303,6 +5320,134 @@ mod tests {
                 "agent lost on the hop: {req}"
             );
         }
+    }
+
+    /// Serve only requests whose head contains `pass`, `403` the rest;
+    /// `/start` forwards to `/landed`.
+    async fn spawn_dress_checking_origin(
+        pass: impl Fn(u16) -> String,
+    ) -> (u16, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let port = l.local_addr().expect("addr").port();
+        let pass = pass(port);
+        let sink = seen.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut s, _)) = l.accept().await else {
+                    return;
+                };
+                let (sink, pass) = (sink.clone(), pass.clone());
+                tokio::spawn(async move {
+                    let mut head = Vec::new();
+                    let mut buf = [0u8; 4096];
+                    while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                        match s.read(&mut buf).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => head.extend_from_slice(&buf[..n]),
+                        }
+                    }
+                    let text = String::from_utf8_lossy(&head).to_string();
+                    sink.lock().unwrap().push(text.clone());
+                    let reply = if !text.contains(&pass) {
+                        "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n"
+                    } else if text.split_whitespace().nth(1) == Some("/start") {
+                        "HTTP/1.1 302 Found\r\nLocation: /landed\r\nContent-Length: 0\r\n"
+                    } else {
+                        "HTTP/1.1 200 OK\r\nContent-Length: 9\r\nAccept-Ranges: bytes\r\n"
+                    };
+                    let _ = s
+                        .write_all(format!("{reply}Connection: close\r\n\r\n").as_bytes())
+                        .await;
+                });
+            }
+        });
+        (port, seen)
+    }
+
+    async fn resolve_gated(
+        port: u16,
+        path: &str,
+        log: &mut Vec<(u8, String)>,
+    ) -> Result<Resolved, String> {
+        let u = crate::url::Url::parse(&format!("http://127.0.0.1:{port}{path}")).expect("url");
+        let t = u
+            .to_target(None)
+            .expect("target")
+            .with_headers(Vec::new(), Some("hydra-test/1".to_string()));
+        let c = hya_net::TlsCapableConnector::new().expect("connector");
+        probe_resolving(
+            &c,
+            &u,
+            &t,
+            log,
+            8,
+            &CookieJar::new(),
+            0,
+            &no_proxy(),
+            30.0,
+            false,
+        )
+        .await
+    }
+
+    /// #277: `hydra <url>` failed with `403` against an origin that serves
+    /// the same link to any browser.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn an_origin_that_serves_only_browsers_resolves_and_the_transfer_goes_as_one() {
+        let pass = format!("User-Agent: {}", hya_net::BROWSER_USER_AGENT);
+        let (port, _) = spawn_dress_checking_origin(|_| pass.clone()).await;
+        let mut log = Vec::new();
+        let r = resolve_gated(port, "/file.bin", &mut log)
+            .await
+            .expect("served to a browser");
+
+        assert_eq!(r.probe.size, 9);
+        assert_eq!(r.target.agent.as_deref(), Some(hya_net::BROWSER_USER_AGENT));
+        assert!(
+            log.iter()
+                .any(|(_, line)| line.contains("refused the request as written")),
+            "{log:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn what_a_gate_accepted_is_still_sent_after_a_redirect() {
+        let (port, seen) =
+            spawn_dress_checking_origin(|port| format!("Referer: http://127.0.0.1:{port}/\r\n"))
+                .await;
+        let mut log = Vec::new();
+        let r = resolve_gated(port, "/start", &mut log)
+            .await
+            .expect("the hop is served");
+
+        assert_eq!(r.url.path, "/landed");
+        let own_site = format!("Referer: http://127.0.0.1:{port}/");
+        assert!(
+            r.target.headers.contains(&own_site),
+            "{:?}",
+            r.target.headers
+        );
+        let seen = seen.lock().unwrap();
+        let landed = requests_for(&seen, "/landed");
+        assert!(!landed.is_empty());
+        assert!(
+            landed.iter().all(|req| req.contains(&own_site)),
+            "the hop was asked bare again: {landed:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_link_refused_however_it_is_asked_keeps_its_plain_error() {
+        let (port, _) = spawn_dress_checking_origin(|_| "X-Never: sent".into()).await;
+        let err = resolve_gated(port, "/expired", &mut Vec::new())
+            .await
+            .err()
+            .expect("refused");
+        assert_eq!(err, "server answered 403 Forbidden");
     }
 
     /// An error status from the probe is an answer about the URL, not a

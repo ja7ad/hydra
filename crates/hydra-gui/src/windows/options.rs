@@ -364,6 +364,10 @@ fn downloads(app: &App) -> El<'_> {
             tr("Fills each download's Status cell up to its percentage, tinted by state."),
         ),
         hinted(
+            check(s.show_progress_icon, tr("Show download progress on the tray and taskbar icons")).on_toggle(|b| o(OptField::ProgressIcon(b))),
+            tr("While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress."),
+        ),
+        hinted(
             check(s.show_completion_tab, tr("Show \"Options on completion\" tab")).on_toggle(|b| o(OptField::CompletionTab(b))),
             tr("Shows or hides the Options-on-completion tab of the progress window."),
         ),
@@ -650,6 +654,7 @@ impl OptionsState {
             OptField::StartMinimized(b) => s.start_minimized = b,
             OptField::SpeedTab(b) => s.show_speed_tab = b,
             OptField::ProgressBar(b) => s.show_progress_bar = b,
+            OptField::ProgressIcon(b) => s.show_progress_icon = b,
             OptField::CompletionTab(b) => s.show_completion_tab = b,
             OptField::HideButtons(b) => s.show_hide_buttons = b,
             OptField::ConnDetails(b) => s.show_conn_details = b,
@@ -1938,6 +1943,7 @@ mod tests {
             ServerDate => server_file_date, NoCatDirs => no_category_dirs,
             ShowFileInfo => show_file_info_dialog, BgDownload => bg_download,
             StartMinimized => start_minimized, SpeedTab => show_speed_tab, ProgressBar => show_progress_bar,
+            ProgressIcon => show_progress_icon,
             CompletionTab => show_completion_tab, HideButtons => show_hide_buttons,
             ConnDetails => show_conn_details, CompleteDialog => show_complete_dialog,
             RemoveCompleted => remove_completed, AdaptiveConns => adaptive_conns,

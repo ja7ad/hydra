@@ -1304,6 +1304,9 @@ pub struct Settings {
     pub show_speed_tab: bool,
     /// Fill each Status cell up to the download's percentage.
     pub show_progress_bar: bool,
+    /// While downloads run, show a second tray icon for them and draw each
+    /// progress window's own icon and taskbar progress.
+    pub show_progress_icon: bool,
     pub show_completion_tab: bool,
     pub show_hide_buttons: bool,
     /// Whether a progress window opens with the per-connection panel already
@@ -1458,6 +1461,7 @@ impl Default for Settings {
             start_minimized: false,
             show_speed_tab: true,
             show_progress_bar: true,
+            show_progress_icon: true,
             show_completion_tab: true,
             show_hide_buttons: true,
             show_conn_details: true,
@@ -1584,6 +1588,7 @@ impl Settings {
             start_minimized,
             show_speed_tab,
             show_progress_bar,
+            show_progress_icon,
             show_completion_tab,
             show_hide_buttons,
             show_conn_details,
@@ -1937,7 +1942,26 @@ pub fn app_dir() -> PathBuf {
     if let Some(dir) = APP_DIR_OVERRIDE.get() {
         return dir.clone();
     }
+    #[cfg(test)]
+    if std::env::var_os("HYDRA_CONFIG_DIR").is_none() {
+        return test_app_dir();
+    }
     hya_plugin::hydra_dir()
+}
+
+/// Where a test build keeps its files. Any test that drives the app saves a
+/// default `config.toml` and download list, and with the real directory that
+/// was the developer's own settings being reset by `cargo test`.
+#[cfg(test)]
+fn test_app_dir() -> PathBuf {
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/gui-test-profile");
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    })
+    .clone()
 }
 
 /// User configuration: everything the Options/Scheduler dialogs edit.
@@ -2462,6 +2486,24 @@ pub fn save_recent_dirs(dirs: &[String]) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_test_build_keeps_its_settings_out_of_the_users_profile() {
+        if std::env::var_os("HYDRA_CONFIG_DIR").is_some() {
+            return;
+        }
+        assert_ne!(app_dir(), hya_plugin::hydra_dir());
+
+        let mut cfg = ConfigFile::default();
+        cfg.settings.beta_channel = true;
+        cfg.settings.hide_from_taskbar = true;
+        save_config(&cfg);
+
+        assert!(app_dir().join("config.toml").starts_with(test_app_dir()));
+        let reopened = load_config();
+        assert!(reopened.settings.beta_channel);
+        assert!(reopened.settings.hide_from_taskbar);
+    }
 
     #[test]
     fn recent_dir_goes_first_and_is_not_repeated() {

@@ -553,6 +553,7 @@ impl Connector for TcpConnector {
     }
 }
 
+pub mod guise;
 pub mod http;
 pub mod pool;
 pub mod sink;
@@ -560,13 +561,15 @@ pub mod transfer;
 
 pub use cookies::{Cookie, CookieJar};
 
+pub use guise::{probe_admitted, Guise, BROWSER_USER_AGENT};
+
 pub use http::{
     describe_status, fetch_object, fetch_range_retry, fetch_small, fetch_small_range,
     fetch_streaming, fetch_streaming_observed, header_all, header_lookup, probe, probe_resilient,
     probe_size_via_range, probe_via_get, Probe, Redirect,
 };
 pub use redirect::{html_redirect, html_redirect_target};
-pub use sink::{allocated_bytes, SparseSink};
+pub use sink::{allocated_bytes, Growth, SparseSink};
 pub use transfer::{
     run_transfer, run_transfer_cancellable, run_transfer_into, run_transfer_observed,
     run_transfer_paced, run_transfer_tick, run_transfer_with_reserves, Bench, OnSubstitute,

@@ -29,10 +29,11 @@
 #![cfg(target_os = "linux")]
 
 use super::Entry;
+use crate::dl_indicator::IconFrame;
 use ksni::blocking::TrayMethods;
 use ksni::menu::{CheckmarkItem, StandardItem, SubMenu};
 use ksni::{MenuItem, OfflineReason, ToolTip};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{mpsc, Mutex, OnceLock};
 
 /// A watcher is registered and the icon is (or will be) on a panel.
@@ -50,6 +51,12 @@ static REFRESH: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 /// Current glyph color: white for dark panels. Kept current by the theme
 /// watcher; `icon_pixmap` reads it on every host request.
 static WHITE: AtomicBool = AtomicBool::new(true);
+/// The download icon's frame, and whether it is animated.
+static FRAME: Mutex<(IconFrame, bool)> = Mutex::new((IconFrame::Idle, false));
+/// Sheen position of the animated arrow, advanced by the download-icon thread.
+static PHASE: AtomicU8 = AtomicU8::new(0);
+/// The download-icon thread, parked while nothing is downloading.
+static PROGRESS_THREAD: OnceLock<Option<std::thread::Thread>> = OnceLock::new();
 
 struct HydraTray;
 
@@ -231,6 +238,109 @@ fn notify() {
     }
 }
 
+/// The second item: the download arrow, registered only while downloads run.
+struct ProgressTray;
+
+impl ksni::Tray for ProgressTray {
+    fn id(&self) -> String {
+        "hydra-progress".into()
+    }
+
+    fn title(&self) -> String {
+        crate::i18n::tr("Show Progress")
+    }
+
+    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
+        let (frame, animate) = frame();
+        let sheen = animate.then(|| PHASE.load(Ordering::Relaxed));
+        // Panel sizes only: an animated arrow is re-sent several times a
+        // second, and a 256 px pixmap is a quarter megabyte on the bus.
+        [64u32, 32]
+            .iter()
+            .map(|&px| {
+                pixmap(
+                    &crate::icons::download_rgba(frame, sheen, px, false),
+                    px,
+                    px,
+                )
+            })
+            .collect()
+    }
+
+    fn tool_tip(&self) -> ToolTip {
+        ToolTip {
+            title: crate::i18n::tr("Show Progress"),
+            ..Default::default()
+        }
+    }
+
+    fn activate(&mut self, _x: i32, _y: i32) {
+        let _ = crate::menubus::sender().send(super::ICON_CLICKED.into());
+    }
+
+    fn watcher_offline(&self, _reason: OfflineReason) -> bool {
+        true
+    }
+}
+
+fn frame() -> (IconFrame, bool) {
+    FRAME.lock().map(|f| *f).unwrap_or((IconFrame::Idle, false))
+}
+
+pub fn set_progress(frame: IconFrame, animate: bool) {
+    let changed = FRAME
+        .lock()
+        .map(|mut f| std::mem::replace(&mut *f, (frame, animate)) != (frame, animate))
+        .unwrap_or(false);
+    if changed && frame != IconFrame::Idle {
+        if let Some(thread) = PROGRESS_THREAD.get_or_init(spawn_progress_thread) {
+            thread.unpark();
+        }
+    }
+}
+
+/// Owns the download item: registers it when a download starts, redraws it
+/// on a fixed beat while one runs (stepping the sheen when animated), and
+/// unregisters it when the last one stops. Its own thread, so a redraw is a
+/// D-Bus icon update and never an iced message.
+fn spawn_progress_thread() -> Option<std::thread::Thread> {
+    let beat = std::time::Duration::from_millis(u64::from(crate::dl_indicator::SHEEN_INTERVAL_MS));
+    std::thread::Builder::new()
+        .name("hydra-tray-progress".into())
+        .spawn(move || loop {
+            if frame().0 == IconFrame::Idle {
+                std::thread::park();
+                continue;
+            }
+            let handle = match ProgressTray.assume_sni_available(true).spawn() {
+                Ok(handle) => handle,
+                Err(e) => {
+                    crate::log::warn(&format!("download tray icon unavailable: {e}"));
+                    std::thread::park();
+                    continue;
+                }
+            };
+            let mut drawn = (frame(), 0);
+            while drawn.0 .0 != IconFrame::Idle {
+                std::thread::sleep(beat);
+                let now = frame();
+                let phase = if now.1 {
+                    (PHASE.load(Ordering::Relaxed) + 1) % crate::dl_indicator::SHEEN_PHASES
+                } else {
+                    0
+                };
+                PHASE.store(phase, Ordering::Relaxed);
+                if (now, phase) != drawn {
+                    drawn = (now, phase);
+                    let _ = handle.update(|_| {});
+                }
+            }
+            handle.shutdown().wait();
+        })
+        .ok()
+        .map(|handle| handle.thread().clone())
+}
+
 pub fn is_active() -> bool {
     ACTIVE.load(Ordering::Relaxed)
 }
@@ -303,38 +413,45 @@ fn pixmaps(white: bool) -> &'static Vec<ksni::Icon> {
     static BLACK_ICONS: OnceLock<Vec<ksni::Icon>> = OnceLock::new();
     let cell = if white { &WHITE_ICONS } else { &BLACK_ICONS };
     cell.get_or_init(|| {
-        let Some((rgba, w, h)) = crate::icons::logo_mono_rgba(white) else {
-            return Vec::new();
-        };
-        // 256 -> 32 and 64 are exact box averages; anything not divisible is
-        // left to the host.
-        [8usize, 4, 1]
-            .iter()
-            .filter_map(|&factor| {
-                let (px, pw, ph) = if factor == 1 {
-                    (rgba.clone(), w, h)
-                } else if (w as usize).is_multiple_of(factor) && (h as usize).is_multiple_of(factor)
-                {
-                    (
-                        box_downscale(&rgba, w as usize, h as usize, factor),
-                        w / factor as u32,
-                        h / factor as u32,
-                    )
-                } else {
-                    return None;
-                };
-                let mut argb = Vec::with_capacity(px.len());
-                for p in px.as_chunks::<4>().0 {
-                    argb.extend_from_slice(&[p[3], p[0], p[1], p[2]]);
-                }
-                Some(ksni::Icon {
-                    width: pw as i32,
-                    height: ph as i32,
-                    data: argb,
-                })
-            })
-            .collect()
+        crate::icons::logo_mono_rgba(white)
+            .map(|(rgba, w, h)| scaled_pixmaps(&rgba, w, h))
+            .unwrap_or_default()
     })
+}
+
+fn scaled_pixmaps(rgba: &[u8], w: u32, h: u32) -> Vec<ksni::Icon> {
+    // 256 -> 32 and 64 are exact box averages; anything not divisible is
+    // left to the host.
+    [8usize, 4, 1]
+        .iter()
+        .filter_map(|&factor| {
+            let (px, pw, ph) = if factor == 1 {
+                (rgba.to_vec(), w, h)
+            } else if (w as usize).is_multiple_of(factor) && (h as usize).is_multiple_of(factor) {
+                (
+                    box_downscale(rgba, w as usize, h as usize, factor),
+                    w / factor as u32,
+                    h / factor as u32,
+                )
+            } else {
+                return None;
+            };
+            Some(pixmap(&px, pw, ph))
+        })
+        .collect()
+}
+
+/// Straight RGBA as an SNI pixmap (ARGB32, network byte order).
+fn pixmap(rgba: &[u8], width: u32, height: u32) -> ksni::Icon {
+    let mut argb = Vec::with_capacity(rgba.len());
+    for p in rgba.as_chunks::<4>().0 {
+        argb.extend_from_slice(&[p[3], p[0], p[1], p[2]]);
+    }
+    ksni::Icon {
+        width: width as i32,
+        height: height as i32,
+        data: argb,
+    }
 }
 
 /// Average `factor`x`factor` blocks. Alpha-weighted on the colour channels so
