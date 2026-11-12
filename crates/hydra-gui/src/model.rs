@@ -1224,6 +1224,11 @@ pub fn drag_column(cols: &mut [ColumnPref], col: Column, from_x: f32, x: f32) ->
 pub const COL_MIN_W: f32 = 40.0;
 pub const COL_MAX_W: f32 = 800.0;
 
+/// `w` held to the range a column may be dragged or fitted to.
+pub fn clamp_col_width(w: f32) -> f32 {
+    w.clamp(COL_MIN_W, COL_MAX_W)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -2232,7 +2237,7 @@ fn migrate_columns(s: &mut Settings) {
         .zip(Settings::default().scheduler_column_widths)
     {
         *width = if width.is_finite() {
-            width.clamp(COL_MIN_W, COL_MAX_W)
+            clamp_col_width(*width)
         } else {
             default
         };
@@ -2265,7 +2270,7 @@ fn migrate_columns(s: &mut Settings) {
     }
     for p in &mut s.columns {
         p.width = if p.width.is_finite() {
-            p.width.clamp(COL_MIN_W, COL_MAX_W)
+            clamp_col_width(p.width)
         } else {
             p.id.default_width()
         };

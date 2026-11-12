@@ -78,7 +78,12 @@ fn header<'a>(app: &App, c: &[(Column, f32)], tw: f32) -> El<'a> {
                 .size(theme::FONT_SIZE)
                 .wrapping(iced::widget::text::Wrapping::None),
         )
-        .padding([3, 6])
+        .padding(iced::Padding {
+            top: 3.0,
+            bottom: 3.0,
+            left: CELL_PAD_X,
+            right: CELL_PAD_X,
+        })
         .width(*w)
         .height(CELL_H)
         .clip(true)
@@ -118,11 +123,22 @@ fn header<'a>(app: &App, c: &[(Column, f32)], tw: f32) -> El<'a> {
     .into()
 }
 
+/// Horizontal padding on each side of a header or body cell.
+const CELL_PAD_X: f32 = 6.0;
+/// The file-type icon at the start of a Name cell, and the gap after it.
+const NAME_ICON: f32 = 15.0;
+const NAME_GAP: f32 = 5.0;
+
 fn cell<'a>(content: El<'a>, w: f32) -> El<'a> {
     container(content)
         .width(w)
         .height(CELL_H)
-        .padding([2, 6])
+        .padding(iced::Padding {
+            top: 2.0,
+            bottom: 2.0,
+            left: CELL_PAD_X,
+            right: CELL_PAD_X,
+        })
         .clip(true)
         .into()
 }
@@ -278,16 +294,19 @@ fn cell_content<'a>(app: &App, d: &'a DownloadItem, col: Column) -> El<'a> {
     };
     match col {
         Column::Name => row![
-            svg(file_icon(app, d)).width(15.0).height(15.0),
+            svg(file_icon(app, d)).width(NAME_ICON).height(NAME_ICON),
             text(&d.file_name)
                 .size(theme::FONT_SIZE)
                 .wrapping(iced::widget::text::Wrapping::None),
         ]
-        .spacing(5)
+        .spacing(NAME_GAP)
         .align_y(iced::Alignment::Center)
         .into(),
         Column::Queue => queue_glyph(app, d),
-        Column::Description => text(&d.description).size(theme::FONT_SIZE).into(),
+        Column::Description => text(&d.description)
+            .size(theme::FONT_SIZE)
+            .wrapping(iced::widget::text::Wrapping::None)
+            .into(),
         _ => txt(cell_text(app, d, col)),
     }
 }
@@ -329,16 +348,15 @@ pub fn fit_width(app: &App, col: Column) -> f32 {
         return col.default_width();
     }
     let mut w = crate::font::line_width(&header_label(app, col), theme::FONT_SIZE);
-    for d in app.visible() {
+    for d in app.state.downloads.iter().filter(|d| app.in_view(d)) {
         let mut cw = crate::font::line_width(&cell_text(app, d, col), theme::FONT_SIZE);
         if col == Column::Name {
-            // Icon (15) and the gap (5) before the text.
-            cw += 20.0;
+            cw += NAME_ICON + NAME_GAP;
         }
         w = w.max(cw);
     }
-    // The cell's 6 px padding either side, plus a pixel of rounding slack.
-    (w.ceil() + 13.0).clamp(crate::model::COL_MIN_W, crate::model::COL_MAX_W)
+    // The cell's padding either side, plus a pixel of rounding slack.
+    crate::model::clamp_col_width(w.ceil() + 2.0 * CELL_PAD_X + 1.0)
 }
 
 fn data_row<'a>(

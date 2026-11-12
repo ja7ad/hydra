@@ -344,17 +344,10 @@ fn file_texts(d: &crate::model::DownloadItem) -> [String; 4] {
 
 const FILE_HEADERS: [&str; 4] = ["File Name", "Size", "Status", "Time Left"];
 
-/// The downloads in the queue selected on the left, in queue order: the rows
+/// Whether `d` belongs to the queue selected on the left: a row
 /// [`files_tab`] paints and [`fit_width`] measures.
-fn queue_members(app: &App) -> Vec<&crate::model::DownloadItem> {
-    let mut members: Vec<&crate::model::DownloadItem> = app
-        .state
-        .downloads
-        .iter()
-        .filter(|d| d.queue.as_deref() == Some(app.sch.queue.as_str()))
-        .collect();
-    members.sort_by_key(|d| d.q_order);
-    members
+fn in_selected_queue(app: &App, d: &crate::model::DownloadItem) -> bool {
+    d.queue.as_deref() == Some(app.sch.queue.as_str())
 }
 
 /// Width at which Files-tab column `index` shows its header and every file
@@ -364,18 +357,31 @@ pub fn fit_width(app: &App, index: usize) -> Option<f32> {
     let header = FILE_HEADERS.get(index)?;
     // The header cell is narrower than its column by the divider's width.
     let mut w = crate::font::line_width(&tr(header), theme::FONT_SIZE) + COL_GRIP;
-    for d in queue_members(app) {
+    for d in app
+        .state
+        .downloads
+        .iter()
+        .filter(|d| in_selected_queue(app, d))
+    {
         let text = &file_texts(d)[index];
         w = w.max(crate::font::line_width(text, theme::FONT_SIZE));
     }
-    Some((w.ceil() + 2.0).clamp(crate::model::COL_MIN_W, crate::model::COL_MAX_W))
+    // `cell` has no padding; one pixel each side is rounding slack, so a text
+    // measured at a fractional width is never cut by its last pixel.
+    Some(crate::model::clamp_col_width(w.ceil() + 2.0))
 }
 
 fn files_tab(app: &App) -> El<'_> {
     let q = app.cfg.queues.iter().find(|q| q.name == app.sch.queue);
     let files_at_once = q.map(|q| q.files_at_once).unwrap_or(4);
 
-    let members = queue_members(app);
+    let mut members: Vec<&crate::model::DownloadItem> = app
+        .state
+        .downloads
+        .iter()
+        .filter(|d| in_selected_queue(app, d))
+        .collect();
+    members.sort_by_key(|d| d.q_order);
 
     let widths = app.cfg.settings.scheduler_column_widths;
     let table_width = widths.iter().sum::<f32>() + 8.0;
@@ -396,7 +402,7 @@ fn files_tab(app: &App) -> El<'_> {
         .spacing(1)
         .width(table_width);
     for d in &members {
-        let texts = file_texts(d);
+        let [name, size, status, time_left] = file_texts(d);
         let selected = app.sch.sel_file == Some(d.id);
         let dragging = app.sch.drag == Some(d.id);
         // Press starts a drag (and selects); dragging over another row
@@ -405,10 +411,10 @@ fn files_tab(app: &App) -> El<'_> {
             mouse_area(
                 container(
                     row![
-                        cell(texts[0].clone(), widths[0]),
-                        cell(texts[1].clone(), widths[1]),
-                        cell(texts[2].clone(), widths[2]),
-                        cell(texts[3].clone(), widths[3]),
+                        cell(name, widths[0]),
+                        cell(size, widths[1]),
+                        cell(status, widths[2]),
+                        cell(time_left, widths[3]),
                     ]
                     .spacing(0),
                 )
