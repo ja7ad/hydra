@@ -4,8 +4,6 @@ import argparse
 import pathlib
 import shutil
 import stat
-import subprocess
-import tomllib
 import zipfile
 
 
@@ -40,44 +38,6 @@ def zip_directory(directory, output):
         for path in sorted(directory.rglob('*')):
             if path.is_file():
                 archive.write(path, path.relative_to(directory).as_posix())
-
-
-def prepare_plugin(root, architecture):
-    platform = f'windows-{architecture}'
-    package = root / 'original-unsigned' / f'unsigned-torrent-download-{platform}.hyaplugin'
-    destination = root / 'plugin-staging'
-    extract(package, destination)
-    manifest = tomllib.loads((destination / 'hydra-plugin.toml').read_text())
-    modules = manifest['native_modules']
-    if len(modules) != 1 or modules[0]['platform'] != platform:
-        raise ValueError('torrent package does not match the requested Windows target')
-    module = modules[0]['module']
-    if pathlib.PurePosixPath(module).name != module or not module.endswith('.dll'):
-        raise ValueError('unexpected torrent module path')
-    original = root / 'source/plugins/bundled/native' / platform / f'torrent-download-{platform}.hyaplugin'
-    with zipfile.ZipFile(original) as archive:
-        if archive.read(module) != (destination / module).read_bytes():
-            raise ValueError('unsigned torrent DLL differs from the released plugin')
-    unsigned = root / 'unsigned-native'
-    unsigned.mkdir()
-    shutil.copy(destination / module, unsigned / module)
-    shutil.copy(root / 'source/target/debug/hydra-plugin.exe', unsigned / 'hydra-plugin.exe')
-
-
-def repack_plugin(root, architecture):
-    platform = f'windows-{architecture}'
-    staging = root / 'plugin-staging'
-    manifest = tomllib.loads((staging / 'hydra-plugin.toml').read_text())
-    module = manifest['native_modules'][0]['module']
-    shutil.copy(root / 'signed-native' / module, staging / module)
-    tool = root / 'source/target/debug/hydra-plugin.exe'
-    unsigned = root / 'unsigned-torrent.hyaplugin'
-    output = root / 'source/plugins/bundled/native' / platform / f'torrent-download-{platform}.hyaplugin'
-    subprocess.run([str(tool), 'pack', str(staging), '--output', str(unsigned)], check=True)
-    subprocess.run([str(tool), 'sign', str(unsigned), '--output', str(output),
-                    '--public-key', str(root / 'source/plugins/official.pub'),
-                    '--key-env', 'HYDRA_PLUGIN_SIGNING_KEY'], check=True)
-    subprocess.run([str(tool), 'validate', str(output)], check=True)
 
 
 def installer_hook(root, mode):
@@ -147,9 +107,6 @@ def repack_archives(root, architecture, target, version="1.1.0"):
         zip_directory(stage, output / name)
     portable = source / 'target/dist' / f'hydra-{version}-windows-portable-{arch}.zip'
     shutil.copy(portable, output / portable.name)
-    platform = f'windows-{architecture}'
-    plugin = source / 'plugins/bundled/native' / platform / f'torrent-download-{platform}.hyaplugin'
-    shutil.copy(plugin, output / plugin.name)
 
 
 def prepare_ffi(root):
@@ -161,10 +118,12 @@ def prepare_ffi(root):
     libraries = sorted(staging.rglob('*.dll'))
     if not libraries:
         raise ValueError('Windows FFI archive contains no DLL')
+    unsigned = root / 'unsigned-native'
+    unsigned.mkdir(exist_ok=True)
     for index, library in enumerate(libraries):
-        output = root / 'unsigned-native' / f'ffi-{index}-{library.name}'
-        output.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(library, output)
+        shutil.copy(library, unsigned / f'ffi-{index}-{library.name}')
+    # The SignPath artifact configuration rejects a request without an EXE.
+    shutil.copy(root / 'source/target/debug/hydra-plugin.exe', unsigned / 'hydra-plugin.exe')
 
 
 def repack_ffi(root):
@@ -177,39 +136,18 @@ def repack_ffi(root):
     zip_directory(staging, output / archive.name)
 
 
-def refresh_bundle(root):
-    output = root / 'signed-plugins'
-    staging = root / 'bundle-staging'
-    archive = output / 'hydra-official-plugins.zip'
-    extract(archive, staging)
-    for architecture in ('x86_64', 'aarch64'):
-        platform = f'windows-{architecture}'
-        name = f'torrent-download-{platform}.hyaplugin'
-        signed = root / 'signed-windows' / name
-        shutil.copy(signed, staging / 'native' / platform / name)
-        shutil.copy(signed, output / 'native' / platform / name)
-    zip_directory(staging, archive)
-    for package in (root / 'native-packages').glob('*.hyaplugin'):
-        replacement = root / 'signed-windows' / package.name
-        shutil.copy(replacement if replacement.exists() else package, output / package.name)
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare-plugin', 'repack-plugin', 'export-uninstaller',
-                                          'import-uninstaller', 'stage-app', 'install-app', 'repack',
-                                          'prepare-ffi', 'repack-ffi', 'refresh-bundle'])
+    parser.add_argument('command', choices=['export-uninstaller', 'import-uninstaller', 'stage-app',
+                                          'install-app', 'repack', 'prepare-ffi', 'repack-ffi'])
     parser.add_argument('--architecture', choices=['x86_64', 'aarch64'], required=True)
     parser.add_argument("--version", default="1.1.0")
     args = parser.parse_args()
     root = pathlib.Path.cwd()
     target = {'x86_64': 'x86_64-pc-windows-msvc', 'aarch64': 'aarch64-pc-windows-msvc'}[args.architecture]
     commands = {
-        'refresh-bundle': lambda: refresh_bundle(root),
         'prepare-ffi': lambda: prepare_ffi(root),
         'repack-ffi': lambda: repack_ffi(root),
-        'prepare-plugin': lambda: prepare_plugin(root, args.architecture),
-        'repack-plugin': lambda: repack_plugin(root, args.architecture),
         'export-uninstaller': lambda: installer_hook(root, 'export'),
         'import-uninstaller': lambda: installer_hook(root, 'import'),
         'stage-app': lambda: stage_app(root, target),

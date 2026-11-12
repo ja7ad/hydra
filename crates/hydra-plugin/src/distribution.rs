@@ -629,9 +629,17 @@ mod tests {
                 .iter()
                 .find(|entry| entry.id == "hydra.torrent")
                 .unwrap();
-            assert!(torrent
-                .package
-                .ends_with(&format!("torrent-download-{platform}.hyaplugin")));
+            let versioned = format!(
+                "torrent-download_{}_{}.hyaplugin",
+                torrent.version,
+                platform.replace('-', "_")
+            );
+            let unversioned = format!("torrent-download-{platform}.hyaplugin");
+            assert!(
+                torrent.package.ends_with(&versioned) || torrent.package.ends_with(&unversioned),
+                "{}",
+                torrent.package
+            );
             let source: serde_json::Value =
                 serde_json::from_slice(include_bytes!("../../../docs/plugins.json")).unwrap();
             let choice = source["plugins"][1]["download"]

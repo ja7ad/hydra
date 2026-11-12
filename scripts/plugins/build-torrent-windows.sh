@@ -75,4 +75,4 @@ EOF
 
 python3 "$repository/plugins/hydra-torrent/build.py" --skip-native-build \
   --platform "windows-$architecture" --native-build "$build/native" \
-  --output "$build/torrent-download-windows-$architecture.hyaplugin"
+  --output "$build/$(python3 "$repository/scripts/plugins/plugin_release.py" name hydra-torrent --platform "windows-$architecture")"

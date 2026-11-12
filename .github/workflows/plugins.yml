@@ -1,0 +1,404 @@
+name: Plugins
+
+# Tests an official plugin when its folder changes, and publishes it when its
+# version is ahead of docs/plugins.json. The path lists mirror the triggers in
+# scripts/plugins/plugin_release.py (a unit test keeps the two in step). The
+# catalog commit that ends a release touches only docs/plugins.json, which is
+# deliberately absent from these lists, so a release never starts another run.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/hydra-youtube/**'
+      - 'plugins/hydra-torrent/**'
+      - 'plugins/build.py'
+      - 'scripts/plugins/plugin_release.py'
+      - 'scripts/plugins/test_plugin_release.py'
+      - 'scripts/plugins/plugin-media-e2e.py'
+      - 'scripts/plugins/signing-e2e.py'
+      - 'scripts/plugins/build-torrent-*.sh'
+      - 'scripts/plugins/torrent-windows.Dockerfile'
+      - 'scripts/plugins/test_torrent_build.py'
+      - 'crates/hydra-plugin/**'
+      - 'crates/hydra-plugin-cli/**'
+      - '.github/workflows/plugins.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/hydra-youtube/**'
+      - 'plugins/hydra-torrent/**'
+      - 'plugins/build.py'
+      - 'scripts/plugins/plugin_release.py'
+      - 'scripts/plugins/test_plugin_release.py'
+      - 'scripts/plugins/plugin-media-e2e.py'
+      - 'scripts/plugins/signing-e2e.py'
+      - 'scripts/plugins/build-torrent-*.sh'
+      - 'scripts/plugins/torrent-windows.Dockerfile'
+      - 'scripts/plugins/test_torrent_build.py'
+      - 'crates/hydra-plugin/**'
+      - 'crates/hydra-plugin-cli/**'
+      - '.github/workflows/plugins.yml'
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: Plugin to test. On main it is also released when its version is ahead of the catalog.
+        type: choice
+        default: all
+        options:
+          - all
+          - hydra-youtube
+          - hydra-torrent
+      force_release:
+        description: >-
+          On main, rebuild and republish the current version even though the
+          catalog already lists it (replaces the release assets and their hashes).
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Runs on main queue instead of cancelling, so a release is never cut off
+# between uploading packages and committing the catalog.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      plugins: ${{ steps.plan.outputs.plugins }}
+      release: ${{ steps.plan.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test release tooling
+        run: python3 -m unittest discover -s scripts/plugins -p 'test_plugin_release.py'
+      - name: List changed paths
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          # A force-push leaves a "before" commit this clone does not have.
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            BASE=$(git rev-parse HEAD^)
+          fi
+          git diff --name-only "$BASE" HEAD | tee "$RUNNER_TEMP/changed.txt"
+      - name: Choose plugins to test and release
+        id: plan
+        env:
+          PLUGIN: ${{ inputs.plugin || 'all' }}
+          FORCE: ${{ inputs.force_release || false }}
+        run: |
+          set -euo pipefail
+          arguments=(--event "$GITHUB_EVENT_NAME" --ref "$GITHUB_REF" --plugin "$PLUGIN")
+          if [ -f "$RUNNER_TEMP/changed.txt" ]; then
+            arguments+=(--changed "$RUNNER_TEMP/changed.txt")
+          fi
+          if [ "$FORCE" = true ]; then
+            arguments+=(--force-release)
+          fi
+          python3 scripts/plugins/plugin_release.py plan "${arguments[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  youtube:
+    name: Verify and build YouTube
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plugins), 'hydra-youtube')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: Swatinem/rust-cache@v2
+      - name: Install extractor test dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg minisign
+      - name: Test resolver and build package
+        run: |
+          cargo test --locked --manifest-path plugins/hydra-youtube/Cargo.toml
+          python3 plugins/build.py hydra-youtube
+          cargo build --locked -p hya-cli -p hya-plugin-cli
+      - name: Verify signing and real media transfers
+        env:
+          HYDRA_E2E_SKIP_BUILD: '1'
+        run: |
+          python3 scripts/plugins/signing-e2e.py
+          python3 scripts/plugins/plugin-media-e2e.py
+      - name: Check package name against the manifest version
+        run: python3 scripts/plugins/plugin_release.py check plugins/hydra-youtube/*.hyaplugin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build-hydra-youtube
+          path: plugins/hydra-youtube/*.hyaplugin
+          if-no-files-found: error
+
+  torrent:
+    name: Verify and build Torrent (${{ matrix.os }})
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plugins), 'hydra-torrent')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: bash scripts/plugins/build-torrent-linux.sh
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install boost openssl@3 nlohmann-json
+      - name: Test resolver and build native package
+        shell: bash
+        run: |
+          python -m unittest discover -s scripts/plugins -p 'test_torrent_build.py'
+          cargo test --locked --manifest-path plugins/hydra-torrent/Cargo.toml
+          if [ "$RUNNER_OS" = Linux ]; then
+            python plugins/hydra-torrent/build.py --skip-native-build
+          else
+            python plugins/hydra-torrent/build.py
+          fi
+          python scripts/plugins/plugin_release.py check target/torrent-download_*.hyaplugin
+      - name: Install swarm test binding
+        run: |
+          python -m pip install --only-binary=:all: libtorrent==2.0.11
+          python -c "import libtorrent; print(libtorrent.version)"
+      - name: Exercise native library with a real local swarm
+        shell: bash
+        run: |
+          library=$(find target/torrent-native-static -maxdepth 2 \( -name 'hydra-torrent-native.dylib' -o -name 'hydra-torrent-native.so' -o -name 'hydra-torrent-native.dll' \) -type f | head -n 1)
+          python plugins/hydra-torrent/tests/native.py "$library"
+          cargo build --locked -p hya-cli
+          cli=target/debug/hydra
+          package=$(find target -maxdepth 1 -name 'torrent-download_*.hyaplugin' -type f | head -n 1)
+          python plugins/hydra-torrent/tests/cli.py "$library" "$cli" "$package"
+          python plugins/hydra-torrent/tests/magnet.py "$library" "$cli" "$package"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build-hydra-torrent-${{ matrix.os }}
+          path: target/torrent-download_*.hyaplugin
+          if-no-files-found: error
+
+  torrent-windows-build:
+    name: Build Windows Torrent with Clang (${{ matrix.arch }})
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plugins), 'hydra-torrent')
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [aarch64, x86_64]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: arm64
+      - uses: Swatinem/rust-cache@v2
+      - name: Test resolver and cross-platform packaging
+        run: |
+          python3 -m unittest discover -s scripts/plugins -p 'test_torrent_build.py'
+          cargo test --locked --manifest-path plugins/hydra-torrent/Cargo.toml
+      - name: Build native package with the local Clang pipeline
+        run: |
+          bash scripts/plugins/build-torrent-windows.sh ${{ matrix.arch }}
+          python3 scripts/plugins/plugin_release.py check target/torrent-windows-${{ matrix.arch }}-cross/*.hyaplugin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: torrent-windows-${{ matrix.arch }}-cross-build
+          path: |
+            target/torrent-windows-${{ matrix.arch }}-cross/torrent-download_*.hyaplugin
+            target/torrent-windows-${{ matrix.arch }}-cross/torrent-download_*.LICENSE
+            target/torrent-windows-${{ matrix.arch }}-cross/native/hydra-torrent-native.dll
+            target/torrent-windows-${{ matrix.arch }}-cross/native/hydra-torrent-native.pdb
+          if-no-files-found: error
+
+  torrent-windows-verify:
+    name: Verify Clang Torrent (${{ matrix.os }})
+    needs: [plan, torrent-windows-build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-11-arm
+            arch: aarch64
+          - os: windows-2022
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      BUILD: target/torrent-windows-${{ matrix.arch }}-cross
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.arch == 'aarch64' && '3.13' || '3.12' }}
+          architecture: ${{ matrix.arch == 'aarch64' && 'arm64' || 'x64' }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: torrent-windows-${{ matrix.arch }}-cross-build
+          path: ${{ env.BUILD }}
+      - name: Exercise Clang native library and installed CLI on Windows
+        shell: bash
+        run: |
+          cargo build --locked -p hya-cli
+          library=$BUILD/native/hydra-torrent-native.dll
+          package=$(ls "$BUILD"/torrent-download_*.hyaplugin)
+          echo "PACKAGE=$package" >> "$GITHUB_ENV"
+          python plugins/hydra-torrent/tests/webseed.py "$library" target/debug/hydra.exe "$package"
+          python plugins/hydra-torrent/tests/magnet.py "$library" target/debug/hydra.exe "$package"
+      - name: Verify v1, v2 and hybrid swarms on Windows x86-64
+        if: matrix.arch == 'x86_64'
+        shell: bash
+        run: |
+          python -m pip install --only-binary=:all: libtorrent==2.0.15
+          library=$BUILD/native/hydra-torrent-native.dll
+          python plugins/hydra-torrent/tests/native.py "$library"
+          python plugins/hydra-torrent/tests/cli.py "$library" target/debug/hydra.exe "$PACKAGE"
+      - name: Preserve Windows native crash symbols
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: torrent-native-symbols-${{ matrix.os }}
+          path: |
+            ${{ env.BUILD }}/native/hydra-torrent-native.dll
+            ${{ env.BUILD }}/native/hydra-torrent-native.pdb
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build-hydra-torrent-${{ matrix.os }}
+          path: ${{ env.BUILD }}/torrent-download_*.hyaplugin
+          if-no-files-found: error
+
+  release:
+    name: Release ${{ matrix.plugin }}
+    needs: [plan, youtube, torrent, torrent-windows-verify]
+    # A plugin that was not selected leaves its jobs skipped, so require that
+    # nothing failed rather than that everything succeeded.
+    if: >-
+      !cancelled() && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
+      && needs.plan.outputs.release != '[]'
+    strategy:
+      # Each release commits the catalog to main; one at a time keeps the
+      # second from racing the first.
+      max-parallel: 1
+      matrix:
+        plugin: ${{ fromJSON(needs.plan.outputs.release) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      PLUGIN: ${{ matrix.plugin }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # main requires a pull request, so the catalog commit is pushed with
+      # PLUGIN_RELEASE_TOKEN (an account or app on the ruleset's bypass list).
+      # Without that secret the default token is used, which works only once
+      # GitHub Actions itself is on the bypass list.
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PLUGIN_RELEASE_TOKEN || github.token }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: plugin-build-${{ matrix.plugin }}*
+          path: unsigned
+          merge-multiple: true
+      - name: Sign packages and check their names against the manifest version
+        env:
+          HYDRA_PLUGIN_SIGNING_KEY: ${{ secrets.HYDRA_PLUGIN_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          cargo build --locked -p hya-plugin-cli
+          mkdir signed
+          for package in unsigned/*.hyaplugin; do
+            output="signed/$(basename "$package")"
+            target/debug/hydra-plugin sign "$package" --output "$output" \
+              --public-key plugins/official.pub --key-env HYDRA_PLUGIN_SIGNING_KEY
+            target/debug/hydra-plugin validate "$output"
+          done
+          python3 scripts/plugins/plugin_release.py check signed/*.hyaplugin
+      # The new packages go up first and the old ones come down last, so the
+      # published catalog points at an existing asset at every step, including
+      # when the catalog push below is rejected.
+      - name: Upload packages to the latest release
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --json tagName --jq .tagName)
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          gh release upload "$tag" signed/*.hyaplugin --clobber
+      - name: Commit the catalog to main
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          main="$RUNNER_TEMP/main"
+          for attempt in 1 2 3 4 5; do
+            # Patch the tip of main, not this run's commit: main may have moved
+            # while the packages were building.
+            git worktree remove --force "$main" 2>/dev/null || true
+            git fetch origin main
+            git worktree add --detach "$main" FETCH_HEAD
+            released=$(python3 scripts/plugins/plugin_release.py catalog "$PLUGIN" signed/*.hyaplugin \
+              --tag "$TAG" --catalog "$main/docs/plugins.json")
+            if git -C "$main" diff --quiet -- docs/plugins.json; then
+              echo "docs/plugins.json already lists $released"
+              exit 0
+            fi
+            git -C "$main" commit -m "chore(plugins): release $released" -- docs/plugins.json
+            if git -C "$main" push origin HEAD:main; then
+              exit 0
+            fi
+            echo "push to main failed (attempt $attempt); retrying on the new tip"
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push the catalog to main. Packages are on $TAG and the previous ones are still there. If main rejects this token, set the PLUGIN_RELEASE_TOKEN secret or let GitHub Actions bypass the ruleset, then run this workflow again."
+          exit 1
+      - name: Remove superseded packages and refresh release checksums
+        run: |
+          set -euo pipefail
+          stale=$(gh release view "$TAG" --json assets --jq '.assets[].name' \
+            | python3 scripts/plugins/plugin_release.py stale "$PLUGIN")
+          for name in $stale; do
+            gh release delete-asset "$TAG" "$name" --yes
+          done
+          if gh release download "$TAG" --pattern SHA256SUMS.txt --dir "$RUNNER_TEMP/sums"; then
+            # shellcheck disable=SC2086
+            python3 scripts/plugins/plugin_release.py checksums "$RUNNER_TEMP/sums/SHA256SUMS.txt" \
+              signed/*.hyaplugin --removed $stale
+            gh release upload "$TAG" "$RUNNER_TEMP/sums/SHA256SUMS.txt" --clobber
+          fi

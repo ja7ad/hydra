@@ -30,13 +30,6 @@ class SigningPackagingTests(unittest.TestCase):
                 archive.writestr(name, contents)
         return path
 
-    def plugin(self, platform='windows-x86_64', module='torrent-windows-x86_64.dll', payload=b'original DLL'):
-        manifest = f'[[native_modules]]\nplatform = "{platform}"\nmodule = "{module}"\n'
-        entries = {'hydra-plugin.toml': manifest, module: payload}
-        self.archive('original-unsigned/unsigned-torrent-download-windows-x86_64.hyaplugin', entries)
-        self.archive('source/plugins/bundled/native/windows-x86_64/torrent-download-windows-x86_64.hyaplugin', entries)
-        self.write('source/target/debug/hydra-plugin.exe')
-
     def app(self, target='x86_64-pc-windows-msvc'):
         for binary in release.BINARIES:
             self.write(f'source/target/{target}/release/{binary}', binary.encode())
@@ -74,36 +67,6 @@ class SigningPackagingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             release.extract(self.root / 'link.zip', self.root / 'stage')
 
-    def test_recovered_dll_must_equal_the_released_plugin(self):
-        self.plugin()
-        release.prepare_plugin(self.root, 'x86_64')
-        self.assertEqual((self.root / 'unsigned-native/torrent-windows-x86_64.dll').read_bytes(), b'original DLL')
-        self.assertTrue((self.root / 'unsigned-native/hydra-plugin.exe').is_file())
-
-    def test_wrong_platform_or_module_is_rejected(self):
-        for platform, module in [('linux-x86_64', 'torrent.dll'), ('windows-x86_64', 'native/torrent.dll')]:
-            with self.subTest(platform=platform, module=module):
-                self.plugin(platform, module)
-                with self.assertRaises(ValueError):
-                    release.prepare_plugin(self.root, 'x86_64')
-
-    def test_changed_recovered_dll_is_rejected(self):
-        self.plugin()
-        self.archive('source/plugins/bundled/native/windows-x86_64/torrent-download-windows-x86_64.hyaplugin',
-                     {'torrent-windows-x86_64.dll': b'different DLL'})
-        with self.assertRaisesRegex(ValueError, 'differs'):
-            release.prepare_plugin(self.root, 'x86_64')
-
-    def test_signed_dll_is_repacked_before_publisher_signing(self):
-        self.plugin()
-        release.prepare_plugin(self.root, 'x86_64')
-        self.write('signed-native/torrent-windows-x86_64.dll', b'signed DLL')
-        with patch.object(release.subprocess, 'run') as run:
-            release.repack_plugin(self.root, 'x86_64')
-        self.assertEqual((self.root / 'plugin-staging/torrent-windows-x86_64.dll').read_bytes(), b'signed DLL')
-        self.assertEqual([call.args[0][1] for call in run.call_args_list], ['pack', 'sign', 'validate'])
-        self.assertIn('HYDRA_PLUGIN_SIGNING_KEY', run.call_args_list[1].args[0])
-
     def test_uninstaller_is_exported_then_signed_copy_is_embedded(self):
         original = b'Section\n  WriteUninstaller "$INSTDIR\\uninstall.exe"\nSectionEnd\n'
         path = self.write('source/scripts/windows/hydra-installer.nsi', original)
@@ -140,12 +103,11 @@ class SigningPackagingTests(unittest.TestCase):
             entries[f'{prefix}/LICENSE'] = b'license'
             self.archive(f'original-windows/{prefix}-1.1.0-windows-amd64.zip', entries)
         self.write('source/target/dist/hydra-1.1.0-windows-portable-amd64.zip')
-        self.write('source/plugins/bundled/native/windows-x86_64/torrent-download-windows-x86_64.hyaplugin')
         release.repack_archives(self.root, 'x86_64', target)
         with zipfile.ZipFile(self.root / 'dist/hydra-1.1.0-windows-amd64.zip') as archive:
             self.assertEqual(archive.read('hydra/hydra.exe'), b'hydra.exe')
             self.assertEqual(archive.read('hydra/LICENSE'), b'license')
-        self.assertEqual(len(list((self.root / 'dist').iterdir())), 5)
+        self.assertEqual(len(list((self.root / 'dist').iterdir())), 4)
 
     def test_arm64_plugin_cli_archive_contains_the_signed_arm64_tool(self):
         target = self.app('aarch64-pc-windows-msvc')
@@ -154,7 +116,6 @@ class SigningPackagingTests(unittest.TestCase):
             self.archive(f'original-windows/{prefix}-1.1.0-windows-arm64.zip', entries)
         self.write(f'source/target/{target}/release/hydra-plugin.exe', b'signed ARM64 plugin CLI')
         self.write('source/target/dist/hydra-1.1.0-windows-portable-arm64.zip')
-        self.write('source/plugins/bundled/native/windows-aarch64/torrent-download-windows-aarch64.hyaplugin')
         release.repack_archives(self.root, 'aarch64', target)
         with zipfile.ZipFile(self.root / 'dist/hydra-plugin-cli-1.1.0-windows-arm64.zip') as archive:
             self.assertEqual(archive.read('hydra-plugin-cli/hydra-plugin.exe'), b'signed ARM64 plugin CLI')
@@ -204,7 +165,6 @@ class SigningPackagingTests(unittest.TestCase):
             self.archive(f'original-windows/{prefix}-1.1.0-windows-amd64.zip', entries)
         self.write('signed-app/uninstall.ps1', b'signed script')
         self.write('source/target/dist/hydra-1.1.0-windows-portable-amd64.zip')
-        self.write('source/plugins/bundled/native/windows-x86_64/torrent-download-windows-x86_64.hyaplugin')
         release.repack_archives(self.root, 'x86_64', target)
         with zipfile.ZipFile(self.root / 'dist/hydra-1.1.0-windows-amd64.zip') as archive:
             self.assertEqual(archive.read('hydra/scripts/uninstall.ps1'), b'signed script')
@@ -217,7 +177,6 @@ class SigningPackagingTests(unittest.TestCase):
             entries = {f'{prefix}/{binary}': b'unsigned' for binary in binaries}
             self.archive(f'original-windows/{prefix}-{version}-windows-arm64.zip', entries)
         self.write(f'source/target/dist/hydra-{version}-windows-portable-arm64.zip')
-        self.write('source/plugins/bundled/native/windows-aarch64/torrent-download-windows-aarch64.hyaplugin')
         release.repack_archives(self.root, 'aarch64', target, version)
         with zipfile.ZipFile(self.root / f'dist/hydra-{version}-windows-arm64.zip') as archive:
             self.assertEqual(archive.read('hydra/hydra.exe'), b'hydra.exe')
@@ -227,6 +186,7 @@ class SigningPackagingTests(unittest.TestCase):
         entries = {'libhydra/bin/hydra.dll': b'unsigned DLL',
                    'libhydra/lib/hydra.lib': b'static library', 'libhydra/include/hydra.h': b'header'}
         self.archive('original-ffi/libhydra-0.9.0-aarch64-pc-windows-msvc.zip', entries)
+        self.write('source/target/debug/hydra-plugin.exe')
         release.prepare_ffi(self.root)
         self.assertEqual((self.root / 'unsigned-native/ffi-0-hydra.dll').read_bytes(), b'unsigned DLL')
         self.write('signed-native/ffi-0-hydra.dll', b'signed DLL')
@@ -241,16 +201,14 @@ class SigningPackagingTests(unittest.TestCase):
                    'libhydra/lib/hydra.dll': b'unsigned first DLL',
                    'libhydra/include/hydra.h': b'header'}
         self.archive('original-ffi/libhydra-1.0.0-x86_64-pc-windows-msvc.zip', entries)
-        self.write('unsigned-native/hydra-plugin.exe', b'plugin tool')
-        self.write('unsigned-native/torrent-windows-x86_64.dll', b'torrent DLL')
+        self.write('source/target/debug/hydra-plugin.exe', b'plugin tool')
         release.prepare_ffi(self.root)
         unsigned = self.root / 'unsigned-native'
         self.assertEqual({path.name for path in unsigned.iterdir()},
-                         {'hydra-plugin.exe', 'torrent-windows-x86_64.dll',
-                          'ffi-0-hydra.dll', 'ffi-1-hydra.dll'})
+                         {'hydra-plugin.exe', 'ffi-0-hydra.dll', 'ffi-1-hydra.dll'})
+        self.assertEqual((unsigned / 'hydra-plugin.exe').read_bytes(), b'plugin tool')
         self.assertEqual((unsigned / 'ffi-0-hydra.dll').read_bytes(), b'unsigned first DLL')
         self.assertEqual((unsigned / 'ffi-1-hydra.dll').read_bytes(), b'unsigned second DLL')
-        self.assertEqual((unsigned / 'torrent-windows-x86_64.dll').read_bytes(), b'torrent DLL')
         self.write('signed-native/ffi-1-hydra.dll', b'signed second DLL')
         self.write('signed-native/ffi-0-hydra.dll', b'signed first DLL')
         release.repack_ffi(self.root)
@@ -267,6 +225,7 @@ class SigningPackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'no DLL'):
             release.prepare_ffi(self.root)
         self.archive('original-ffi/ffi.zip', {'bundle/hydra.dll': b'unsigned'})
+        self.write('source/target/debug/hydra-plugin.exe')
         release.prepare_ffi(self.root)
         with self.assertRaises(FileNotFoundError):
             release.repack_ffi(self.root)
@@ -275,44 +234,10 @@ class SigningPackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'exactly one'):
             release.prepare_ffi(self.root)
 
-    def test_official_bundle_and_individual_packages_use_both_signed_windows_plugins(self):
-        entries = {'youtube-download.hyaplugin': b'youtube'}
-        for platform in ('windows-x86_64', 'windows-aarch64', 'linux-x86_64', 'macos-aarch64'):
-            name = f'torrent-download-{platform}.hyaplugin'
-            entries[f'native/{platform}/{name}'] = platform.encode()
-            self.write(f'signed-plugins/native/{platform}/{name}', platform.encode())
-            self.write(f'native-packages/{name}', platform.encode())
-        self.archive('signed-plugins/hydra-official-plugins.zip', entries)
-        for architecture in ('x86_64', 'aarch64'):
-            self.write(f'signed-windows/torrent-download-windows-{architecture}.hyaplugin',
-                       f'signed {architecture}'.encode())
-        release.refresh_bundle(self.root)
-        with zipfile.ZipFile(self.root / 'signed-plugins/hydra-official-plugins.zip') as archive:
-            for name, content in entries.items():
-                expected = content
-                if '/windows-' in name:
-                    architecture = name.split('/')[1].removeprefix('windows-')
-                    expected = f'signed {architecture}'.encode()
-                    self.assertEqual((self.root / 'signed-plugins' / name).read_bytes(), expected)
-                self.assertEqual(archive.read(name), expected)
-                if name.startswith('native/'):
-                    self.assertEqual((self.root / 'signed-plugins' / pathlib.Path(name).name).read_bytes(), expected)
-
-    def test_missing_signed_windows_plugin_blocks_bundle_publication(self):
-        name = 'torrent-download-windows-x86_64.hyaplugin'
-        self.write(f'signed-plugins/native/windows-x86_64/{name}')
-        self.archive('signed-plugins/hydra-official-plugins.zip', {f'native/windows-x86_64/{name}': b'original'})
-        with self.assertRaises(FileNotFoundError):
-            release.refresh_bundle(self.root)
-        with zipfile.ZipFile(self.root / 'signed-plugins/hydra-official-plugins.zip') as archive:
-            self.assertEqual(archive.read(f'native/windows-x86_64/{name}'), b'original')
-
     def test_cli_dispatches_every_stage_for_arm64(self):
-        for command, function in [('prepare-plugin', 'prepare_plugin'), ('repack-plugin', 'repack_plugin'),
-                                  ('export-uninstaller', 'installer_hook'), ('import-uninstaller', 'installer_hook'),
+        for command, function in [('export-uninstaller', 'installer_hook'), ('import-uninstaller', 'installer_hook'),
                                   ('stage-app', 'stage_app'), ('install-app', 'install_signed_app'), ('repack', 'repack_archives'),
-                                  ('prepare-ffi', 'prepare_ffi'), ('repack-ffi', 'repack_ffi'),
-                                  ('refresh-bundle', 'refresh_bundle')]:
+                                  ('prepare-ffi', 'prepare_ffi'), ('repack-ffi', 'repack_ffi')]:
             with self.subTest(command=command), patch('sys.argv', ['windows-release.py', command, '--architecture', 'aarch64']), patch.object(release, function) as called:
                 release.main()
                 called.assert_called_once()

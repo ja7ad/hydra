@@ -4,10 +4,6 @@ if [ -z "$SIGNPATH_API_TOKEN" ]; then
   echo '::error::Configure the SIGNPATH_API_TOKEN repository secret.'
   exit 1
 fi
-if [ -z "$HYDRA_PLUGIN_SIGNING_KEY" ]; then
-  echo '::error::Configure the HYDRA_PLUGIN_SIGNING_KEY repository secret.'
-  exit 1
-fi
 case "$SIGNING_POLICY" in
   test-signing)
     CERTIFICATE_THUMBPRINT=4924FFE138E36949CA3EDDF03252903CDB65B2AE

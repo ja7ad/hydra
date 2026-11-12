@@ -14,8 +14,6 @@ on:
     secrets:
       SIGNPATH_API_TOKEN:
         required: true
-      HYDRA_PLUGIN_SIGNING_KEY:
-        required: true
 
 permissions:
   contents: read
@@ -35,7 +33,6 @@ jobs:
         id: configuration
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-          HYDRA_PLUGIN_SIGNING_KEY: ${{ secrets.HYDRA_PLUGIN_SIGNING_KEY }}
           SIGNING_POLICY: ${{ inputs.test_signing && 'test-signing' || 'release-signing' }}
           RELEASE_ENABLED: ${{ vars.SIGNPATH_RELEASE_SIGNING_ENABLED }}
           RELEASE_THUMBPRINT: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
@@ -54,13 +51,11 @@ jobs:
             installer_arch: x64
             target: x86_64-pc-windows-msvc
             runner: windows-2022
-            plugin_artifact: official-plugin-build-torrent-windows-2022
           - architecture: aarch64
             arch: arm64
             installer_arch: arm64
             target: aarch64-pc-windows-msvc
             runner: windows-11-arm
-            plugin_artifact: official-plugin-build-torrent-windows-11-arm
     runs-on: ${{ matrix.runner }}
     env:
       ARCHITECTURE: ${{ matrix.architecture }}
@@ -89,12 +84,8 @@ jobs:
           architecture: ${{ matrix.architecture == 'aarch64' && 'arm64' || 'x64' }}
       - uses: actions/download-artifact@v4
         with:
-          name: unsigned-official-plugins
+          name: official-plugin-bundle
           path: source/plugins/bundled
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.plugin_artifact }}
-          path: original-unsigned
       - uses: actions/download-artifact@v4
         with:
           name: unsigned-hydra-windows-${{ matrix.arch }}
@@ -107,16 +98,13 @@ jobs:
         with:
           name: unsigned-libhydra-${{ matrix.target }}
           path: original-ffi
-      - name: Build plugin packaging tool and stage released torrent DLL
+      - name: Stage Windows FFI DLLs and the plugin authoring tool
         shell: bash
         run: |
           set -euo pipefail
           cargo build --locked --manifest-path source/Cargo.toml -p hya-plugin-cli
-          python scripts/signing/windows-release.py prepare-plugin --architecture "$ARCHITECTURE" --version "$VERSION"
-      - name: Stage Windows FFI DLLs
-        shell: bash
-        run: python scripts/signing/windows-release.py prepare-ffi --architecture "$ARCHITECTURE"
-      - name: Sign and verify torrent and FFI DLLs before packaging
+          python scripts/signing/windows-release.py prepare-ffi --architecture "$ARCHITECTURE"
+      - name: Sign and verify FFI DLLs before packaging
         uses: ./.github/actions/sign-windows
         with:
           artifact-name: unsigned-native-${{ matrix.architecture }}
@@ -133,12 +121,7 @@ jobs:
           name: libhydra-${{ matrix.target }}
           path: ffi-dist/*.zip
           if-no-files-found: error
-      - name: Regenerate plugin checksums and publisher signature
-        shell: bash
-        env:
-          HYDRA_PLUGIN_SIGNING_KEY: ${{ secrets.HYDRA_PLUGIN_SIGNING_KEY }}
-        run: python scripts/signing/windows-release.py repack-plugin --architecture "$ARCHITECTURE" --version "$VERSION"
-      - name: Build applications with the signed torrent package embedded
+      - name: Build applications with the released official plugins embedded
         shell: bash
         env:
           HYDRA_OFFICIAL_PLUGIN_DIR: ${{ github.workspace }}/source/plugins/bundled

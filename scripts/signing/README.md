@@ -2,8 +2,8 @@
 
 `release.yml` skips Windows Authenticode signing unless repository variable
 `SIGNPATH_RELEASE_SIGNING_ENABLED` is exactly `true`. With signing disabled,
-Windows application and FFI builds and the official plugin bundle use their
-normal final artifact names, without an `unsigned-` prefix. Release notes state
+Windows application and FFI builds use their normal final artifact names,
+without an `unsigned-` prefix. Release notes state
 that Windows files are not Authenticode signed. Plugin publisher signatures
 remain enabled independently of Authenticode.
 
@@ -11,16 +11,15 @@ When enabled, the release calls the reusable `sign-windows.yml` after the build
 matrix and Windows FFI builds complete, using only the production certificate.
 Both AMD64 and ARM64 pass through signing before release upload. Unsigned inputs
 use `unsigned-` artifact names; publication selects only final artifacts.
-Standalone `hydra-torrent-native.dll` and
-`hydra-torrent-native.pdb` are excluded from release assets; the signed DLL stays
-inside its plugin package. Signing failure blocks publication.
+Official plugins are not part of this pipeline: `plugins.yml` builds and
+publishes them, and the release embeds those published packages unchanged, so
+their checksums match `docs/plugins.json`. Signing failure blocks publication.
 
 The release workflow no longer uses `SIGNPATH_TEST_SIGNING`. Test signing remains
 available to callers of `sign-windows.yml` through its `test_signing` input for
 onboarding; test certificates are not used by the release workflow.
 
-Signing requires repository secrets `SIGNPATH_API_TOKEN` and
-`HYDRA_PLUGIN_SIGNING_KEY`. Production also requires
+Signing requires the repository secret `SIGNPATH_API_TOKEN`. Production also requires
 `SIGNPATH_RELEASE_SIGNING_ENABLED=true` and a production
 `SIGNPATH_CERTIFICATE_THUMBPRINT`, as described below. Production errors never
 fall back to test signing or unsigned files.
@@ -42,19 +41,16 @@ verification enabled, and authorize the release workflow in SignPath if its
 policy requires a workflow allowlist. The submission uses the pinned official
 [SignPath action](https://github.com/SignPath/github-action-submit-signing-request).
 
-The torrent DLL is Authenticode signed, then its plugin checksums and publisher
-signature are regenerated. Applications are rebuilt from the same release SHA
-to embed that package. Applications, portable launcher, PowerShell scripts and
+Applications are rebuilt from the same release SHA with the released official
+plugin packages embedded. Applications, portable launcher, PowerShell scripts and
 exported uninstaller are signed before packaging; setup is signed last. FFI ZIPs
 preserve their own library version, static libraries, headers and documentation.
 FFI DLLs are staged as root-level `ffi-<index>-<name>.dll` files for signing, then
 restored to their original archive paths. The index keeps identical DLL names in
 different directories distinct and avoids relying on nested DLL signing rules.
-The shared official bundle and individual Windows plugin assets are replaced
-together, while Linux and macOS plugin bytes are preserved.
 
-Final artifact names retain `hydra-windows-amd64`, `hydra-windows-arm64`,
-`libhydra-<target>` and `official-plugins`; installation scripts use
+Final artifact names retain `hydra-windows-amd64`, `hydra-windows-arm64` and
+`libhydra-<target>`; installation scripts use
 `windows-installation-scripts`. Release filenames keep their original names
 without any `signed_` or `signed-` prefix, preserving existing download URLs.
 

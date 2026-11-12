@@ -318,17 +318,10 @@ jobs:
           echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-34.0-x86_64-linux" >> "$GITHUB_ENV"
       - name: Scaffold, build, validate and execute all five SDKs
         run: python3 plugins/sdk/test.py
-      - name: Test official bundle staging
-        run: python3 -m unittest discover -s scripts/plugins -p 'test_stage_official.py'
-      - name: Test and package the official YouTube plugin
+      - name: Test official bundle staging and release tooling
         run: |
-          cargo test --manifest-path plugins/hydra-youtube/Cargo.toml
-          python3 plugins/build.py hydra-youtube
-      - name: Verify package signing with disposable keys
-        run: |
-          sudo apt-get update && sudo apt-get install -y minisign
-          cargo build -p hya-cli --bin hydra
-          python3 scripts/plugins/signing-e2e.py
+          python3 -m unittest discover -s scripts/plugins -p 'test_stage_official.py'
+          python3 -m unittest discover -s scripts/plugins -p 'test_plugin_release.py'
       - name: Exercise plugin lifecycle and download through the CLI
         run: python3 scripts/plugins/plugin-e2e.py
       - name: Exercise terminal plugin management through a PTY

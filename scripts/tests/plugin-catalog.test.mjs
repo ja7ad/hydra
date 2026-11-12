@@ -54,7 +54,9 @@ test('each torrent platform has its own download, checksum and install link', ()
   assert.equal(new Set(torrent.download.map(choice => choice.platform)).size, 6);
   for (const choice of torrent.download) {
     assert.equal(new URL(installLink(choice)).searchParams.get('url'), choice.link);
-    assert.match(choice.link, new RegExp(`torrent-download-${choice.platform}\\.hyaplugin$`));
+    // Packages released before plugins.yml keep the unversioned name until their next release.
+    const versioned = `torrent-download_${torrent.version}_${choice.platform.replace('-', '_')}`;
+    assert.match(choice.link, new RegExp(`/(${versioned}|torrent-download-${choice.platform})\\.hyaplugin$`));
     assert.match(choice.sha256, /^[a-f0-9]{64}$/);
   }
 });

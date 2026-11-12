@@ -10,10 +10,12 @@ import subprocess
 import tempfile
 import zipfile
 
+import plugin_release
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--package", type=Path, default=Path("plugins/hydra-youtube/youtube-download.hyaplugin"))
+    parser.add_argument("--package", type=Path, default=Path("plugins/hydra-youtube") / plugin_release.load("hydra-youtube").file_name())
     parser.add_argument("--validator", default="target/debug/hydra-plugin")
     parser.add_argument("--minisign", default="minisign")
     parser.add_argument("--hydra", default="target/debug/hydra")

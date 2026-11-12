@@ -1606,7 +1606,7 @@ pub(crate) mod tests {
             .any(|line| line.contains("cookies") && line.contains("youtube.com")));
         assert!(summary
             .iter()
-            .any(|line| line.contains("yt-dlp") && line.contains("9 permitted")));
+            .any(|line| line.contains("yt-dlp") && line.contains("17 permitted")));
         assert!(summary
             .iter()
             .any(|line| line.contains("download programs")));

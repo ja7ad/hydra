@@ -16,7 +16,6 @@ class ConfigurationTests(unittest.TestCase):
             env = {
                 'PATH': os.environ['PATH'],
                 'SIGNPATH_API_TOKEN': 'fixture-token',
-                'HYDRA_PLUGIN_SIGNING_KEY': 'fixture-key',
                 'SIGNING_POLICY': 'test-signing',
                 'RELEASE_ENABLED': '',
                 'RELEASE_THUMBPRINT': '',
@@ -32,15 +31,12 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(values, {'signing_policy': 'test-signing', 'certificate_thumbprint': TEST_THUMBPRINT})
 
-    def test_missing_api_or_plugin_token_is_reported_without_disclosing_values(self):
-        for name in ('SIGNPATH_API_TOKEN', 'HYDRA_PLUGIN_SIGNING_KEY'):
-            with self.subTest(name=name):
-                result, values = self.configure(**{name: ''})
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(name, result.stdout)
-                self.assertNotIn('fixture-token', result.stdout + result.stderr)
-                self.assertNotIn('fixture-key', result.stdout + result.stderr)
-                self.assertFalse(values)
+    def test_missing_api_token_is_reported_without_disclosing_values(self):
+        result, values = self.configure(SIGNPATH_API_TOKEN='')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('SIGNPATH_API_TOKEN', result.stdout)
+        self.assertNotIn('fixture-token', result.stdout + result.stderr)
+        self.assertFalse(values)
 
     def test_production_requires_explicit_activation(self):
         result, values = self.configure(SIGNING_POLICY='release-signing', RELEASE_THUMBPRINT='A' * 40)

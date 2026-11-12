@@ -92,10 +92,22 @@ pub fn find_program(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
 /// Directories searched for a program: an explicit setting, `PATH`, then the
 /// well-known tool locations.
 pub fn search_dirs(setting_path: Option<&Path>) -> Vec<PathBuf> {
-    search_dirs_with_path(setting_path, std::env::var_os("PATH").as_deref())
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    search_dirs_with_path(
+        setting_path,
+        std::env::var_os("PATH").as_deref(),
+        home.as_deref().map(Path::new),
+    )
 }
 
-fn search_dirs_with_path(setting_path: Option<&Path>, path: Option<&OsStr>) -> Vec<PathBuf> {
+/// Where per-user installers put tools: Deno, pipx and pip `--user`, Bun.
+const HOME_TOOL_DIRS: [&str; 3] = [".deno/bin", ".local/bin", ".bun/bin"];
+
+fn search_dirs_with_path(
+    setting_path: Option<&Path>,
+    path: Option<&OsStr>,
+    home: Option<&Path>,
+) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(p) = setting_path {
         match p.parent() {
@@ -113,6 +125,10 @@ fn search_dirs_with_path(setting_path: Option<&Path>, path: Option<&OsStr>) -> V
         "/snap/bin",
     ] {
         dirs.push(PathBuf::from(extra));
+    }
+    // A desktop launcher's PATH lacks what the user's shell profile adds.
+    if let Some(home) = home {
+        dirs.extend(HOME_TOOL_DIRS.iter().map(|dir| home.join(dir)));
     }
     dirs
 }
@@ -426,7 +442,7 @@ mod tests {
     #[test]
     fn finder_path_includes_homebrew_for_child_runtime_discovery() {
         let inherited = std::env::join_paths(["/usr/bin", "/bin"]).unwrap();
-        let dirs = search_dirs_with_path(None, Some(&inherited));
+        let dirs = search_dirs_with_path(None, Some(&inherited), None);
         assert_eq!(
             &dirs[..2],
             &[PathBuf::from("/usr/bin"), PathBuf::from("/bin")]
@@ -438,10 +454,51 @@ mod tests {
 
     #[test]
     fn absent_path_still_searches_fallback_tool_folders() {
-        let dirs = search_dirs_with_path(None, None);
+        let dirs = search_dirs_with_path(None, None, None);
         assert!(dirs.contains(&PathBuf::from("/opt/homebrew/bin")));
         assert!(dirs.contains(&PathBuf::from("/usr/local/bin")));
         assert!(std::env::join_paths(&dirs).is_ok());
+    }
+
+    #[test]
+    fn per_user_tool_folders_are_searched_after_path_and_system_folders() {
+        let inherited = std::env::join_paths(["/usr/bin"]).unwrap();
+        let home = Path::new("/home/someone");
+        let dirs = search_dirs_with_path(None, Some(&inherited), Some(home));
+        assert_eq!(dirs[0], PathBuf::from("/usr/bin"));
+        let position = |dir: &Path| dirs.iter().position(|d| d == dir).unwrap();
+        for tool_dir in [".deno/bin", ".local/bin", ".bun/bin"] {
+            assert!(position(&home.join(tool_dir)) > position(Path::new("/usr/local/bin")));
+        }
+        assert!(!search_dirs_with_path(None, Some(&inherited), None)
+            .iter()
+            .any(|dir| dir.ends_with(".deno/bin")));
+    }
+
+    #[test]
+    fn the_real_search_path_ends_with_the_users_own_tool_folders() {
+        let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))
+        else {
+            return;
+        };
+        let dirs = search_dirs(None);
+        assert_eq!(dirs.last(), Some(&Path::new(&home).join(".bun/bin")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_runtime_installed_only_under_the_home_folder_is_found() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir().unwrap();
+        let bin = home.path().join(".deno/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let deno = bin.join("hydra-test-deno");
+        std::fs::write(&deno, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&deno, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let with_home = search_dirs_with_path(None, None, Some(home.path()));
+        assert_eq!(find_program("hydra-test-deno", &with_home), Some(deno));
+        let without = search_dirs_with_path(None, None, None);
+        assert_eq!(find_program("hydra-test-deno", &without), None);
     }
 
     #[test]

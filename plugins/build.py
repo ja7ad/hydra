@@ -3,14 +3,18 @@
 from pathlib import Path
 import subprocess
 import sys
-import tomllib
 
 root = Path(__file__).resolve().parent
+sys.path.insert(0, str(root.parent / "scripts/plugins"))
+import plugin_release  # noqa: E402
+
 if len(sys.argv) != 2 or Path(sys.argv[1]).name != sys.argv[1]:
     raise SystemExit("usage: python3 plugins/build.py PLUGIN_FOLDER")
 plugin = root / sys.argv[1]
-cargo = tomllib.loads((plugin / "Cargo.toml").read_text())
-name = cargo["package"].get("metadata", {}).get("hydra", {}).get("package-name", cargo["package"]["name"])
+output = plugin / plugin_release.load(sys.argv[1]).file_name()
+for stale in plugin.glob("*.hyaplugin"):
+    stale.unlink()
 subprocess.run(["cargo", "run", "--manifest-path", str(root.parent / "Cargo.toml"),
                 "-p", "hya-plugin-cli", "--", "build", str(plugin),
-                "--output", str(plugin / (name + ".hyaplugin"))], check=True)
+                "--output", str(output)], check=True)
+print(output)

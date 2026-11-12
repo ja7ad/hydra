@@ -292,38 +292,16 @@ pub async fn run_playlist(
         .unwrap_or_else(|| PathBuf::from("."))
         .join(title);
     let start = std::time::Instant::now();
-    let mut size = 0u64;
-    for (index, entry) in entries.iter().enumerate() {
-        if template
-            .cancel
-            .as_ref()
-            .is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed))
-        {
-            return Err("playlist cancelled".into());
-        }
-        eprintln!(
-            "Playlist {}/{} — {}",
-            index + 1,
-            entries.len(),
-            crate::plugin_ui::clean(entry.title.as_deref().unwrap_or(&entry.id))
-        );
+    let size = run_entries(&entries, template.cancel.as_deref(), |index, entry| {
         let mut job = template.clone();
         job.urls = vec![entry.url.clone()];
         job.output_dir = Some(directory.join(format!("{:03}-{}", index + 1, entry.id)));
         if let Some(options) = &mut job.plugin_options {
             options.only = Some(plugin.into());
         }
-        let (id, item) = crate::plugins::resolve_job(&job)
-            .await?
-            .ok_or_else(|| format!("plugin {plugin} did not resolve playlist item {}", entry.id))?;
-        if !item.entries.is_empty() {
-            return Err("nested playlists are unsupported".into());
-        }
-        let outcome = run(item, job, prefs.clone(), &id)
-            .await
-            .map_err(|error| format!("playlist item {}: {error}", entry.id))?;
-        size = size.saturating_add(outcome.size);
-    }
+        run_playlist_item(job, &prefs, plugin)
+    })
+    .await?;
     Ok(crate::download::Outcome {
         url: template.urls[0].clone(),
         output: directory.to_string_lossy().into_owned(),
@@ -332,6 +310,69 @@ pub async fn run_playlist(
         ok: true,
         ..Default::default()
     })
+}
+
+/// Downloads every entry in order and returns the bytes saved; an entry that
+/// fails is reported and skipped, and only cancellation stops the rest.
+async fn run_entries<F, Fut>(
+    entries: &[hya_plugin_api::PlaylistEntry],
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+    mut download: F,
+) -> Result<u64, String>
+where
+    F: FnMut(usize, &hya_plugin_api::PlaylistEntry) -> Fut,
+    Fut: std::future::Future<Output = Result<crate::download::Outcome, String>>,
+{
+    let mut size = 0u64;
+    let mut failures = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
+        if cancel.is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed)) {
+            return Err("playlist cancelled".into());
+        }
+        eprintln!(
+            "Playlist {}/{} — {}",
+            index + 1,
+            entries.len(),
+            crate::plugin_ui::clean(entry.title.as_deref().unwrap_or(&entry.id))
+        );
+        match download(index, entry).await {
+            Ok(outcome) => size = size.saturating_add(outcome.size),
+            Err(error) => {
+                eprintln!("hydra: playlist item {}: {error}", entry.id);
+                failures.push(format!("{}: {error}", entry.id));
+            }
+        }
+    }
+    playlist_verdict(entries.len(), &failures)?;
+    Ok(size)
+}
+
+async fn run_playlist_item(
+    job: crate::download::Job,
+    prefs: &Preferences,
+    plugin: &str,
+) -> Result<crate::download::Outcome, String> {
+    let (id, item) = crate::plugins::resolve_job(&job)
+        .await?
+        .ok_or_else(|| format!("plugin {plugin} did not resolve it"))?;
+    if !item.entries.is_empty() {
+        return Err("nested playlists are unsupported".into());
+    }
+    run(item, job, prefs.clone(), &id).await
+}
+
+/// One unavailable video must not cost the rest of the playlist, but the run
+/// still fails so scripts notice the gap.
+fn playlist_verdict(total: usize, failures: &[String]) -> Result<(), String> {
+    match failures {
+        [] => Ok(()),
+        [only] if total == 1 => Err(format!("playlist item {only}")),
+        _ => Err(format!(
+            "{} of {total} playlist items failed: {}",
+            failures.len(),
+            failures.join("; ")
+        )),
+    }
 }
 
 fn publish(
@@ -484,4 +525,109 @@ async fn run_transfer(
         note: (progress.state != "complete").then(|| "transfer stopped; resume state saved".into()),
         ..Default::default()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entries(ids: &[&str]) -> Vec<hya_plugin_api::PlaylistEntry> {
+        ids.iter()
+            .map(|id| hya_plugin_api::PlaylistEntry {
+                id: (*id).into(),
+                url: format!("https://example.com/{id}"),
+                title: None,
+            })
+            .collect()
+    }
+
+    fn saved(size: u64) -> Result<crate::download::Outcome, String> {
+        Ok(crate::download::Outcome {
+            size,
+            ok: true,
+            ..Default::default()
+        })
+    }
+
+    #[tokio::test]
+    async fn an_item_that_fails_does_not_stop_the_items_after_it() {
+        let playlist = entries(&["a", "b", "c"]);
+        let mut attempted = Vec::new();
+        let result = run_entries(&playlist, None, |index, entry| {
+            attempted.push((index, entry.id.clone()));
+            let outcome = if entry.id == "b" {
+                Err("track 18: server answered 403 Forbidden".to_owned())
+            } else {
+                saved(10)
+            };
+            async move { outcome }
+        })
+        .await;
+        assert_eq!(
+            attempted,
+            [
+                (0, "a".to_owned()),
+                (1, "b".to_owned()),
+                (2, "c".to_owned())
+            ]
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "1 of 3 playlist items failed: b: track 18: server answered 403 Forbidden"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_clean_playlist_reports_the_bytes_of_every_item() {
+        let playlist = entries(&["a", "b"]);
+        let size = run_entries(&playlist, None, |index, _| async move {
+            saved(100 + index as u64)
+        })
+        .await;
+        assert_eq!(size, Ok(201));
+    }
+
+    #[tokio::test]
+    async fn cancellation_stops_before_the_next_item_starts() {
+        let playlist = entries(&["a", "b", "c"]);
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let mut started = 0;
+        let result = run_entries(&playlist, Some(&cancel), |_, _| {
+            started += 1;
+            cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+            async { saved(1) }
+        })
+        .await;
+        assert_eq!(result.unwrap_err(), "playlist cancelled");
+        assert_eq!(started, 1);
+    }
+
+    #[test]
+    fn a_playlist_succeeds_only_when_every_item_did() {
+        assert_eq!(playlist_verdict(3, &[]), Ok(()));
+    }
+
+    #[test]
+    fn failed_items_are_counted_and_named_after_the_rest_finished() {
+        let failures = [
+            "b: track 18: 403 Forbidden".to_owned(),
+            "c: no tracks".to_owned(),
+        ];
+        assert_eq!(
+            playlist_verdict(5, &failures).unwrap_err(),
+            "2 of 5 playlist items failed: b: track 18: 403 Forbidden; c: no tracks"
+        );
+        assert_eq!(
+            playlist_verdict(2, &failures[..1]).unwrap_err(),
+            "1 of 2 playlist items failed: b: track 18: 403 Forbidden"
+        );
+    }
+
+    #[test]
+    fn a_single_item_playlist_reports_its_failure_plainly() {
+        assert_eq!(
+            playlist_verdict(1, &["a: no tracks match the selection".to_owned()]).unwrap_err(),
+            "playlist item a: no tracks match the selection"
+        );
+    }
 }

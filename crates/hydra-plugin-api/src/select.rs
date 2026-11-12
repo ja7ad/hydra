@@ -132,16 +132,11 @@ pub fn select(plan: &Plan, prefs: &Preferences) -> Selection {
                 .into_iter()
                 .filter(|&i| usable(i))
                 .collect();
+            // A plan may flag several tracks, e.g. every codec of the original language.
             candidates
                 .iter()
                 .copied()
-                .find(|&i| plan.tracks[i].default)
-                .or_else(|| {
-                    candidates
-                        .iter()
-                        .copied()
-                        .max_by_key(|&i| plan.tracks[i].bitrate.unwrap_or(0))
-                })
+                .max_by_key(|&i| (plan.tracks[i].default, plan.tracks[i].bitrate.unwrap_or(0)))
         }),
     };
     chosen.extend(audio);
@@ -299,6 +294,28 @@ mod tests {
             ..Preferences::default()
         };
         assert_eq!(ids(&p, &select(&p, &webm)), ["vp9", "opus"]);
+    }
+
+    #[test]
+    fn several_flagged_audio_tracks_compete_on_bitrate_within_the_container() {
+        let flagged = |id: &str, bitrate: u64, codec: &str| Track {
+            default: true,
+            ..audio(id, bitrate, codec)
+        };
+        let p = plan(vec![
+            video("v", 1080, "avc1"),
+            flagged("original-aac", 128_000, "mp4a.40.2"),
+            flagged("original-opus", 160_000, "opus"),
+            audio("dubbed-opus", 160_000, "opus"),
+            audio("dubbed-aac", 192_000, "mp4a.40.2"),
+        ]);
+        let any = select(&p, &Preferences::default());
+        assert_eq!(ids(&p, &any), ["v", "original-opus"]);
+        let mp4 = Preferences {
+            container: Some("mp4".into()),
+            ..Preferences::default()
+        };
+        assert_eq!(ids(&p, &select(&p, &mp4)), ["v", "original-aac"]);
     }
 
     #[test]

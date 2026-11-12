@@ -1,13 +1,13 @@
 id = "hydra.youtube"
 name = "YouTube Downloader"
 author = "Hydra Team"
-version = "0.1.3"
+version = "0.2.0"
 api = 1
 module = "plugin.wasm"
 license = "MIT OR Apache-2.0"
-welcome = """Install yt-dlp on PATH, or enable 'Download yt-dlp if it is missing' in this plugin’s settings. Choose an installed JavaScript runtime (Node or Deno) when YouTube requires it. Install ffmpeg on PATH to combine video and audio or extract MP3 audio. Add a YouTube video or playlist URL, then choose quality, audio and subtitles before downloading."""
+welcome = """Install yt-dlp on PATH, or enable 'Download yt-dlp if it is missing' in this plugin’s settings. yt-dlp also needs a JavaScript runtime for YouTube: install Deno or Node.js 22 or newer. Install ffmpeg on PATH to combine video and audio or extract MP3 audio. If YouTube asks you to confirm you are not a bot, enable 'Use granted browser cookies'. Add a YouTube video or playlist URL, then choose quality, audio and subtitles before downloading."""
 hooks = ["resolve", "refresh", "check"]
-claims = ["*://*.youtube.com/watch*", "*://youtube.com/watch*", "*://*.youtube.com/shorts/*", "*://youtube.com/shorts/*", "*://youtu.be/*", "*://*.youtube.com/playlist*", "*://youtube.com/playlist*"]
+claims = ["*://*.youtube.com/watch*", "*://youtube.com/watch*", "*://*.youtube.com/shorts/*", "*://youtube.com/shorts/*", "*://*.youtube.com/live/*", "*://youtube.com/live/*", "*://*.youtube.com/embed/*", "*://youtube.com/embed/*", "*://youtu.be/*", "*://*.youtube.com/playlist*", "*://youtube.com/playlist*"]
 
 [permissions]
 http = ["github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"]
@@ -16,29 +16,10 @@ exec_from_data = true
 cookies = ["youtube.com", "*.youtube.com"]
 sources = ["*.googlevideo.com", "*.youtube.com", "youtube.com"]
 
-[[permissions.exec]]
-program = "yt-dlp"
-args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-download", "--", "*"]
-
+# One entry per command line `src/invocation.rs` can build; its tests keep the two in step.
 [[permissions.exec]]
 program = "yt-dlp"
 args = ["--ignore-config", "--no-plugin-dirs", "--version"]
-
-[[permissions.exec]]
-program = "yt-dlp"
-args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-download", "--cookies", "{cookie_file}", "--", "*"]
-
-[[settings]]
-key = "use_cookies"
-label = "Use granted browser cookies"
-type = "bool"
-default = false
-
-[[settings]]
-key = "yt_dlp_path"
-label = "yt-dlp program folder"
-type = "path"
-help = "After changing this folder, grant exec:yt-dlp again to approve and pin the program."
 
 [[permissions.exec]]
 program = "yt-dlp"
@@ -48,28 +29,29 @@ args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-do
 program = "yt-dlp"
 args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-download", "--js-runtimes", "*", "--cookies", "{cookie_file}", "--", "*"]
 
-[[settings]]
-key = "javascript_runtime"
-label = "JavaScript runtime for yt-dlp"
-type = "dropdown"
-options = ["default", "node", "deno"]
-default = "default"
-help = "Recent YouTube extractors need a runtime to solve player challenges. Default uses Deno when installed, otherwise Node."
-
-[[settings]]
-key = "download_backend"
-label = "Download yt-dlp if it is missing"
-type = "boolean"
-default = false
-help = "Fetch the pinned official release for your platform, verify its SHA256, and keep it in this plugin's private folder. Existing approved programs are never replaced automatically."
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-download", "--js-runtimes", "*", "--extractor-args", "*", "--", "*"]
 
 [[permissions.exec]]
 program = "yt-dlp"
-args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-download", "--flat-playlist", "--playlist-end", "512", "--", "*"]
+args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-download", "--js-runtimes", "*", "--extractor-args", "*", "--cookies", "{cookie_file}", "--", "*"]
 
 [[permissions.exec]]
 program = "yt-dlp"
-args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-download", "--flat-playlist", "--playlist-end", "512", "--cookies", "{cookie_file}", "--", "*"]
+args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-download", "--no-js-runtimes", "--js-runtimes", "*", "--", "*"]
+
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-download", "--no-js-runtimes", "--js-runtimes", "*", "--cookies", "{cookie_file}", "--", "*"]
+
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-download", "--no-js-runtimes", "--js-runtimes", "*", "--extractor-args", "*", "--", "*"]
+
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "-J", "--skip-download", "--no-js-runtimes", "--js-runtimes", "*", "--extractor-args", "*", "--cookies", "{cookie_file}", "--", "*"]
 
 [[permissions.exec]]
 program = "yt-dlp"
@@ -78,3 +60,67 @@ args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-d
 [[permissions.exec]]
 program = "yt-dlp"
 args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-download", "--flat-playlist", "--playlist-end", "512", "--js-runtimes", "*", "--cookies", "{cookie_file}", "--", "*"]
+
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-download", "--flat-playlist", "--playlist-end", "512", "--js-runtimes", "*", "--extractor-args", "*", "--", "*"]
+
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-download", "--flat-playlist", "--playlist-end", "512", "--js-runtimes", "*", "--extractor-args", "*", "--cookies", "{cookie_file}", "--", "*"]
+
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-download", "--flat-playlist", "--playlist-end", "512", "--no-js-runtimes", "--js-runtimes", "*", "--", "*"]
+
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-download", "--flat-playlist", "--playlist-end", "512", "--no-js-runtimes", "--js-runtimes", "*", "--cookies", "{cookie_file}", "--", "*"]
+
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-download", "--flat-playlist", "--playlist-end", "512", "--no-js-runtimes", "--js-runtimes", "*", "--extractor-args", "*", "--", "*"]
+
+[[permissions.exec]]
+program = "yt-dlp"
+args = ["--ignore-config", "--no-plugin-dirs", "--yes-playlist", "-J", "--skip-download", "--flat-playlist", "--playlist-end", "512", "--no-js-runtimes", "--js-runtimes", "*", "--extractor-args", "*", "--cookies", "{cookie_file}", "--", "*"]
+
+[[settings]]
+key = "use_cookies"
+label = "Use granted browser cookies"
+type = "bool"
+default = false
+help = "Sends the YouTube cookies you grant Hydra to yt-dlp. Needed when YouTube asks to confirm you are not a bot, and for age-restricted, private or members-only videos."
+
+[[settings]]
+key = "yt_dlp_path"
+label = "yt-dlp program folder"
+type = "path"
+help = "After changing this folder, grant exec:yt-dlp again to approve and pin the program."
+
+[[settings]]
+key = "download_backend"
+label = "Download yt-dlp if it is missing"
+type = "boolean"
+default = false
+help = "Fetch the pinned official release for your platform, verify its SHA256, and keep it in this plugin's private folder. Existing approved programs are never replaced automatically."
+
+[[settings]]
+key = "javascript_runtime"
+label = "JavaScript runtime for yt-dlp"
+type = "dropdown"
+options = ["default", "deno", "node", "quickjs", "bun"]
+default = "default"
+help = "yt-dlp needs a runtime to solve YouTube's player challenges. Default uses Deno when installed, otherwise Node. Choosing one makes yt-dlp use only that runtime."
+
+[[settings]]
+key = "javascript_runtime_path"
+label = "JavaScript runtime folder"
+type = "path"
+help = "Folder or program file of the runtime chosen above, for installs outside PATH such as nvm, fnm or a portable Deno. Leave empty to search PATH."
+
+[[settings]]
+key = "extractor_args"
+label = "YouTube extractor arguments"
+type = "text"
+help = "Advanced: passed to yt-dlp as --extractor-args youtube:… For example player_client=web_safari, or po_token=web.gvs+TOKEN when YouTube demands a PO token. Leave empty for yt-dlp's defaults."
