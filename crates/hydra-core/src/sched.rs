@@ -1726,12 +1726,8 @@ impl Scheduler {
 
     fn worst_busy(&self, exclude: usize) -> Option<usize> {
         let mut best: Option<(usize, u64)> = None;
-        for j in 0..self.conns.len() {
-            if j == exclude {
-                continue;
-            }
-            let c = &self.conns[j];
-            if !c.busy() {
+        for (j, c) in self.conns.iter().enumerate() {
+            if j == exclude || !c.busy() {
                 continue;
             }
             let left = c.range.unwrap().hi.saturating_sub(c.pos);
