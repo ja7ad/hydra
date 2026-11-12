@@ -13,6 +13,7 @@ use crate::dl_indicator::Indicator;
 use iced::window::raw_window_handle::RawWindowHandle;
 use std::cell::Cell;
 use std::ffi::c_void;
+use std::ptr::NonNull;
 use windows_sys::core::{GUID, HRESULT};
 use windows_sys::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
 use windows_sys::Win32::UI::Shell::{
@@ -27,7 +28,7 @@ const IID_ITASKBARLIST3: GUID = GUID::from_u128(0xea1afb91_9e28_4b86_90e9_9e9f8a
 struct Vtbl {
     query_interface: usize,
     add_ref: usize,
-    release: usize,
+    release: unsafe extern "system" fn(*mut c_void) -> u32,
     hr_init: unsafe extern "system" fn(*mut c_void) -> HRESULT,
     add_tab: usize,
     delete_tab: usize,
@@ -38,16 +39,28 @@ struct Vtbl {
     set_progress_state: unsafe extern "system" fn(*mut c_void, *mut c_void, TBPFLAG) -> HRESULT,
 }
 
-thread_local! {
-    /// The taskbar object, created on first use and kept for the life of the
-    /// UI thread. Null while unavailable (no shell, as under some remote
-    /// sessions); creation is retried on the next change.
-    static TASKBAR: Cell<*mut c_void> = const { Cell::new(std::ptr::null_mut()) };
+/// A live `ITaskbarList3`: never null, and initialised.
+#[derive(Clone, Copy)]
+struct Taskbar(NonNull<c_void>);
+
+impl Taskbar {
+    fn vtbl(self) -> &'static Vtbl {
+        // SAFETY: a COM object's first word is its vtable pointer, the
+        // interface asked for is the one `Vtbl` lays out, and the object is
+        // never released once it is kept.
+        unsafe { &**self.0.cast::<*const Vtbl>().as_ptr() }
+    }
 }
 
-fn taskbar() -> Option<*mut c_void> {
-    let known = TASKBAR.get();
-    if !known.is_null() {
+thread_local! {
+    /// The taskbar object, created on first use and kept for the life of the
+    /// UI thread. `None` while unavailable (no shell, as under some remote
+    /// sessions); creation is retried on the next change.
+    static TASKBAR: Cell<Option<Taskbar>> = const { Cell::new(None) };
+}
+
+fn taskbar() -> Option<Taskbar> {
+    if let Some(known) = TASKBAR.get() {
         return Some(known);
     }
     let mut object: *mut c_void = std::ptr::null_mut();
@@ -62,16 +75,21 @@ fn taskbar() -> Option<*mut c_void> {
             &mut object,
         )
     };
-    if created < 0 || object.is_null() {
+    if created < 0 {
         return None;
     }
-    // SAFETY: a COM object's first word is its vtable pointer, and the
-    // interface asked for is the one `Vtbl` lays out.
-    if unsafe { ((**object.cast::<*const Vtbl>()).hr_init)(object) } < 0 {
-        return None;
+    let taskbar = Taskbar(NonNull::new(object)?);
+    let vtbl = taskbar.vtbl();
+    // SAFETY: the object is live and these are its own methods; one that
+    // failed to initialise is given back rather than leaked.
+    unsafe {
+        if (vtbl.hr_init)(object) < 0 {
+            (vtbl.release)(object);
+            return None;
+        }
     }
-    TASKBAR.set(object);
-    Some(object)
+    TASKBAR.set(Some(taskbar));
+    Some(taskbar)
 }
 
 /// The taskbar flag and the completed part out of 100 for an indicator.
@@ -92,15 +110,15 @@ pub fn apply(window: &dyn iced::window::Window, shown: Indicator) {
     let RawWindowHandle::Win32(handle) = handle.as_raw() else {
         return;
     };
-    let Some(object) = taskbar() else {
+    let Some(taskbar) = taskbar() else {
         return;
     };
+    let (object, vtbl) = (taskbar.0.as_ptr(), taskbar.vtbl());
     let hwnd = handle.hwnd.get() as *mut c_void;
     let (flag, done) = state(shown);
     // SAFETY: `object` is the live ITaskbarList3 from `taskbar`, called on
     // the thread that created it; a stale HWND is rejected by the shell.
     unsafe {
-        let vtbl = &**object.cast::<*const Vtbl>();
         (vtbl.set_progress_state)(object, hwnd, flag);
         if flag == TBPF_NORMAL {
             (vtbl.set_progress_value)(object, hwnd, done, 100);
