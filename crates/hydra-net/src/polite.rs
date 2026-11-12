@@ -278,6 +278,11 @@ pub fn parse_http_date(s: &str) -> Option<u64> {
     // A date before the epoch has no `u64` timestamp, and `days_from_civil`
     // would wrap to the far future. Servers send one to delete a cookie
     // (`expires=Thu, 01 Jan 1900 00:00:00 GMT`), so it means "already past".
+    // IMF-fixdate's year is `4DIGIT`. A longer one would overflow
+    // `days_from_civil` and the `* 86_400` after it, so it is not a date.
+    if year > 9999 {
+        return None;
+    }
     if year < 1970 {
         return Some(0);
     }
@@ -615,6 +620,11 @@ mod tests {
         assert_eq!(parse_http_date("Wed, 21 Oct 2015 24:00:00 GMT"), None);
         assert_eq!(parse_http_date("Wed, 21 Oct 2015 07:60:00 GMT"), None);
         assert_eq!(parse_http_date("Wed, 21 Oct 2015 07:28:61 GMT"), None);
+        assert_eq!(parse_http_date("Wed, 21 Oct 10000 07:28:00 GMT"), None);
+        assert_eq!(
+            parse_http_date("Wed, 21 Oct 18446744073709551615 07:28:00 GMT"),
+            None
+        );
     }
 
     #[test]

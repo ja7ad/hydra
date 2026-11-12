@@ -821,6 +821,25 @@ mod tests {
     }
 
     #[test]
+    fn a_pre_epoch_expires_deletes_the_cookie() {
+        let mut jar = CookieJar::new();
+        jar.store_response(&head(&["Set-Cookie: id=1"]), "example.org", "/", NOW);
+        assert_eq!(
+            jar.header_value("example.org", "/", true, NOW).as_deref(),
+            Some("id=1")
+        );
+        jar.store_response(
+            &head(&["Set-Cookie: id=; expires=Mon, 01 Jan 1900 00:00:00 GMT"]),
+            "example.org",
+            "/",
+            NOW,
+        );
+        assert_eq!(jar.header_value("example.org", "/", true, NOW), None);
+        jar.purge(NOW, false);
+        assert!(jar.iter().all(|c| c.name != "id"));
+    }
+
+    #[test]
     fn purge_drops_session_cookies_only_when_asked() {
         let mut jar = CookieJar::new();
         jar.store_response(
