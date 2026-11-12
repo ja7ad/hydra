@@ -1962,6 +1962,61 @@ struct Primary {
     delta: f64,
 }
 
+/// Open the staging file at its full length, off the runtime.
+///
+/// On a volume without sparse files (exFAT, FAT32) every byte of it is
+/// written first, which on a USB stick runs for minutes: the status line
+/// counts it, and Stop ends it between two steps with what was written kept
+/// for the next start.
+#[cfg(not(test))]
+fn staging_growth(_temp: &str) -> hya_net::Growth {
+    hya_net::Growth::Measured
+}
+
+/// Staging files a test has declared to be on a volume without holes.
+#[cfg(test)]
+static WITHOUT_HOLES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+#[cfg(test)]
+fn staging_growth(temp: &str) -> hya_net::Growth {
+    if WITHOUT_HOLES.lock().unwrap().iter().any(|t| t == temp) {
+        hya_net::Growth::Written
+    } else {
+        hya_net::Growth::Measured
+    }
+}
+
+async fn open_staging(
+    temp: &str,
+    size: u64,
+    id: DlId,
+    cancel: &Arc<AtomicBool>,
+    tx: &UnboundedSender<Event>,
+) -> std::io::Result<SparseSink> {
+    let growth = staging_growth(temp);
+    let (temp, cancel, tx) = (temp.to_string(), cancel.clone(), tx.clone());
+    let opened = tokio::task::spawn_blocking(move || {
+        let mut shown = None;
+        SparseSink::create_observed(&temp, size, growth, |filled| {
+            let percent = filled.saturating_mul(100) / size.max(1);
+            if shown != Some(percent) {
+                if shown.is_none() {
+                    crate::log::info(&format!(
+                        "#{id} the volume has no sparse files: allocating {size} bytes first"
+                    ));
+                }
+                shown = Some(percent);
+                let _ = tx.send(Event::Status {
+                    id,
+                    line: format!("{} {percent}%", crate::i18n::tr("Allocating disk space...")),
+                });
+            }
+            !cancel.load(Ordering::Relaxed)
+        })
+    });
+    opened.await.map_err(std::io::Error::other)?
+}
+
 /// Send what the origin accepted on every later request of this download.
 fn wear(spec: &mut StartSpec, guise: hya_net::Guise) {
     if guise == hya_net::Guise::default() {
@@ -2657,8 +2712,16 @@ async fn run_file_download(
         }
     }
 
-    let sink = match SparseSink::create(&temp, size) {
+    let sink = match open_staging(&temp, size, id, &cancel, &tx).await {
         Ok(s) => Arc::new(s),
+        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+            ev(Event::Stopped {
+                id,
+                done: already,
+                held: spec.held.clone(),
+            });
+            return;
+        }
         Err(e) => {
             crate::log::error(&format!("#{id} sink create failed at {temp}: {e}"));
             let denied = e.kind() == std::io::ErrorKind::PermissionDenied;
@@ -3010,8 +3073,16 @@ async fn run_ftp_download(
     if let Some(dir) = std::path::Path::new(&temp).parent() {
         ensure_writable_dir(dir);
     }
-    let sink = match SparseSink::create(&temp, probe.size) {
+    let sink = match open_staging(&temp, probe.size, id, cancel, tx).await {
         Ok(s) => Arc::new(s),
+        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+            ev(Event::Stopped {
+                id,
+                done: start,
+                held: spec.held.clone(),
+            });
+            return;
+        }
         Err(e) => {
             let denied = e.kind() == std::io::ErrorKind::PermissionDenied;
             ev(Event::Failed {
@@ -4132,6 +4203,7 @@ mod tests {
         const EACH: u64 = 1024 * 1024;
         const READ: u64 = 64 * 1024;
 
+        let _alone = super::plugin::RATES_IN_USE.write().await;
         // Built BEFORE the cap is set, as a transfer already running is: the
         // limiter is read per read, so switching the Speed Limiter on has to
         // bind what is in flight.
@@ -9115,6 +9187,100 @@ mod intercepted_page_e2e_tests {
                 .all(|r| r.contains(&own_name) && !r.contains("Referer:")),
             "{requests:?}"
         );
+    }
+
+    fn allocating(events: &[Event]) -> Vec<&String> {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Status { line, .. } if line.starts_with("Allocating disk space") => {
+                    Some(line)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn gui_e2e_a_volume_with_sparse_files_shows_no_allocation_step() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = vec![0x5A; 6 << 20];
+        let origin = origin(body.clone(), None, None, true, false).await;
+        let spec = spec(&origin, dir.path(), "plain.bin");
+        let temp = std::path::PathBuf::from(&spec.temp_path);
+        std::fs::write(&temp, b"").unwrap();
+        let sparse = {
+            std::fs::File::options()
+                .write(true)
+                .open(&temp)
+                .unwrap()
+                .set_len(64 << 20)
+                .unwrap();
+            hya_net::allocated_bytes(&temp).unwrap() < 32 << 20
+        };
+        std::fs::remove_file(&temp).unwrap();
+
+        let events = download(spec.clone()).await;
+
+        assert!(
+            events.iter().any(|e| matches!(e, Event::Finished { .. })),
+            "{events:?}"
+        );
+        if sparse {
+            assert!(allocating(&events).is_empty(), "{events:?}");
+        }
+        assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), body);
+    }
+
+    /// #414 on exFAT and FAT32, on whatever volume the tests run on. Name a
+    /// real one to run it there:
+    /// `HYDRA_NO_HOLES_DIR=/Volumes/EXFAT cargo test -p hya-gui no_sparse_files`.
+    #[tokio::test]
+    async fn gui_e2e_a_volume_with_no_sparse_files_allocates_visibly_and_stops_on_request() {
+        let real = std::env::var_os("HYDRA_NO_HOLES_DIR");
+        let dir = match &real {
+            Some(volume) => tempfile::tempdir_in(volume).unwrap(),
+            None => tempfile::tempdir().unwrap(),
+        };
+        let body: Vec<u8> = (0..12u32 << 20).map(|i| (i % 251) as u8).collect();
+        let origin = origin(body.clone(), None, None, true, false).await;
+        let spec = spec(&origin, dir.path(), "stick.bin");
+        if real.is_none() {
+            WITHOUT_HOLES.lock().unwrap().push(spec.temp_path.clone());
+        }
+
+        // No time limit: a USB stick writes a few megabytes a second.
+        let run = |stop: bool| {
+            let spec = spec.clone();
+            async move {
+                let (tx, mut rx) = unbounded_channel();
+                let final_path = Arc::new(Mutex::new(spec.final_path.clone()));
+                let stop = Arc::new(AtomicBool::new(stop));
+                run_download(spec, stop, Pace::unlimited(), final_path, tx).await;
+                let mut events = Vec::new();
+                while let Ok(event) = rx.try_recv() {
+                    events.push(event);
+                }
+                events
+            }
+        };
+
+        let stopped = run(true).await;
+        assert!(
+            stopped.iter().any(|e| matches!(e, Event::Stopped { .. })),
+            "a stop during allocation is a stop, not a failure: {stopped:?}"
+        );
+        assert!(!std::path::Path::new(&spec.final_path).exists());
+
+        let events = run(false).await;
+
+        let steps = allocating(&events);
+        assert!(steps.len() >= 2, "the allocation was not shown: {events:?}");
+        assert!(
+            events.iter().any(|e| matches!(e, Event::Finished { .. })),
+            "{events:?}"
+        );
+        assert_eq!(tokio::fs::read(&spec.final_path).await.unwrap(), body);
     }
 
     #[tokio::test]

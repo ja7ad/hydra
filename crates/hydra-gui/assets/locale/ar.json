@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "جارٍ قراءة قائمة جودة البث...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "يقرأ مخزن ملفات تعريف الارتباط الخاص بذلك المتصفح للتنزيلات التي تضيفها يدويًا، وللموقع الذي يجري التنزيل منه فقط. التنزيلات التي تلتقطها إضافة هيدرا للمتصفح تحمل بالفعل ملفات تعريف الارتباط الخاصة بالصفحة ولا تتأثر. تعرض نافذة إضافة رابط اسم الملف الذي قُرئ.",
   "Receiving data...": "جارٍ استقبال البيانات...",
+  "Allocating disk space...": "جارٍ حجز مساحة القرص...",
   "Receiving...": "جارٍ الاستقبال...",
   "Record": "تسجيل",
   "Recorded": "تم التسجيل",

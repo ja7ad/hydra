@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "Yayının kalite listesi okunuyor...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "Elle eklediğiniz indirmeler için o tarayıcının kendi çerez deposunu, yalnızca indirmenin yapıldığı site için okur. Hydra tarayıcı eklentisinin yakaladığı indirmeler sayfanın çerezlerini zaten taşır ve bundan etkilenmez. URL Ekle penceresi okunan dosyayı belirtir.",
   "Receiving data...": "Veri alınıyor...",
+  "Allocating disk space...": "Disk alanı ayrılıyor...",
   "Receiving...": "Alınıyor...",
   "Record": "Kaydet",
   "Recorded": "Kaydedildi",

@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "קורא את רשימת האיכויות של השידור...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "קורא את מאגר העוגיות של אותו דפדפן עבור הורדות שאתה מוסיף ידנית, ורק עבור האתר שממנו מתבצעת ההורדה. הורדות שנלכדו על ידי תוסף הדפדפן של Hydra כבר נושאות את העוגיות של הדף ואינן מושפעות. חלון הוסף כתובת URL מציין את הקובץ שנקרא.",
   "Receiving data...": "מקבל נתונים...",
+  "Allocating disk space...": "מקצה שטח דיסק...",
   "Receiving...": "מקבל...",
   "Record": "הקלט",
   "Recorded": "הוקלט",

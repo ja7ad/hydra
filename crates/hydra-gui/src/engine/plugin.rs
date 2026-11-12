@@ -23,6 +23,11 @@ fn rates() -> &'static Mutex<NativeRates> {
     RATES.get_or_init(|| Mutex::new(NativeRates::default()))
 }
 
+/// The rates are one per process, so a test that sets the cap waits out the
+/// tests with a transfer registered: sharing the bucket left it 1 B/s.
+#[cfg(test)]
+pub(super) static RATES_IN_USE: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
+
 fn distribute_rates(state: &NativeRates) {
     super::global_limiter().set_rate(distribute_native_rates(state));
 }
@@ -763,6 +768,8 @@ async fn run_transfer(
     root: std::path::PathBuf,
 ) {
     let started = std::time::Instant::now();
+    #[cfg(test)]
+    let _rates = RATES_IN_USE.read().await;
     let (_rate_guard, control) = NativeRateGuard::register(spec.id, spec.limit.unwrap_or(0));
     let authorization_plugin = plugin.to_owned();
     let program = transfer.engine.clone();

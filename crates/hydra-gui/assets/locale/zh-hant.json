@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "正在讀取串流的畫質清單...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "為您手動新增的下載讀取該瀏覽器自己的 Cookie 儲存區，且僅限於正在下載的網站。由 Hydra 瀏覽器擴充功能擷取的下載已帶有頁面的 Cookie，不受影響。「新增連結」對話框會顯示讀取的檔案。",
   "Receiving data...": "正在接收數據...",
+  "Allocating disk space...": "正在配置磁碟空間...",
   "Receiving...": "正在接收...",
   "Record": "錄製",
   "Recorded": "已錄製",

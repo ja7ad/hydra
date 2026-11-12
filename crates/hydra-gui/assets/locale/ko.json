@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "스트림의 품질 목록을 읽는 중...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "손으로 추가한 다운로드에 대해 해당 브라우저의 쿠키 저장소를 읽으며, 다운로드하는 사이트에 대해서만 읽습니다. Hydra 브라우저 확장이 캡처한 다운로드는 이미 페이지의 쿠키를 가지고 있으므로 영향을 받지 않습니다. URL 추가 창에 읽은 파일이 표시됩니다.",
   "Receiving data...": "데이터 수신 중...",
+  "Allocating disk space...": "디스크 공간 할당 중...",
   "Receiving...": "수신 중...",
   "Record": "녹화",
   "Recorded": "녹화됨",

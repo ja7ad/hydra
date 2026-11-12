@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "Načítání seznamu kvalit datového proudu...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "Načte úložiště cookies daného prohlížeče pro stahování, která přidáte ručně, a to pouze pro web, ze kterého se stahuje. Stahování zachycená rozšířením Hydra už cookies stránky obsahují a nejsou ovlivněna. Dialog Přidat URL uvede soubor, který byl načten.",
   "Receiving data...": "Přijímání dat...",
+  "Allocating disk space...": "Přidělování místa na disku...",
   "Receiving...": "Přijímání...",
   "Record": "Nahrávat",
   "Recorded": "Nahráno",

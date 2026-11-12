@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "Kwaliteitslijst van de stream lezen...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "Leest de eigen cookie-opslag van die browser voor downloads die u met de hand toevoegt, en alleen voor de site waarvan wordt gedownload. Downloads die door de Hydra-browserextensie zijn vastgelegd bevatten de cookies van de pagina al en worden niet beïnvloed. Het venster URL toevoegen noemt het bestand dat is gelezen.",
   "Receiving data...": "Gegevens ontvangen...",
+  "Allocating disk space...": "Schijfruimte toewijzen...",
   "Receiving...": "Ontvangen...",
   "Record": "Opnemen",
   "Recorded": "Opgenomen",

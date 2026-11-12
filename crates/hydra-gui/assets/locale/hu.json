@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "A stream minőségi listájának olvasása...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "A kézzel hozzáadott letöltésekhez az adott böngésző saját sütitárolóját olvassa, és csak ahhoz az oldalhoz, ahonnan a letöltés történik. A Hydra böngészőbővítménye által rögzített letöltések már tartalmazzák az oldal sütijeit, ezeket ez nem érinti. Az URL hozzáadása ablak megnevezi a beolvasott fájlt.",
   "Receiving data...": "Adatok fogadása...",
+  "Allocating disk space...": "Lemezterület lefoglalása...",
   "Receiving...": "Fogadás...",
   "Record": "Rögzítés",
   "Recorded": "Rögzítve",

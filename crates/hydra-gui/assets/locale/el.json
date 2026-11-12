@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "Ανάγνωση λίστας ποιοτήτων της ροής...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "Διαβάζει τον αποθηκευτικό χώρο cookies του συγκεκριμένου προγράμματος περιήγησης για λήψεις που προσθέτετε χειροκίνητα, και μόνο για τον ιστότοπο από τον οποίο γίνεται η λήψη. Οι λήψεις που καταγράφει η επέκταση Hydra περιέχουν ήδη τα cookies της σελίδας και δεν επηρεάζονται. Το παράθυρο «Προσθήκη URL» αναφέρει το αρχείο που διαβάστηκε.",
   "Receiving data...": "Λήψη δεδομένων...",
+  "Allocating disk space...": "Δέσμευση χώρου στον δίσκο...",
   "Receiving...": "Λήψη...",
   "Record": "Εγγραφή",
   "Recorded": "Έγινε εγγραφή",

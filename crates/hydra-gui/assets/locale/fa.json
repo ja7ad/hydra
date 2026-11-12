@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "در حال خواندن فهرست کیفیت پخش...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "کوکی‌های خودِ آن مرورگر را برای دانلودهایی که دستی اضافه می‌کنید می‌خواند، و فقط برای سایتی که از آن دانلود می‌شود. دانلودهایی که افزونهٔ مرورگر هیدرا می‌گیرد از پیش کوکی‌های صفحه را دارند و تأثیری نمی‌پذیرند. پنجرهٔ افزودن پیوند نام فایلی را که خوانده شده نشان می‌دهد.",
   "Receiving data...": "در حال دریافت داده...",
+  "Allocating disk space...": "در حال تخصیص فضای دیسک...",
   "Receiving...": "در حال دریافت...",
   "Record": "ضبط",
   "Recorded": "ضبط شد",

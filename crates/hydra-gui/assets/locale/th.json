@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "กำลังอ่านรายการคุณภาพของสตรีม...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "อ่านที่เก็บคุกกี้ของเบราว์เซอร์นั้นสำหรับการดาวน์โหลดที่คุณเพิ่มเอง และเฉพาะเว็บไซต์ที่กำลังดาวน์โหลดเท่านั้น การดาวน์โหลดที่ส่วนขยายเบราว์เซอร์ Hydra ดักจับมีคุกกี้ของหน้าอยู่แล้วและไม่ได้รับผลกระทบ หน้าต่างเพิ่ม URL จะระบุไฟล์ที่อ่าน",
   "Receiving data...": "กำลังรับข้อมูล...",
+  "Allocating disk space...": "กำลังจัดสรรพื้นที่ดิสก์...",
   "Receiving...": "กำลังรับข้อมูล...",
   "Record": "บันทึก",
   "Recorded": "บันทึกแล้ว",

@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "Đang đọc danh sách chất lượng của luồng...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "Đọc kho cookie của chính trình duyệt đó cho các mục tải xuống bạn thêm thủ công, và chỉ cho trang đang tải về. Các mục tải xuống do tiện ích trình duyệt Hydra bắt được đã mang sẵn cookie của trang và không bị ảnh hưởng. Hộp thoại Thêm URL cho biết tệp đã được đọc.",
   "Receiving data...": "Đang nhận dữ liệu...",
+  "Allocating disk space...": "Đang cấp phát dung lượng đĩa...",
   "Receiving...": "Đang nhận...",
   "Record": "Ghi",
   "Recorded": "Đã ghi",

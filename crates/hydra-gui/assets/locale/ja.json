@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "ストリームの画質リストを読み込み中...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "手動で追加したダウンロードについて、そのブラウザー自身の Cookie ストアを、ダウンロード元のサイトに限って読み込みます。Hydra のブラウザー拡張機能が取得したダウンロードは既にページの Cookie を持っているため影響を受けません。「URLを追加」ダイアログに読み込んだファイル名が表示されます。",
   "Receiving data...": "データ受信中...",
+  "Allocating disk space...": "ディスク領域を確保中...",
   "Receiving...": "受信中...",
   "Record": "録画",
   "Recorded": "録画済み",

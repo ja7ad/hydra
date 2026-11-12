@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "Luetaan lähetyksen laatuluetteloa...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "Lukee kyseisen selaimen oman evästevaraston käsin lisäämiäsi latauksia varten, ja vain siltä sivustolta, josta ladataan. Hydran selainlaajennuksen sieppaamat lataukset sisältävät jo sivun evästeet, eikä tämä vaikuta niihin. Lisää URL-osoite -ikkuna kertoo, mikä tiedosto luettiin.",
   "Receiving data...": "Vastaanotetaan dataa...",
+  "Allocating disk space...": "Varataan levytilaa...",
   "Receiving...": "Vastaanotetaan...",
   "Record": "Nauhoita",
   "Recorded": "Nauhoitettu",

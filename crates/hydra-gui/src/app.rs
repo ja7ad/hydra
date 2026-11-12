@@ -1560,6 +1560,8 @@ pub enum Message {
     /// The folder the user chose after a download failed for want of write
     /// permission on the one it had.
     SaveDirRegranted(DlId, std::path::PathBuf),
+    /// The startup probe could not write to this download folder.
+    FolderAccessDenied(String),
     /// Tasks > Export download URLs: where the picker said the list should go.
     ExportUrlsTo(Option<std::path::PathBuf>),
     /// File > Export settings: where the picker said the file should go.
@@ -2204,23 +2206,22 @@ impl App {
     /// Probe write access to the default download folder; a denial opens the
     /// warning dialog so the user grants access up front instead of at the
     /// first failed download.
+    ///
+    /// Off the UI thread: the probe waits on the system's permission prompt
+    /// for a removable or protected folder, and on a slow or sleeping drive,
+    /// and run here it held the main window back for as long as that took.
     pub fn check_folder_access(&mut self) -> Task<Message> {
         let Some(dir) = self.cfg.categories.first().map(|c| c.dir.clone()) else {
             return Task::none();
         };
-        let probe = std::path::Path::new(&dir).join(".hydra-access-probe");
-        let ok = std::fs::create_dir_all(&dir)
-            .and_then(|()| std::fs::write(&probe, b"ok"))
-            .map(|()| {
-                let _ = std::fs::remove_file(&probe);
-            })
-            .is_ok();
-        if ok {
-            Task::none()
-        } else {
-            crate::log::warn(&format!("no write access to {dir}"));
-            self.ask(ConfirmKind::PermissionWarn { dir })
-        }
+        Task::perform(
+            async move {
+                let probed = dir.clone();
+                let writable = tokio::task::spawn_blocking(move || folder_is_writable(&probed));
+                (!writable.await.unwrap_or(true)).then_some(dir)
+            },
+            |denied| denied.map_or(Message::Noop, Message::FolderAccessDenied),
+        )
     }
 
     /// Move a download's file or partial staging file, or give it another name,
@@ -8143,6 +8144,10 @@ impl App {
                 self.save_dir_regranted(id, dir);
                 self.start_download(id, false)
             }
+            Message::FolderAccessDenied(dir) => {
+                crate::log::warn(&format!("no write access to {dir}"));
+                self.ask(ConfirmKind::PermissionWarn { dir })
+            }
             Message::CloseThis(id) => {
                 match self.windows.remove(&id) {
                     Some(WinKind::Confirm) => {
@@ -9736,6 +9741,17 @@ pub fn sanitize_spans(spans: &[(u64, u64)], size: Option<u64>) -> Vec<(u64, u64)
         }
     }
     out
+}
+
+/// A file can be created in `dir`, creating the folder first if need be.
+fn folder_is_writable(dir: &str) -> bool {
+    let probe = std::path::Path::new(dir).join(".hydra-access-probe");
+    std::fs::create_dir_all(dir)
+        .and_then(|()| std::fs::write(&probe, b"ok"))
+        .map(|()| {
+            let _ = std::fs::remove_file(&probe);
+        })
+        .is_ok()
 }
 
 /// Does the `.part` staging file plausibly contain the recorded spans?
@@ -11577,6 +11593,31 @@ mod tests {
         // converts with it — or a window left on it reads as off every screen.
         let right = display_normalized(rect(1920.0, 0.0, 1920.0, 1080.0), 1.25);
         assert_eq!(right, rect(1536.0, 0.0, 1536.0, 864.0));
+    }
+
+    #[test]
+    fn a_folder_that_cannot_be_written_to_is_reported_and_a_writable_one_is_not() {
+        use super::folder_is_writable;
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("made/on/demand");
+        assert!(folder_is_writable(&nested.to_string_lossy()));
+        assert!(nested.is_dir());
+        assert_eq!(
+            std::fs::read_dir(&nested).unwrap().count(),
+            0,
+            "the probe is removed"
+        );
+
+        let file = dir.path().join("a-file");
+        std::fs::write(&file, b"x").unwrap();
+        assert!(!folder_is_writable(&file.join("below").to_string_lossy()));
+
+        let mut app = App::default();
+        let _ = app.update(Message::FolderAccessDenied("/no/such/place".into()));
+        assert!(matches!(
+            app.confirm,
+            Some(ConfirmKind::PermissionWarn { ref dir }) if dir == "/no/such/place"
+        ));
     }
 
     #[test]

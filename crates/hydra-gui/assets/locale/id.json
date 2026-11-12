@@ -365,6 +365,7 @@
   "Reading the stream's quality list...": "Membaca daftar kualitas stream...",
   "Reads that browser's own cookie store for downloads you add by hand, and only for the site being downloaded from. Downloads captured by the Hydra browser extension already carry the page's cookies and are not affected. The Add URL dialog names the file it read.": "Membaca penyimpanan cookie milik peramban tersebut untuk unduhan yang Anda tambahkan secara manual, dan hanya untuk situs yang sedang diunduh. Unduhan yang ditangkap ekstensi peramban Hydra sudah membawa cookie halaman dan tidak terpengaruh. Dialog Tambah URL menyebutkan berkas yang dibaca.",
   "Receiving data...": "Menerima data...",
+  "Allocating disk space...": "Mengalokasikan ruang disk...",
   "Receiving...": "Menerima...",
   "Record": "Rekam",
   "Recorded": "Direkam",
