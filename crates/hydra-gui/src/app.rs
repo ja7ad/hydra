@@ -1564,6 +1564,8 @@ pub enum Message {
     /// The folder the user chose after a download failed for want of write
     /// permission on the one it had.
     SaveDirRegranted(DlId, std::path::PathBuf),
+    /// The startup probe could not write to this download folder.
+    FolderAccessDenied(String),
     /// Tasks > Export download URLs: where the picker said the list should go.
     ExportUrlsTo(Option<std::path::PathBuf>),
     /// File > Export settings: where the picker said the file should go.
@@ -1603,6 +1605,7 @@ pub enum OptField {
     StartMinimized(bool),
     SpeedTab(bool),
     ProgressBar(bool),
+    ProgressIcon(bool),
     CompletionTab(bool),
     HideButtons(bool),
     ConnDetails(bool),
@@ -1694,6 +1697,12 @@ pub struct App {
     pub state: StateFile,
     pub windows: HashMap<window::Id, WinKind>,
     pub main_id: Option<window::Id>,
+    /// What the tray, Dock and taskbar icons show; `None` until first drawn.
+    pub indicator: Option<crate::dl_indicator::Indicator>,
+    /// Whether the tray arrow was last drawn animated (off in power save).
+    pub icon_animated: bool,
+    /// What each open progress window's own icon shows.
+    pub window_indicator: HashMap<window::Id, crate::dl_indicator::Indicator>,
     /// Multi-selection: click selects, Cmd/Ctrl-click toggles, Shift-click
     /// extends from the anchor. First entry is the primary item.
     pub selected: Vec<DlId>,
@@ -1986,6 +1995,9 @@ impl Default for App {
             state: StateFile::default(),
             windows: HashMap::new(),
             main_id: None,
+            indicator: None,
+            icon_animated: false,
+            window_indicator: HashMap::new(),
             selected: vec![],
             sel_anchor: None,
             mods: iced::keyboard::Modifiers::default(),
@@ -2198,23 +2210,22 @@ impl App {
     /// Probe write access to the default download folder; a denial opens the
     /// warning dialog so the user grants access up front instead of at the
     /// first failed download.
+    ///
+    /// Off the UI thread: the probe waits on the system's permission prompt
+    /// for a removable or protected folder, and on a slow or sleeping drive,
+    /// and run here it held the main window back for as long as that took.
     pub fn check_folder_access(&mut self) -> Task<Message> {
         let Some(dir) = self.cfg.categories.first().map(|c| c.dir.clone()) else {
             return Task::none();
         };
-        let probe = std::path::Path::new(&dir).join(".hydra-access-probe");
-        let ok = std::fs::create_dir_all(&dir)
-            .and_then(|()| std::fs::write(&probe, b"ok"))
-            .map(|()| {
-                let _ = std::fs::remove_file(&probe);
-            })
-            .is_ok();
-        if ok {
-            Task::none()
-        } else {
-            crate::log::warn(&format!("no write access to {dir}"));
-            self.ask(ConfirmKind::PermissionWarn { dir })
-        }
+        Task::perform(
+            async move {
+                let probed = dir.clone();
+                let writable = tokio::task::spawn_blocking(move || folder_is_writable(&probed));
+                (!writable.await.unwrap_or(true)).then_some(dir)
+            },
+            |denied| denied.map_or(Message::Noop, Message::FolderAccessDenied),
+        )
     }
 
     /// Move a download's file or partial staging file, or give it another name,
@@ -2741,7 +2752,78 @@ impl App {
         } else {
             Task::none()
         };
-        Task::batch([skip_taskbar, details_task])
+        Task::batch([skip_taskbar, details_task, self.sync_indicator()])
+    }
+
+    /// Bring the download tray icon and the progress windows' own icons up
+    /// to date. The native surfaces are only touched when the step they
+    /// display has moved.
+    fn sync_indicator(&mut self) -> Task<Message> {
+        let enabled = self.cfg.settings.show_progress_icon;
+        let active = self.state.downloads.iter().filter(|d| d.state.is_active());
+        let next = crate::dl_indicator::aggregate(enabled, active.map(|d| (d.downloaded, d.size)));
+        // Power save keeps the arrow still; a change of that redraws it.
+        let animate = !self.cfg.settings.power_save;
+        let prev = self.indicator.filter(|_| self.icon_animated == animate);
+        if prev != Some(next) {
+            (self.indicator, self.icon_animated) = (Some(next), animate);
+            crate::dl_indicator::show(prev, next, animate);
+        }
+        self.sync_progress_windows()
+    }
+
+    /// Each open progress window shows its own download on its icon (and,
+    /// on Windows, its taskbar button); the main window keeps the logo.
+    fn sync_progress_windows(&mut self) -> Task<Message> {
+        let enabled = self.cfg.settings.show_progress_icon;
+        self.window_indicator
+            .retain(|win, _| self.windows.contains_key(win));
+        let open: Vec<(window::Id, DlId)> = self
+            .windows
+            .iter()
+            .filter_map(|(win, kind)| match kind {
+                WinKind::Progress(dl) => Some((*win, *dl)),
+                _ => None,
+            })
+            .collect();
+        let mut tasks = Vec::new();
+        for (win, dl) in open {
+            let own = self
+                .item(dl)
+                .filter(|d| d.state.is_active())
+                .map(|d| (d.downloaded, d.size));
+            let shown = crate::dl_indicator::aggregate(enabled, own);
+            let prev = self.window_indicator.insert(win, shown);
+            // A window nothing was drawn on yet already shows the idle look.
+            let prev = prev.unwrap_or_default();
+            if prev != shown {
+                tasks.push(progress_window_task(win, prev, shown));
+            }
+        }
+        Task::batch(tasks)
+    }
+
+    /// A click on the download tray icon restores the progress window of
+    /// the newest active download.
+    fn reveal_from_icon(&mut self) -> Task<Message> {
+        let showing = self
+            .indicator
+            .is_some_and(|shown| shown != crate::dl_indicator::Indicator::Idle);
+        let newest = self
+            .state
+            .downloads
+            .iter()
+            .rev()
+            .find(|d| showing && d.state.is_active())
+            .map(|d| d.id);
+        let Some(dl) = newest else {
+            return self.open_window(WinKind::Main);
+        };
+        self.sync_prog_state(dl);
+        match self.win_of(WinKind::Progress(dl)) {
+            Some(win) => Task::batch([window::minimize(win, false), window::gain_focus(win)]),
+            None => self.open_window(WinKind::Progress(dl)),
+        }
     }
 
     fn export_settings(&mut self, path: &std::path::Path) -> Task<Message> {
@@ -3030,11 +3112,14 @@ impl App {
                 main_open_position(self.cfg.settings.window_pos, os_w, &display_bounds())
                     .map_or(window::Position::Centered, window::Position::Specific)
             }
-            (_, None) => window::Position::Centered,
-            (_, Some(origin)) => window::Position::Specific(Point::new(
-                origin.x + (self.main_size.width - os_w) / 2.0,
-                origin.y + (self.main_size.height - os_h) / 2.0,
-            )),
+            _ => {
+                let main = self
+                    .main_pos
+                    .filter(|_| self.win_of(WinKind::Main).is_some())
+                    .map(|origin| iced::Rectangle::new(origin, self.main_size));
+                child_open_position(main, iced::Size::new(os_w, os_h), &display_bounds())
+                    .map_or(window::Position::Centered, window::Position::Specific)
+            }
         };
         // "Hide from taskbar" on Windows is a per-window creation flag, so
         // it reaches windows opened after the toggle (the main window picks
@@ -3067,7 +3152,10 @@ impl App {
             // a minimum straight to winit, so this one is in OS points and
             // does carry the scale.
             min_size: match kind {
-                WinKind::Main => Some(iced::Size::new(main_min_w() * scale, MAIN_MIN_H * scale)),
+                WinKind::Main => Some(iced::Size::new(
+                    main_floor_w(&self.cfg.settings.toolbar) * scale,
+                    MAIN_MIN_H * scale,
+                )),
                 WinKind::Progress(_) => Some(iced::Size::new(os_w, os_h)),
                 _ => None,
             },
@@ -4807,6 +4895,23 @@ impl App {
         self.open_window(WinKind::Power)
     }
 
+    /// Move the main window's floor to the toolbar as it is now shown, and
+    /// widen a window the newly shown buttons no longer fit in.
+    fn refit_main_to_toolbar(&mut self) -> Task<Message> {
+        let Some(id) = self.main_id else {
+            return Task::none();
+        };
+        let floor = main_floor_w(&self.cfg.settings.toolbar);
+        let scale = self.ui_scale();
+        let (width, height) = (self.main_size.width / scale, self.main_size.height / scale);
+        let min = window::set_min_size(id, Some(iced::Size::new(floor, MAIN_MIN_H)));
+        if width > 0.0 && width < floor {
+            Task::batch([min, window::resize(id, iced::Size::new(floor, height))])
+        } else {
+            min
+        }
+    }
+
     /// The countdown ran out (or "now" was pressed): do it.
     fn fire_power_action(&mut self) -> Task<Message> {
         let Some(p) = self.power.take() else {
@@ -5560,7 +5665,10 @@ impl App {
                 // "Hide from taskbar" is a per-window creation flag on
                 // Windows; on X11 it is a hint the window manager only takes
                 // once the window exists, so it is applied here instead.
-                let skip_taskbar = self.skip_taskbar_task(id);
+                let skip_taskbar = Task::batch([self.skip_taskbar_task(id), {
+                    self.window_indicator.remove(&id);
+                    self.sync_progress_windows()
+                }]);
                 let parent = self.attach_to_main(id);
                 // Browser-capture dialogs float above everything: at that
                 // moment this app is in the background and a normal-level
@@ -5697,7 +5805,8 @@ impl App {
                 Task::none()
             }
             Message::WinResized(id, size) => {
-                if self.main_id == Some(id) {
+                // Windows reports a minimized window as having no size.
+                if self.main_id == Some(id) && size.width > 0.0 && size.height > 0.0 {
                     let s = self.ui_scale();
                     self.main_size = iced::Size::new(size.width * s, size.height * s);
                     // Remember it. Marking the config dirty rather than
@@ -5710,7 +5819,7 @@ impl App {
                     // arrives in: below it the size is not one the user
                     // could have dragged to.
                     let resized = Some((self.main_size.width, self.main_size.height));
-                    if size.width >= main_min_w()
+                    if size.width >= main_floor_w(&self.cfg.settings.toolbar)
                         && size.height >= MAIN_MIN_H
                         && self.cfg.settings.window_size != resized
                     {
@@ -5728,7 +5837,7 @@ impl App {
                 self.sweep_pending_deletes();
                 self.schedule_tick();
                 let quota = self.quota_tick();
-                let queue = Task::batch([quota, self.queue_tick()]);
+                let queue = Task::batch([quota, self.queue_tick(), self.sync_indicator()]);
                 self.flush_saves();
                 if self.cfg.settings.monitor_clipboard {
                     Task::batch([queue, iced::clipboard::read().map(Message::ClipboardSeen)])
@@ -5818,6 +5927,9 @@ impl App {
             Message::NativeMenu(id) => {
                 if id == "show_main" {
                     return self.open_window(WinKind::Main);
+                }
+                if id == crate::tray::ICON_CLICKED {
+                    return self.reveal_from_icon();
                 }
                 if id == crate::tray::THEME_CHANGED {
                     crate::tray::refresh_icon();
@@ -6273,6 +6385,7 @@ impl App {
             Message::ToolbarToggle(item) => {
                 if model::toggle_toolbar_item(&mut self.cfg.settings.toolbar, item) {
                     self.save_config();
+                    return self.refit_main_to_toolbar();
                 }
                 Task::none()
             }
@@ -6285,7 +6398,7 @@ impl App {
             Message::ToolbarReset => {
                 self.cfg.settings.toolbar = model::default_toolbar();
                 self.save_config();
-                Task::none()
+                self.refit_main_to_toolbar()
             }
             Message::QueueMenuOpen(start) => {
                 self.queue_menu = Some(start);
@@ -8061,6 +8174,10 @@ impl App {
                 self.save_dir_regranted(id, dir);
                 self.start_download(id, false)
             }
+            Message::FolderAccessDenied(dir) => {
+                crate::log::warn(&format!("no write access to {dir}"));
+                self.ask(ConfirmKind::PermissionWarn { dir })
+            }
             Message::CloseThis(id) => {
                 match self.windows.remove(&id) {
                     Some(WinKind::Confirm) => {
@@ -8524,7 +8641,10 @@ impl App {
                 if let Some(id) = self.main_id {
                     tasks.push(window::set_min_size(
                         id,
-                        Some(iced::Size::new(main_min_w(), MAIN_MIN_H)),
+                        Some(iced::Size::new(
+                            main_floor_w(&self.cfg.settings.toolbar),
+                            MAIN_MIN_H,
+                        )),
                     ));
                 }
                 Task::batch(tasks)
@@ -8555,7 +8675,10 @@ impl App {
                     let scale = self.ui_scale();
                     window::set_min_size(
                         id,
-                        Some(iced::Size::new(main_min_w() * scale, MAIN_MIN_H * scale)),
+                        Some(iced::Size::new(
+                            main_floor_w(&self.cfg.settings.toolbar) * scale,
+                            MAIN_MIN_H * scale,
+                        )),
                     )
                 });
                 if face_changes {
@@ -8804,6 +8927,16 @@ fn sort_keyed<'a, K: Ord>(v: &mut [&'a DownloadItem], asc: bool, key: impl Fn(&D
 /// line — by the time this runs, the queue or download it was guarding is
 /// already done.
 fn run_power_action(action: PowerAction) {
+    crate::log::info(&format!("power action {action:?}: asking the system"));
+    // Forced: Windows reports success and then drops a shutdown that an
+    // application with unsaved work vetoes, and nobody is there to answer it.
+    #[cfg(target_os = "windows")]
+    let result = match action {
+        PowerAction::Shutdown => system_shutdown::force_shutdown(),
+        PowerAction::LogOff => system_shutdown::force_logout(),
+        PowerAction::Sleep => system_shutdown::sleep(),
+    };
+    #[cfg(not(target_os = "windows"))]
     let result = match action {
         PowerAction::Shutdown => system_shutdown::shutdown(),
         PowerAction::LogOff => system_shutdown::logout(),
@@ -8827,12 +8960,12 @@ pub fn display_points() -> Option<iced::Size> {
     Some(display_rect(d).size())
 }
 
-/// Every connected display's bounds in OS points, empty when the platform
-/// will not say.
+/// Every connected display's bounds in OS points, the primary one first,
+/// empty when the platform will not say.
 fn display_bounds() -> Vec<iced::Rectangle> {
-    display_info::DisplayInfo::all()
-        .map(|displays| displays.iter().map(display_rect).collect())
-        .unwrap_or_default()
+    let mut displays = display_info::DisplayInfo::all().unwrap_or_default();
+    displays.sort_by_key(|d| !d.is_primary);
+    displays.iter().map(display_rect).collect()
 }
 
 fn display_rect(d: &display_info::DisplayInfo) -> iced::Rectangle {
@@ -8867,15 +9000,23 @@ fn display_normalized(r: iced::Rectangle, scale: f32) -> iced::Rectangle {
 /// whole toolbar row, which does not wrap — anything past the right edge is
 /// clipped, and a clipped tool is one the user cannot reach.
 ///
-/// The floor is the row as this locale actually draws it. 1050 was measured
-/// against the English labels, and every language that writes "Delete
-/// Completed" as one long compound overran it — so the last tools were
-/// squeezed to nothing and their labels drawn over each other on a window
-/// nobody could narrow any further.
-pub const MAIN_MIN_H: f32 = 600.0;
+/// The floor is the row as this locale actually draws it, not a number
+/// measured once against the English labels: languages that write "Delete
+/// Completed" as one long compound overran that, and English never needed
+/// all of it.
+pub const MAIN_MIN_H: f32 = 480.0;
 
 pub fn main_min_w() -> f32 {
-    crate::ui::toolbar::min_width().max(1050.0)
+    crate::ui::toolbar::min_width()
+}
+
+/// Narrowest the download list and the category tree beside it stay usable.
+const MAIN_MIN_W: f32 = 480.0;
+
+/// Narrowest the main window may get with the toolbar buttons now shown, in
+/// interface units: hiding buttons is what lets the window go narrower.
+fn main_floor_w(toolbar: &[model::ToolbarPref]) -> f32 {
+    crate::ui::toolbar::width_of(toolbar.iter().filter(|p| p.visible).map(|p| p.id)).max(MAIN_MIN_W)
 }
 
 pub fn main_window_size() -> iced::Size {
@@ -8938,6 +9079,50 @@ fn main_open_position(
         }
         _ => None,
     }
+}
+
+/// Where a dialog or progress box opens, in OS points: centred over the main
+/// window while that is showing, centred on the display otherwise, and in
+/// both cases moved the least it takes to sit wholly on one display.
+///
+/// `main` is `None` while the main window is in the tray. A minimized one
+/// reports no area, and one dragged off every display shows on none; both
+/// are centred on the first display, which [`display_bounds`] makes the
+/// primary. `None` when no display is known: the platform centres it then.
+fn child_open_position(
+    main: Option<iced::Rectangle>,
+    child: iced::Size,
+    displays: &[iced::Rectangle],
+) -> Option<Point> {
+    let shown = |d: &iced::Rectangle| {
+        main.and_then(|m| d.intersection(&m))
+            .map_or(0.0, |r| r.width * r.height)
+    };
+    let over = displays
+        .iter()
+        .filter(|d| shown(d) > 0.0)
+        .max_by(|a, b| shown(a).total_cmp(&shown(b)));
+    let display = over.or(displays.first())?;
+    let anchor = main.filter(|_| over.is_some()).unwrap_or(*display);
+    // The bottom of the display belongs to the taskbar or Dock.
+    let usable_h = display.height * 0.95;
+    // `max` last, so a child larger than the display keeps its title bar on
+    // it rather than its far edge.
+    let held = |at: f32, len: f32, from: f32, span: f32| at.min(from + span - len).max(from);
+    Some(Point::new(
+        held(
+            anchor.x + (anchor.width - child.width) / 2.0,
+            child.width,
+            display.x,
+            display.width,
+        ),
+        held(
+            anchor.y + (anchor.height - child.height) / 2.0,
+            child.height,
+            display.y,
+            usable_h,
+        ),
+    ))
 }
 
 /// Windows parks a minimized window at (-32000, -32000) pixels, and reports
@@ -9588,6 +9773,17 @@ pub fn sanitize_spans(spans: &[(u64, u64)], size: Option<u64>) -> Vec<(u64, u64)
     out
 }
 
+/// A file can be created in `dir`, creating the folder first if need be.
+fn folder_is_writable(dir: &str) -> bool {
+    let probe = std::path::Path::new(dir).join(".hydra-access-probe");
+    std::fs::create_dir_all(dir)
+        .and_then(|()| std::fs::write(&probe, b"ok"))
+        .map(|()| {
+            let _ = std::fs::remove_file(&probe);
+        })
+        .is_ok()
+}
+
 /// Does the `.part` staging file plausibly contain the recorded spans?
 ///
 /// Length must match the recorded size exactly — `SparseSink::create` calls
@@ -9883,6 +10079,39 @@ pub(crate) fn resolve_quit_action(win: iced::window::Id, is_windows: bool) -> Me
 #[cfg(target_os = "linux")]
 pub(crate) fn linux_application_id() -> String {
     std::env::var("FLATPAK_ID").unwrap_or_else(|_| "hydra".to_string())
+}
+
+/// Redraw one progress window's own icon for `shown`: its window icon on
+/// Windows and Linux, its taskbar progress on Windows, its minimised Dock
+/// tile on macOS.
+#[allow(unused_variables)]
+fn progress_window_task(
+    win: window::Id,
+    prev: crate::dl_indicator::Indicator,
+    shown: crate::dl_indicator::Indicator,
+) -> Task<Message> {
+    let frame = shown.icon_frame();
+    let redraw = prev.icon_frame() != frame;
+    #[cfg(target_os = "macos")]
+    let icon = if redraw {
+        window::run(win, move |w| {
+            crate::macos_dock::set_miniwindow_icon(w, frame)
+        })
+        .discard()
+    } else {
+        Task::none()
+    };
+    #[cfg(not(target_os = "macos"))]
+    let icon = redraw
+        .then(|| crate::icons::window_icon_for(frame))
+        .flatten()
+        .map_or_else(Task::none, |icon| window::set_icon(win, icon));
+    #[cfg(target_os = "windows")]
+    let icon = Task::batch([
+        icon,
+        window::run(win, move |w| crate::windows_taskbar::apply(w, shown)).discard(),
+    ]);
+    icon
 }
 
 #[cfg(test)]
@@ -11063,6 +11292,127 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn the_progress_icon_follows_active_downloads_and_its_setting() {
+        use crate::dl_indicator::Indicator;
+        let mut app = App::default();
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Idle));
+
+        let mut running = item(1, "/tmp", "a.bin", None, DlState::Receiving);
+        (running.downloaded, running.size) = (25, Some(100));
+        let mut paused = item(2, "/tmp", "b.bin", None, DlState::Paused);
+        (paused.downloaded, paused.size) = (900, Some(1000));
+        app.state.downloads = vec![running, paused];
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Percent(25)));
+
+        app.state.downloads[0].size = None;
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Indeterminate));
+
+        app.cfg.settings.show_progress_icon = false;
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Idle), "switched off");
+
+        app.cfg.settings.show_progress_icon = true;
+        app.state.downloads[0].state = DlState::Paused;
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Idle), "cleared on pause");
+    }
+
+    #[test]
+    fn each_progress_window_shows_its_own_download() {
+        use crate::dl_indicator::Indicator;
+        let mut app = App::default();
+        let mut first = item(1, "/tmp", "a.bin", None, DlState::Receiving);
+        (first.downloaded, first.size) = (10, Some(100));
+        let mut second = item(2, "/tmp", "b.bin", None, DlState::Receiving);
+        (second.downloaded, second.size) = (80, Some(100));
+        app.state.downloads = vec![first, second];
+        let (main, one, two) = (
+            window::Id::unique(),
+            window::Id::unique(),
+            window::Id::unique(),
+        );
+        app.windows.insert(main, WinKind::Main);
+        app.windows.insert(one, WinKind::Progress(1));
+        app.windows.insert(two, WinKind::Progress(2));
+
+        let _ = app.sync_indicator();
+        assert_eq!(app.indicator, Some(Indicator::Percent(45)), "tray: all");
+        assert_eq!(
+            app.window_indicator.get(&one),
+            Some(&Indicator::Percent(10))
+        );
+        assert_eq!(
+            app.window_indicator.get(&two),
+            Some(&Indicator::Percent(80))
+        );
+        assert!(
+            !app.window_indicator.contains_key(&main),
+            "main keeps the logo"
+        );
+
+        app.state.downloads[0].state = DlState::Paused;
+        app.windows.remove(&two);
+        let _ = app.sync_indicator();
+        assert_eq!(app.window_indicator.get(&one), Some(&Indicator::Idle));
+        assert!(
+            !app.window_indicator.contains_key(&two),
+            "closed windows drop out"
+        );
+
+        app.state.downloads[0].state = DlState::Receiving;
+        app.cfg.settings.show_progress_icon = false;
+        let _ = app.sync_indicator();
+        assert_eq!(
+            app.window_indicator.get(&one),
+            Some(&Indicator::Idle),
+            "off"
+        );
+    }
+
+    #[test]
+    fn an_icon_click_restores_the_newest_active_progress_window() {
+        let click = || Message::NativeMenu(crate::tray::ICON_CLICKED.into());
+        let mut app = App::default();
+        let _ = app.update(click());
+        assert!(app.win_of(WinKind::Main).is_some(), "nothing active: main");
+        assert!(app.win_of(WinKind::Progress(2)).is_none());
+
+        app.state.downloads = vec![
+            item(1, "/tmp", "a.bin", None, DlState::Receiving),
+            item(2, "/tmp", "b.bin", None, DlState::Receiving),
+            item(3, "/tmp", "c.bin", None, DlState::Paused),
+        ];
+        let _ = app.update(click());
+        assert!(
+            app.win_of(WinKind::Progress(2)).is_none(),
+            "the arrow is not on the icon yet"
+        );
+        let _ = app.sync_indicator();
+        let _ = app.update(click());
+        let opened = app.win_of(WinKind::Progress(2));
+        assert!(opened.is_some());
+        assert!(app.win_of(WinKind::Progress(1)).is_none());
+        let _ = app.update(click());
+        assert_eq!(
+            app.win_of(WinKind::Progress(2)),
+            opened,
+            "restored, not duplicated"
+        );
+
+        app.cfg.settings.show_progress_icon = false;
+        let _ = app.sync_indicator();
+        app.state.downloads[1].state = DlState::Paused;
+        let _ = app.update(click());
+        assert!(
+            app.win_of(WinKind::Progress(1)).is_none(),
+            "nothing active again: main"
+        );
+    }
+
     fn item(id: DlId, dir: &str, name: &str, queue: Option<&str>, state: DlState) -> DownloadItem {
         DownloadItem {
             id,
@@ -11273,6 +11623,169 @@ mod tests {
         // converts with it — or a window left on it reads as off every screen.
         let right = display_normalized(rect(1920.0, 0.0, 1920.0, 1080.0), 1.25);
         assert_eq!(right, rect(1536.0, 0.0, 1536.0, 864.0));
+    }
+
+    #[test]
+    fn a_folder_that_cannot_be_written_to_is_reported_and_a_writable_one_is_not() {
+        use super::folder_is_writable;
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("made/on/demand");
+        assert!(folder_is_writable(&nested.to_string_lossy()));
+        assert!(nested.is_dir());
+        assert_eq!(
+            std::fs::read_dir(&nested).unwrap().count(),
+            0,
+            "the probe is removed"
+        );
+
+        let file = dir.path().join("a-file");
+        std::fs::write(&file, b"x").unwrap();
+        assert!(!folder_is_writable(&file.join("below").to_string_lossy()));
+
+        let mut app = App::default();
+        let _ = app.update(Message::FolderAccessDenied("/no/such/place".into()));
+        assert!(matches!(
+            app.confirm,
+            Some(ConfirmKind::PermissionWarn { ref dir }) if dir == "/no/such/place"
+        ));
+    }
+
+    #[test]
+    fn the_main_window_may_narrow_as_far_as_the_shown_toolbar_buttons_allow() {
+        use super::{main_floor_w, MAIN_MIN_W};
+        let all = model::default_toolbar();
+        let mut few = all.clone();
+        for pref in &mut few {
+            pref.visible = matches!(
+                pref.id,
+                model::ToolbarItem::AddUrl | model::ToolbarItem::Resume
+            );
+        }
+        let mut one_more = few.clone();
+        one_more[2].visible = true;
+
+        assert!(
+            main_floor_w(&all) > 900.0,
+            "a full row still gets its width"
+        );
+        assert_eq!(main_floor_w(&few), MAIN_MIN_W);
+        assert!(main_floor_w(&one_more) >= main_floor_w(&few));
+        assert!(main_floor_w(&all) > main_floor_w(&one_more));
+    }
+
+    #[test]
+    fn changing_the_toolbar_with_no_main_window_open_touches_nothing() {
+        let mut app = App::default();
+        let _ = app.update(Message::ToolbarToggle(model::ToolbarItem::Stop));
+        let _ = app.update(Message::ToolbarReset);
+        assert_eq!(app.cfg.settings.toolbar, model::default_toolbar());
+        assert!(app.cfg_dirty);
+    }
+
+    #[test]
+    fn a_child_window_opens_wholly_on_the_screen_that_shows_the_main_window() {
+        use super::child_open_position;
+        let rect = |x, y, w, h| iced::Rectangle::new(Point::new(x, y), iced::Size::new(w, h));
+        let screen = [rect(0.0, 0.0, 1920.0, 1080.0)];
+        let progress = iced::Size::new(620.0, 600.0);
+        let over = |main| child_open_position(Some(main), progress, &screen).unwrap();
+
+        assert_eq!(
+            over(rect(400.0, 200.0, 1000.0, 600.0)),
+            Point::new(590.0, 200.0)
+        );
+        // The main window dragged half off the right edge.
+        assert_eq!(
+            over(rect(1113.0, 30.0, 1600.0, 830.0)),
+            Point::new(1300.0, 145.0)
+        );
+        assert_eq!(
+            over(rect(-700.0, -300.0, 1000.0, 600.0)),
+            Point::new(0.0, 0.0)
+        );
+        // Low on the screen: the child stays clear of the taskbar.
+        assert_eq!(
+            over(rect(400.0, 900.0, 1000.0, 600.0)),
+            Point::new(590.0, 426.0)
+        );
+    }
+
+    /// The reported case: with Hydra in the tray or minimized, the File Info,
+    /// progress and "download complete" dialogs opened half off the top-left
+    /// of the screen, centred on a main window that was not there.
+    #[test]
+    fn a_child_window_is_centred_on_the_screen_when_the_main_window_is_not_showing() {
+        use super::child_open_position;
+        let rect = |x, y, w, h| iced::Rectangle::new(Point::new(x, y), iced::Size::new(w, h));
+        let screen = [rect(0.0, 0.0, 1920.0, 1080.0)];
+        let centre = Some(Point::new(650.0, 240.0));
+        let progress = iced::Size::new(620.0, 600.0);
+
+        // In the tray.
+        assert_eq!(child_open_position(None, progress, &screen), centre);
+        // Minimized on Windows: the place it was left, and no area.
+        let minimized = rect(300.0, 90.0, 0.0, 0.0);
+        assert_eq!(
+            child_open_position(Some(minimized), progress, &screen),
+            centre
+        );
+        // Left on a monitor that has since been unplugged.
+        let stranded = rect(5000.0, 5000.0, 1000.0, 600.0);
+        assert_eq!(
+            child_open_position(Some(stranded), progress, &screen),
+            centre
+        );
+
+        // The primary display is listed first, and is the one used.
+        let secondary_then = [
+            rect(0.0, 0.0, 1920.0, 1080.0),
+            rect(-2560.0, 0.0, 2560.0, 1440.0),
+        ];
+        assert_eq!(child_open_position(None, progress, &secondary_then), centre);
+
+        // No display known: left to the platform to centre.
+        assert_eq!(child_open_position(None, progress, &[]), None);
+    }
+
+    #[test]
+    fn a_child_window_fits_small_and_scaled_screens() {
+        use super::child_open_position;
+        let rect = |x, y, w, h| iced::Rectangle::new(Point::new(x, y), iced::Size::new(w, h));
+        let progress = iced::Size::new(620.0, 600.0);
+
+        // 1366x768 at 125% is 1093x614 points; 1024x768; 1280x720 at 150%.
+        for (w, h) in [(1093.0, 614.0), (1024.0, 768.0), (853.0, 480.0)] {
+            let screen = [rect(0.0, 0.0, w, h)];
+            for main in [None, Some(rect(w - 300.0, h - 200.0, 1050.0, 600.0))] {
+                let at = child_open_position(main, progress, &screen).unwrap();
+                assert!(at.x >= 0.0 && at.y >= 0.0, "{w}x{h}: {at:?}");
+                assert!(at.x + progress.width.min(w) <= w, "{w}x{h}: {at:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_child_window_follows_the_main_window_onto_a_second_screen() {
+        use super::child_open_position;
+        let rect = |x, y, w, h| iced::Rectangle::new(Point::new(x, y), iced::Size::new(w, h));
+        let laptop = rect(0.0, 0.0, 1512.0, 982.0);
+        let external = rect(1512.0, -200.0, 2560.0, 1440.0);
+        let dialog = iced::Size::new(600.0, 400.0);
+
+        // Straddling both, mostly on the external one.
+        let straddling = rect(1400.0, 100.0, 1000.0, 600.0);
+        assert_eq!(
+            child_open_position(Some(straddling), dialog, &[laptop, external]),
+            Some(Point::new(1600.0, 200.0))
+        );
+
+        // A dialog taller than the screen keeps its title bar reachable.
+        let tall = child_open_position(
+            Some(rect(100.0, 100.0, 1000.0, 600.0)),
+            iced::Size::new(600.0, 1200.0),
+            &[laptop],
+        );
+        assert_eq!(tall.unwrap().y, 0.0);
     }
 
     #[test]

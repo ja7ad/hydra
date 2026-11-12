@@ -60,6 +60,126 @@ pub fn logo_mono_rgba(white: bool) -> Option<(Vec<u8>, u32, u32)> {
     Some((out, w, h))
 }
 
+/// The icon shown instead of the logo while downloads run: a download arrow
+/// over a tray line, green down to the aggregate progress and grey below it.
+/// Straight RGBA, `size` pixels square. `sheen` is the animation phase: a
+/// bright band at that position on its way down the arrow, `None` for a
+/// still icon. `tile` sets it on a dark rounded square, the shape a Dock
+/// icon wants; a tray or taskbar draws it bare.
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+pub fn download_rgba(
+    frame: crate::dl_indicator::IconFrame,
+    sheen: Option<u8>,
+    size: u32,
+    tile: bool,
+) -> Vec<u8> {
+    let n = size as usize;
+    let mut out = Vec::with_capacity(n * n * 4);
+    for y in 0..n {
+        for x in 0..n {
+            // 2x2 supersampling: the arrow head is all diagonal.
+            let (mut sum, mut hits) = ([0u32; 3], 0u32);
+            for (dx, dy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+                let u = (x as f32 + dx) / n as f32;
+                let v = (y as f32 + dy) / n as f32;
+                if let Some(color) = download_sample(frame, sheen, u, v, tile) {
+                    for (s, c) in sum.iter_mut().zip(color) {
+                        *s += u32::from(c);
+                    }
+                    hits += 1;
+                }
+            }
+            let px = sum.map(|s| s.checked_div(hits).unwrap_or(0) as u8);
+            out.extend_from_slice(&[px[0], px[1], px[2], (hits * 255 / 4) as u8]);
+        }
+    }
+    out
+}
+
+/// The colour of the download icon at `(u, v)` in the unit square, `None`
+/// where it is transparent.
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn download_sample(
+    frame: crate::dl_indicator::IconFrame,
+    sheen: Option<u8>,
+    u: f32,
+    v: f32,
+    tile: bool,
+) -> Option<[u8; 3]> {
+    use crate::dl_indicator::{IconFrame, ICON_STEPS, SHEEN_PHASES};
+    const GREEN: [u8; 3] = [46, 204, 89];
+    const GREEN_SHEEN: [u8; 3] = [170, 255, 190];
+    const REST: [u8; 3] = [150, 156, 163];
+    const REST_SHEEN: [u8; 3] = [214, 218, 223];
+    const SHEEN_HALF: f32 = 0.07;
+    const TILE: [u8; 3] = [28, 34, 43];
+    const TOP: f32 = 0.06;
+    const BOTTOM: f32 = 0.94;
+
+    let (gu, gv) = if tile {
+        ((u - 0.2) / 0.6, (v - 0.2) / 0.6)
+    } else {
+        (u, v)
+    };
+    let off = (gu - 0.5).abs();
+    let arrow = ((TOP..0.5).contains(&gv) && off < 0.15)
+        || ((0.5..0.8).contains(&gv) && off < 0.36 * (0.8 - gv) / 0.3);
+    let base = (0.86..BOTTOM).contains(&gv) && off < 0.36;
+    if arrow || base {
+        let lit = match frame {
+            IconFrame::Bar(n) => {
+                let done = f32::from(n.min(ICON_STEPS)) / f32::from(ICON_STEPS);
+                gv < TOP + (BOTTOM - TOP) * done
+            }
+            // Activity with no fraction to draw: the arrow alone is lit.
+            IconFrame::Indeterminate => arrow,
+            IconFrame::Idle => false,
+        };
+        let shining = sheen.is_some_and(|phase| {
+            let at = (f32::from(phase % SHEEN_PHASES) + 0.5) / f32::from(SHEEN_PHASES);
+            (gv - (TOP + (BOTTOM - TOP) * at)).abs() < SHEEN_HALF
+        });
+        return Some(match (lit, shining) {
+            (true, false) => GREEN,
+            (true, true) => GREEN_SHEEN,
+            (false, false) => REST,
+            (false, true) => REST_SHEEN,
+        });
+    }
+    if tile {
+        const HALF: f32 = 0.44;
+        const RADIUS: f32 = 0.2;
+        let (cx, cy) = ((u - 0.5).abs(), (v - 0.5).abs());
+        let corner = HALF - RADIUS;
+        let inside = cx <= HALF
+            && cy <= HALF
+            && (cx <= corner || cy <= corner || (cx - corner).hypot(cy - corner) <= RADIUS);
+        return inside.then_some(TILE);
+    }
+    None
+}
+
+/// Straight RGBA as a PNG file, the form AppKit takes an icon image in.
+#[cfg(target_os = "macos")]
+pub fn png_bytes(rgba: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut encoder = png::Encoder::new(&mut out, width, height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder.write_header().ok()?.write_image_data(rgba).ok()?;
+    Some(out)
+}
+
+/// The window icon for a download state: the logo when idle, the download
+/// arrow otherwise. Windows and Linux only — a macOS window carries no icon.
+#[cfg(not(target_os = "macos"))]
+pub fn window_icon_for(frame: crate::dl_indicator::IconFrame) -> Option<iced::window::Icon> {
+    if frame == crate::dl_indicator::IconFrame::Idle {
+        return window_icon();
+    }
+    iced::window::icon::from_rgba(download_rgba(frame, None, 64, false), 64, 64).ok()
+}
+
 /// The logo as a window icon: title bar + taskbar on Windows, dock/panel on
 /// Linux. macOS windows carry no icon (the app bundle provides the Dock one).
 pub fn window_icon() -> Option<iced::window::Icon> {
@@ -566,6 +686,107 @@ pub fn info() -> svg::Handle {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    fn pixel(img: &[u8], n: usize, x: usize, y: usize) -> [u8; 4] {
+        img[(y * n + x) * 4..][..4].try_into().unwrap()
+    }
+
+    #[test]
+    fn the_download_arrow_fills_from_the_top_with_progress() {
+        use crate::dl_indicator::IconFrame;
+        const N: usize = 100;
+        const GREEN: [u8; 4] = [46, 204, 89, 255];
+        const REST: [u8; 4] = [150, 156, 163, 255];
+        let draw = |frame| download_rgba(frame, None, N as u32, false);
+
+        let empty = draw(IconFrame::Bar(0));
+        let half = draw(IconFrame::Bar(10));
+        let full = draw(IconFrame::Bar(200));
+        assert_eq!(empty.len(), N * N * 4);
+        assert_eq!(pixel(&empty, N, 50, 20), REST, "shaft");
+        assert_eq!(pixel(&empty, N, 50, 70), REST, "head");
+        assert_eq!(pixel(&empty, N, 50, 90), REST, "tray line");
+        assert_eq!(pixel(&empty, N, 5, 20)[3], 0, "beside the shaft");
+        assert_eq!(pixel(&empty, N, 50, 83)[3], 0, "between head and line");
+        assert_eq!(pixel(&half, N, 50, 20), GREEN);
+        assert_eq!(pixel(&half, N, 50, 70), REST);
+        assert_eq!(pixel(&full, N, 50, 70), GREEN);
+        assert_eq!(pixel(&full, N, 50, 90), GREEN);
+
+        let busy = draw(IconFrame::Indeterminate);
+        assert_eq!(pixel(&busy, N, 50, 70), GREEN);
+        assert_eq!(pixel(&busy, N, 50, 90), REST);
+        assert_eq!(pixel(&draw(IconFrame::Idle), N, 50, 20), REST);
+
+        let edge = (0..N)
+            .map(|x| pixel(&empty, N, x, 65)[3])
+            .any(|a| a > 0 && a < 255);
+        assert!(edge, "the head's diagonal is antialiased");
+    }
+
+    #[test]
+    fn the_sheen_travels_down_the_arrow_and_wraps() {
+        use crate::dl_indicator::{IconFrame, SHEEN_PHASES};
+        const N: usize = 100;
+        let draw = |phase| download_rgba(IconFrame::Bar(10), Some(phase), N as u32, false);
+        let band = |img: &[u8]| -> Vec<usize> {
+            (0..N)
+                .filter(|&y| {
+                    let px = pixel(img, N, 50, y);
+                    px == [170, 255, 190, 255] || px == [214, 218, 223, 255]
+                })
+                .collect()
+        };
+        let still = download_rgba(IconFrame::Bar(10), None, N as u32, false);
+        assert!(band(&still).is_empty());
+
+        let first = draw(0);
+        assert_eq!(pixel(&first, N, 50, 10), [170, 255, 190, 255], "lit part");
+        let mut last_top = 0;
+        for phase in 0..SHEEN_PHASES {
+            let rows = band(&draw(phase));
+            assert!(!rows.is_empty(), "phase {phase} shows a band");
+            assert!(rows[0] >= last_top, "phase {phase} moves down");
+            last_top = rows[0];
+        }
+        assert_eq!(
+            pixel(&draw(5), N, 50, 62),
+            [214, 218, 223, 255],
+            "unlit part"
+        );
+        assert_eq!(draw(SHEEN_PHASES), first, "wraps");
+    }
+
+    #[test]
+    fn the_dock_variant_sits_on_a_rounded_tile() {
+        use crate::dl_indicator::IconFrame;
+        const N: usize = 100;
+        let tile = download_rgba(IconFrame::Bar(20), None, N as u32, true);
+        assert_eq!(pixel(&tile, N, 50, 10), [28, 34, 43, 255], "tile");
+        assert_eq!(pixel(&tile, N, 10, 50), [28, 34, 43, 255], "tile");
+        assert_eq!(pixel(&tile, N, 7, 7)[3], 0, "rounded corner");
+        assert_eq!(pixel(&tile, N, 2, 50)[3], 0, "margin");
+        assert_eq!(pixel(&tile, N, 50, 40), [46, 204, 89, 255], "arrow");
+        assert_eq!(pixel(&tile, N, 50, 74), [46, 204, 89, 255], "tray line");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_dock_icon_round_trips_through_png() {
+        use crate::dl_indicator::IconFrame;
+        let rgba = download_rgba(IconFrame::Bar(7), None, 32, true);
+        let file = png_bytes(&rgba, 32, 32).unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(file))
+            .read_info()
+            .unwrap();
+        let mut back = vec![0u8; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut back).unwrap();
+        assert_eq!((info.width, info.height), (32, 32));
+        assert_eq!(&back[..info.buffer_size()], &rgba[..]);
+        assert!(png_bytes(&rgba, 32, 99).is_none(), "size mismatch");
+    }
+
     /// Windows accepts PNG-compressed icon images only at 256x256; below that
     /// the entry has to be a BITMAPINFOHEADER DIB. An all-PNG .ico still looks
     /// right in Explorer and the Start menu, which decode through the shell,

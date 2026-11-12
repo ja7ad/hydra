@@ -585,6 +585,11 @@ struct ChromeProfile {
     platform: &'static str,
 }
 
+/// `t` is sent with a browser's whole header set, not the plain one.
+pub(crate) fn has_browser_profile(t: &Target) -> bool {
+    chrome_profile(t).is_some()
+}
+
 /// A request made under a Chrome `User-Agent` carries that browser's header
 /// set; every other request keeps the plain one.
 ///

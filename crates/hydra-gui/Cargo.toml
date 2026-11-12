@@ -131,14 +131,19 @@ embed-resource = "3"
 # "Hide Dock icon": NSApplication activation policy (Regular <-> Accessory).
 # Same objc2 generation the tray/menu stack (tray-icon 0.24) already links.
 objc2 = "0.6"
+# The console login time, to tell a login launch from the user opening the app.
+libc = "0.2"
 block2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = [
-    "std", "block2", "NSNotification", "NSOperation", "NSString",
-    "NSAppleEventManager", "NSAppleEventDescriptor", "objc2-core-services",
+    "std", "block2", "NSData", "NSDate", "NSNotification", "NSOperation", "NSString",
+    "NSAppleEventManager", "NSAppleEventDescriptor", "NSTimer", "objc2-core-services",
 ] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "NSApplication",
+    # A progress window's minimised Dock tile as the download arrow
+    # (macos_dock.rs).
+    "NSImage",
     "NSResponder",
     "NSRunningApplication",
     # Pinning the window's colour space to the software surface's — see
