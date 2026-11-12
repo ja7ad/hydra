@@ -1370,7 +1370,11 @@ pub enum Message {
     ShortcutEdit(String, String),
     MouseUp,
     ColResizeStart(Column),
+    /// Double click on a header divider: fit the column to its content.
+    ColAutoFit(Column),
     SchColResizeStart(usize),
+    /// Double click on a Files-tab divider in the scheduler: fit to content.
+    SchColAutoFit(usize),
     /// Left press on a header cell: the start of either a sort (release
     /// without moving) or a drag that reorders the columns.
     HeaderPress(Column),
@@ -2465,26 +2469,31 @@ impl App {
         self.visible().iter().map(|d| d.id).collect()
     }
 
+    /// Whether `d` is listed under the current tree selection.
+    pub fn in_view(&self, d: &DownloadItem) -> bool {
+        match &self.tree_sel {
+            TreeSel::All => true,
+            TreeSel::Cat(c) => d.category.as_deref() == Some(c.as_str()),
+            TreeSel::Unfinished => d.state != DlState::Complete,
+            TreeSel::UnfCat(c) => {
+                d.state != DlState::Complete && d.category.as_deref() == Some(c.as_str())
+            }
+            TreeSel::Finished => d.state == DlState::Complete,
+            TreeSel::FinCat(c) => {
+                d.state == DlState::Complete && d.category.as_deref() == Some(c.as_str())
+            }
+            TreeSel::Queues => d.queue.is_some(),
+            TreeSel::Queue(q) => d.queue.as_deref() == Some(q.as_str()),
+        }
+    }
+
     /// Items shown for the current tree selection, sorted.
     pub fn visible(&self) -> Vec<&DownloadItem> {
         let mut v: Vec<&DownloadItem> = self
             .state
             .downloads
             .iter()
-            .filter(|d| match &self.tree_sel {
-                TreeSel::All => true,
-                TreeSel::Cat(c) => d.category.as_deref() == Some(c.as_str()),
-                TreeSel::Unfinished => d.state != DlState::Complete,
-                TreeSel::UnfCat(c) => {
-                    d.state != DlState::Complete && d.category.as_deref() == Some(c.as_str())
-                }
-                TreeSel::Finished => d.state == DlState::Complete,
-                TreeSel::FinCat(c) => {
-                    d.state == DlState::Complete && d.category.as_deref() == Some(c.as_str())
-                }
-                TreeSel::Queues => d.queue.is_some(),
-                TreeSel::Queue(q) => d.queue.as_deref() == Some(q.as_str()),
-            })
+            .filter(|d| self.in_view(d))
             .collect();
         let (key, asc) = self.sort;
         // Name and Status build a key per item instead of comparing on the
@@ -6120,13 +6129,12 @@ impl App {
                 }
                 if let Some((col, grab_x, start_w)) = self.resizing {
                     if let Some(pref) = self.column_mut(col) {
-                        pref.width =
-                            (start_w + (p.x - grab_x)).clamp(model::COL_MIN_W, model::COL_MAX_W);
+                        pref.width = model::clamp_col_width(start_w + (p.x - grab_x));
                     }
                 }
                 if let Some((col, grab_x, start_w)) = self.sch_resizing {
                     self.cfg.settings.scheduler_column_widths[col] =
-                        (start_w + p.x - grab_x).clamp(model::COL_MIN_W, model::COL_MAX_W);
+                        model::clamp_col_width(start_w + p.x - grab_x);
                 }
                 self.drag_header_to(p.x);
                 Task::none()
@@ -6427,8 +6435,7 @@ impl App {
             Message::MouseUp => {
                 if let Some((col, grab_x, start_w)) = self.sch_resizing.take() {
                     self.cfg.settings.scheduler_column_widths[col] =
-                        (start_w + self.cursor_now().x - grab_x)
-                            .clamp(model::COL_MIN_W, model::COL_MAX_W);
+                        model::clamp_col_width(start_w + self.cursor_now().x - grab_x);
                     self.save_config();
                 }
                 if self.resizing.take().is_some() {
@@ -6461,9 +6468,32 @@ impl App {
                 }
                 Task::none()
             }
+            Message::ColAutoFit(col) => {
+                // The second press of the double click started a drag; the fit
+                // replaces it rather than being undone by it on release.
+                self.resizing = None;
+                let width = crate::ui::table::fit_width(self, col);
+                if let Some(pref) = self.column_mut(col) {
+                    pref.width = width;
+                    self.save_config();
+                }
+                Task::none()
+            }
             Message::SchColResizeStart(col) => {
                 if let Some(&width) = self.cfg.settings.scheduler_column_widths.get(col) {
                     self.sch_resizing = Some((col, self.cursor_now().x, width));
+                }
+                Task::none()
+            }
+            Message::SchColAutoFit(col) => {
+                self.sch_resizing = None;
+                let width = crate::windows::scheduler::fit_width(self, col);
+                if let (Some(width), Some(slot)) = (
+                    width,
+                    self.cfg.settings.scheduler_column_widths.get_mut(col),
+                ) {
+                    *slot = width;
+                    self.save_config();
                 }
                 Task::none()
             }
@@ -15049,6 +15079,103 @@ mod tests {
         assert_eq!(app.sort, (SortKey::Column(Column::Name), false));
         assert_eq!(app.cfg.settings.sort_key, app.sort.0);
         assert_eq!(app.cfg.settings.sort_ascending, app.sort.1);
+    }
+
+    #[test]
+    fn double_click_on_divider_fits_column_to_longest_cell() {
+        let mut app = App::default();
+        app.cfg = model::normalize_config(app.cfg);
+        let long = "a-very-long-video-title-that-never-fits-the-stock-width-in-name.mp4";
+        app.state
+            .downloads
+            .push(item(1, "/d", "a.zip", None, DlState::Queued));
+        app.state
+            .downloads
+            .push(item(2, "/d", long, None, DlState::Queued));
+        app.cursor_cell.set(Point::new(100.0, 10.0));
+        let _ = app.update(Message::ColResizeStart(Column::Name));
+        assert!(app.resizing.is_some());
+        let _ = app.update(Message::ColAutoFit(Column::Name));
+        let wide = app.column_mut(Column::Name).unwrap().width;
+        assert!(wide > Column::Name.default_width());
+        // The button is still down: the drag the second press started must
+        // not carry on and put the pre-fit width back.
+        let _ = app.update(Message::DragTick);
+        let _ = app.update(Message::MouseUp);
+        assert_eq!(app.column_mut(Column::Name).unwrap().width, wide);
+
+        // Shrinks again once the long name is gone.
+        app.state.downloads.retain(|d| d.id == 1);
+        let _ = app.update(Message::ColAutoFit(Column::Name));
+        let narrow = app.column_mut(Column::Name).unwrap().width;
+        assert!(narrow < wide);
+    }
+
+    #[test]
+    fn divider_fit_keeps_the_header_readable_and_stays_within_the_drag_range() {
+        let mut app = App::default();
+        app.cfg = model::normalize_config(app.cfg);
+        let fit = |app: &mut App, col| {
+            let _ = app.update(Message::ColAutoFit(col));
+            app.column_mut(col).unwrap().width
+        };
+
+        // Idle downloads leave Rate empty: the header alone sets the width.
+        let header_only = fit(&mut app, Column::Rate);
+        let label = crate::i18n::tr(Column::Rate.label());
+        assert!(header_only >= crate::font::line_width(&label, crate::theme::FONT_SIZE));
+        app.state
+            .downloads
+            .push(item(1, "/d", "a.zip", None, DlState::Queued));
+        assert_eq!(fit(&mut app, Column::Rate), header_only);
+
+        // Sorting by the column adds the arrow to its header, which needs room.
+        let _ = app.update(Message::SortBy(SortKey::Column(Column::Rate)));
+        assert!(fit(&mut app, Column::Rate) > header_only);
+
+        // A name wider than any column is cut at the drag limit, not past it.
+        app.state
+            .downloads
+            .push(item(2, "/d", &"x".repeat(400), None, DlState::Queued));
+        assert_eq!(fit(&mut app, Column::Name), model::COL_MAX_W);
+    }
+
+    #[test]
+    fn double_click_on_scheduler_divider_fits_column_of_selected_queue() {
+        let mut app = App::default();
+        app.cfg = model::normalize_config(app.cfg);
+        app.sch.queue = app.cfg.queues[0].name.clone();
+        let long = "a-very-long-video-title-that-never-fits-the-stock-width-in-name.mp4";
+        let mut member = item(1, "/d", long, None, DlState::Queued);
+        member.queue = Some(app.sch.queue.clone());
+        app.state.downloads.push(member);
+        // Outside the queue: must not widen the column.
+        app.state
+            .downloads
+            .push(item(2, "/d", &long.repeat(4), None, DlState::Queued));
+
+        app.cursor_cell.set(Point::new(100.0, 10.0));
+        let _ = app.update(Message::SchColResizeStart(0));
+        let _ = app.update(Message::SchColAutoFit(0));
+        let _ = app.update(Message::MouseUp);
+        assert!(app.sch_resizing.is_none());
+        let wide = app.cfg.settings.scheduler_column_widths[0];
+        assert!(wide > Settings::default().scheduler_column_widths[0]);
+        // Exactly what the member alone needs: the outsider, which would reach
+        // the drag limit, plays no part.
+        let outsider = app.state.downloads.pop().unwrap();
+        assert_eq!(crate::windows::scheduler::fit_width(&app, 0), Some(wide));
+        app.state.downloads.push(outsider);
+        let _ = app.update(Message::SchColAutoFit(0));
+        assert_eq!(app.cfg.settings.scheduler_column_widths[0], wide);
+
+        app.state.downloads.retain(|d| d.id == 2);
+        let _ = app.update(Message::SchColAutoFit(0));
+        assert!(app.cfg.settings.scheduler_column_widths[0] < wide);
+
+        let before = app.cfg.settings.scheduler_column_widths;
+        let _ = app.update(Message::SchColAutoFit(4));
+        assert_eq!(app.cfg.settings.scheduler_column_widths, before);
     }
 
     #[test]

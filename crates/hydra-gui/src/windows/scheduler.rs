@@ -328,27 +328,70 @@ fn schedule_tab<'a>(q: &'a QueueDef) -> El<'a> {
     col.into()
 }
 
+/// Cell `index` of a queue member's row, as [`files_tab`] paints it and
+/// [`fit_width`] measures it.
+fn file_text(d: &crate::model::DownloadItem, index: usize) -> String {
+    match index {
+        0 => d.file_name.clone(),
+        1 => d.size.map(fmt::size2).unwrap_or_default(),
+        2 => d.status_text(),
+        _ => match d.state {
+            DlState::Receiving => d.eta_secs.map(fmt::eta).unwrap_or_default(),
+            _ => String::new(),
+        },
+    }
+}
+
+/// The four cells of a queue member's row.
+fn file_texts(d: &crate::model::DownloadItem) -> [String; 4] {
+    std::array::from_fn(|i| file_text(d, i))
+}
+
+const FILE_HEADERS: [&str; 4] = ["File Name", "Size", "Status", "Time Left"];
+
+/// Whether `d` belongs to the queue selected on the left: a row
+/// [`files_tab`] paints and [`fit_width`] measures.
+fn in_selected_queue(app: &App, d: &crate::model::DownloadItem) -> bool {
+    d.queue.as_deref() == Some(app.sch.queue.as_str())
+}
+
+/// Width at which Files-tab column `index` shows its header and every file
+/// of the selected queue untruncated, within the draggable range. `None` for
+/// an index past the last column.
+pub fn fit_width(app: &App, index: usize) -> Option<f32> {
+    let header = FILE_HEADERS.get(index)?;
+    // The header cell is narrower than its column by the divider's width.
+    let mut w = crate::font::line_width(&tr(header), theme::FONT_SIZE) + COL_GRIP;
+    for d in app
+        .state
+        .downloads
+        .iter()
+        .filter(|d| in_selected_queue(app, d))
+    {
+        let text = file_text(d, index);
+        w = w.max(crate::font::line_width(&text, theme::FONT_SIZE));
+    }
+    // `cell` has no padding; one pixel each side is rounding slack, so a text
+    // measured at a fractional width is never cut by its last pixel.
+    Some(crate::model::clamp_col_width(w.ceil() + 2.0))
+}
+
 fn files_tab(app: &App) -> El<'_> {
-    let name = app.sch.queue.clone();
-    let q = app.cfg.queues.iter().find(|q| q.name == name);
+    let q = app.cfg.queues.iter().find(|q| q.name == app.sch.queue);
     let files_at_once = q.map(|q| q.files_at_once).unwrap_or(4);
 
     let mut members: Vec<&crate::model::DownloadItem> = app
         .state
         .downloads
         .iter()
-        .filter(|d| d.queue.as_deref() == Some(name.as_str()))
+        .filter(|d| in_selected_queue(app, d))
         .collect();
     members.sort_by_key(|d| d.q_order);
 
     let widths = app.cfg.settings.scheduler_column_widths;
     let table_width = widths.iter().sum::<f32>() + 8.0;
     let mut header = row![].spacing(0);
-    for (index, (label, width)) in ["File Name", "Size", "Status", "Time Left"]
-        .into_iter()
-        .zip(widths)
-        .enumerate()
-    {
+    for (index, (label, width)) in FILE_HEADERS.into_iter().zip(widths).enumerate() {
         header = header.push(cell(tr(label), width - COL_GRIP)).push(
             mouse_area(
                 container(iced::widget::rule::vertical(1))
@@ -356,13 +399,15 @@ fn files_tab(app: &App) -> El<'_> {
                     .height(20.0),
             )
             .interaction(iced::mouse::Interaction::ResizingHorizontally)
-            .on_press(Message::SchColResizeStart(index)),
+            .on_press(Message::SchColResizeStart(index))
+            .on_double_click(Message::SchColAutoFit(index)),
         );
     }
     let mut list = column![header.padding([2, 4])]
         .spacing(1)
         .width(table_width);
     for d in &members {
+        let [name, size, status, time_left] = file_texts(d);
         let selected = app.sch.sel_file == Some(d.id);
         let dragging = app.sch.drag == Some(d.id);
         // Press starts a drag (and selects); dragging over another row
@@ -371,16 +416,10 @@ fn files_tab(app: &App) -> El<'_> {
             mouse_area(
                 container(
                     row![
-                        cell(d.file_name.clone(), widths[0]),
-                        cell(d.size.map(fmt::size2).unwrap_or_default(), widths[1]),
-                        cell(d.status_text(), widths[2]),
-                        cell(
-                            match d.state {
-                                DlState::Receiving => d.eta_secs.map(fmt::eta).unwrap_or_default(),
-                                _ => String::new(),
-                            },
-                            widths[3],
-                        ),
+                        cell(name, widths[0]),
+                        cell(size, widths[1]),
+                        cell(status, widths[2]),
+                        cell(time_left, widths[3]),
                     ]
                     .spacing(0),
                 )

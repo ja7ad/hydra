@@ -55,24 +55,30 @@ fn total_width(c: &[(Column, f32)]) -> f32 {
     c.iter().map(|(_, w)| w).sum::<f32>() + GRIP * c.len() as f32
 }
 
+/// What a header cell reads: the column's title, with the sort arrow when the
+/// list is sorted by it. Shared by painting and by [`fit_width`].
+fn header_label(app: &App, col: Column) -> String {
+    let arrow = if app.sort.0 == SortKey::Column(col) {
+        if app.sort.1 {
+            " \u{25b4}"
+        } else {
+            " \u{25be}"
+        }
+    } else {
+        ""
+    };
+    format!("{}{arrow}", tr(col.label()))
+}
+
 fn header<'a>(app: &App, c: &[(Column, f32)], tw: f32) -> El<'a> {
     let mut r = row![].spacing(0);
     for (col, w) in c {
-        let arrow = if app.sort.0 == SortKey::Column(*col) {
-            if app.sort.1 {
-                " \u{25b4}"
-            } else {
-                " \u{25be}"
-            }
-        } else {
-            ""
-        };
         let cell = container(
-            text(format!("{}{arrow}", tr(col.label())))
+            text(header_label(app, *col))
                 .size(theme::FONT_SIZE)
                 .wrapping(iced::widget::text::Wrapping::None),
         )
-        .padding([3, 6])
+        .padding([3.0, CELL_PAD_X])
         .width(*w)
         .height(CELL_H)
         .clip(true)
@@ -98,6 +104,7 @@ fn header<'a>(app: &App, c: &[(Column, f32)], tw: f32) -> El<'a> {
             mouse_area(rule_grip())
                 .interaction(iced::mouse::Interaction::ResizingHorizontally)
                 .on_press(Message::ColResizeStart(*col))
+                .on_double_click(Message::ColAutoFit(*col))
                 .on_right_press(Message::HeaderRightClick(*col)),
         );
     }
@@ -111,11 +118,17 @@ fn header<'a>(app: &App, c: &[(Column, f32)], tw: f32) -> El<'a> {
     .into()
 }
 
+/// Horizontal padding on each side of a header or body cell.
+const CELL_PAD_X: f32 = 6.0;
+/// The file-type icon at the start of a Name cell, and the gap after it.
+const NAME_ICON: f32 = 15.0;
+const NAME_GAP: f32 = 5.0;
+
 fn cell<'a>(content: El<'a>, w: f32) -> El<'a> {
     container(content)
         .width(w)
         .height(CELL_H)
-        .padding([2, 6])
+        .padding([2.0, CELL_PAD_X])
         .clip(true)
         .into()
 }
@@ -271,34 +284,69 @@ fn cell_content<'a>(app: &App, d: &'a DownloadItem, col: Column) -> El<'a> {
     };
     match col {
         Column::Name => row![
-            svg(file_icon(app, d)).width(15.0).height(15.0),
+            svg(file_icon(app, d)).width(NAME_ICON).height(NAME_ICON),
             text(&d.file_name)
                 .size(theme::FONT_SIZE)
                 .wrapping(iced::widget::text::Wrapping::None),
         ]
-        .spacing(5)
+        .spacing(NAME_GAP)
         .align_y(iced::Alignment::Center)
         .into(),
         Column::Queue => queue_glyph(app, d),
-        Column::Size => txt(d.size.map(fmt::size2).unwrap_or_default()),
-        Column::Status => txt(d.status_text()),
-        Column::Downloaded => txt(d.downloaded_text()),
-        Column::TimeLeft => txt(match d.state {
+        Column::Description => text(&d.description)
+            .size(theme::FONT_SIZE)
+            .wrapping(iced::widget::text::Wrapping::None)
+            .into(),
+        _ => txt(cell_text(app, d, col)),
+    }
+}
+
+/// The text a column shows for one download; `Queue` is an icon and shows none.
+/// Shared by painting and by [`fit_width`], so the two cannot disagree.
+fn cell_text(app: &App, d: &DownloadItem, col: Column) -> String {
+    match col {
+        Column::Name => d.file_name.clone(),
+        Column::Queue => String::new(),
+        Column::Size => d.size.map(fmt::size2).unwrap_or_default(),
+        Column::Status => d.status_text(),
+        Column::Downloaded => d.downloaded_text(),
+        Column::TimeLeft => match d.state {
             crate::model::DlState::Receiving => d.eta_secs.map(fmt::eta).unwrap_or_default(),
             _ => String::new(),
-        }),
-        Column::Rate => txt(if d.state.is_active() && d.rate > 0.0 {
-            fmt::rate_steady(d.rate, app.effective_limit(d))
-        } else {
-            String::new()
-        }),
-        Column::LastTry => txt(d
+        },
+        Column::Rate => {
+            if d.state.is_active() && d.rate > 0.0 {
+                fmt::rate_steady(d.rate, app.effective_limit(d))
+            } else {
+                String::new()
+            }
+        }
+        Column::LastTry => d
             .last_try
             .or(Some(d.added))
             .map(fmt::date)
-            .unwrap_or_default()),
-        Column::Description => text(&d.description).size(theme::FONT_SIZE).into(),
+            .unwrap_or_default(),
+        Column::Description => d.description.clone(),
     }
+}
+
+/// Width at which `col` shows its header and every listed download untruncated,
+/// clamped to the range a column may be dragged to. The icon-only Queue strip
+/// goes back to its stock width.
+pub fn fit_width(app: &App, col: Column) -> f32 {
+    if col == Column::Queue {
+        return col.default_width();
+    }
+    let mut w = crate::font::line_width(&header_label(app, col), theme::FONT_SIZE);
+    for d in app.state.downloads.iter().filter(|d| app.in_view(d)) {
+        let mut cw = crate::font::line_width(&cell_text(app, d, col), theme::FONT_SIZE);
+        if col == Column::Name {
+            cw += NAME_ICON + NAME_GAP;
+        }
+        w = w.max(cw);
+    }
+    // The cell's padding either side, plus a pixel of rounding slack.
+    crate::model::clamp_col_width(w.ceil() + 2.0 * CELL_PAD_X + 1.0)
 }
 
 fn data_row<'a>(
