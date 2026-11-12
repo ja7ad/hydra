@@ -3142,7 +3142,10 @@ impl App {
             // a minimum straight to winit, so this one is in OS points and
             // does carry the scale.
             min_size: match kind {
-                WinKind::Main => Some(iced::Size::new(main_min_w() * scale, MAIN_MIN_H * scale)),
+                WinKind::Main => Some(iced::Size::new(
+                    main_floor_w(&self.cfg.settings.toolbar) * scale,
+                    MAIN_MIN_H * scale,
+                )),
                 WinKind::Progress(_) => Some(iced::Size::new(os_w, os_h)),
                 _ => None,
             },
@@ -4882,6 +4885,23 @@ impl App {
         self.open_window(WinKind::Power)
     }
 
+    /// Move the main window's floor to the toolbar as it is now shown, and
+    /// widen a window the newly shown buttons no longer fit in.
+    fn refit_main_to_toolbar(&mut self) -> Task<Message> {
+        let Some(id) = self.main_id else {
+            return Task::none();
+        };
+        let floor = main_floor_w(&self.cfg.settings.toolbar);
+        let scale = self.ui_scale();
+        let (width, height) = (self.main_size.width / scale, self.main_size.height / scale);
+        let min = window::set_min_size(id, Some(iced::Size::new(floor, MAIN_MIN_H)));
+        if width > 0.0 && width < floor {
+            Task::batch([min, window::resize(id, iced::Size::new(floor, height))])
+        } else {
+            min
+        }
+    }
+
     /// The countdown ran out (or "now" was pressed): do it.
     fn fire_power_action(&mut self) -> Task<Message> {
         let Some(p) = self.power.take() else {
@@ -5789,7 +5809,7 @@ impl App {
                     // arrives in: below it the size is not one the user
                     // could have dragged to.
                     let resized = Some((self.main_size.width, self.main_size.height));
-                    if size.width >= main_min_w()
+                    if size.width >= main_floor_w(&self.cfg.settings.toolbar)
                         && size.height >= MAIN_MIN_H
                         && self.cfg.settings.window_size != resized
                     {
@@ -6356,6 +6376,7 @@ impl App {
             Message::ToolbarToggle(item) => {
                 if model::toggle_toolbar_item(&mut self.cfg.settings.toolbar, item) {
                     self.save_config();
+                    return self.refit_main_to_toolbar();
                 }
                 Task::none()
             }
@@ -6368,7 +6389,7 @@ impl App {
             Message::ToolbarReset => {
                 self.cfg.settings.toolbar = model::default_toolbar();
                 self.save_config();
-                Task::none()
+                self.refit_main_to_toolbar()
             }
             Message::QueueMenuOpen(start) => {
                 self.queue_menu = Some(start);
@@ -8585,7 +8606,10 @@ impl App {
                 if let Some(id) = self.main_id {
                     tasks.push(window::set_min_size(
                         id,
-                        Some(iced::Size::new(main_min_w(), MAIN_MIN_H)),
+                        Some(iced::Size::new(
+                            main_floor_w(&self.cfg.settings.toolbar),
+                            MAIN_MIN_H,
+                        )),
                     ));
                 }
                 Task::batch(tasks)
@@ -8616,7 +8640,10 @@ impl App {
                     let scale = self.ui_scale();
                     window::set_min_size(
                         id,
-                        Some(iced::Size::new(main_min_w() * scale, MAIN_MIN_H * scale)),
+                        Some(iced::Size::new(
+                            main_floor_w(&self.cfg.settings.toolbar) * scale,
+                            MAIN_MIN_H * scale,
+                        )),
                     )
                 });
                 if face_changes {
@@ -8946,6 +8973,15 @@ pub const MAIN_MIN_H: f32 = 480.0;
 
 pub fn main_min_w() -> f32 {
     crate::ui::toolbar::min_width()
+}
+
+/// Narrowest the download list and the category tree beside it stay usable.
+const MAIN_MIN_W: f32 = 480.0;
+
+/// Narrowest the main window may get with the toolbar buttons now shown, in
+/// interface units: hiding buttons is what lets the window go narrower.
+fn main_floor_w(toolbar: &[model::ToolbarPref]) -> f32 {
+    crate::ui::toolbar::width_of(toolbar.iter().filter(|p| p.visible).map(|p| p.id)).max(MAIN_MIN_W)
 }
 
 pub fn main_window_size() -> iced::Size {
@@ -11544,6 +11580,38 @@ mod tests {
     }
 
     #[test]
+    fn the_main_window_may_narrow_as_far_as_the_shown_toolbar_buttons_allow() {
+        use super::{main_floor_w, MAIN_MIN_W};
+        let all = model::default_toolbar();
+        let mut few = all.clone();
+        for pref in &mut few {
+            pref.visible = matches!(
+                pref.id,
+                model::ToolbarItem::AddUrl | model::ToolbarItem::Resume
+            );
+        }
+        let mut one_more = few.clone();
+        one_more[2].visible = true;
+
+        assert!(
+            main_floor_w(&all) > 900.0,
+            "a full row still gets its width"
+        );
+        assert_eq!(main_floor_w(&few), MAIN_MIN_W);
+        assert!(main_floor_w(&one_more) >= main_floor_w(&few));
+        assert!(main_floor_w(&all) > main_floor_w(&one_more));
+    }
+
+    #[test]
+    fn changing_the_toolbar_with_no_main_window_open_touches_nothing() {
+        let mut app = App::default();
+        let _ = app.update(Message::ToolbarToggle(model::ToolbarItem::Stop));
+        let _ = app.update(Message::ToolbarReset);
+        assert_eq!(app.cfg.settings.toolbar, model::default_toolbar());
+        assert!(app.cfg_dirty);
+    }
+
+    #[test]
     fn a_child_window_opens_wholly_on_the_screen_that_shows_the_main_window() {
         use super::child_open_position;
         let rect = |x, y, w, h| iced::Rectangle::new(Point::new(x, y), iced::Size::new(w, h));
@@ -11551,12 +11619,24 @@ mod tests {
         let progress = iced::Size::new(620.0, 600.0);
         let over = |main| child_open_position(Some(main), progress, &screen).unwrap();
 
-        assert_eq!(over(rect(400.0, 200.0, 1000.0, 600.0)), Point::new(590.0, 200.0));
+        assert_eq!(
+            over(rect(400.0, 200.0, 1000.0, 600.0)),
+            Point::new(590.0, 200.0)
+        );
         // The main window dragged half off the right edge.
-        assert_eq!(over(rect(1113.0, 30.0, 1600.0, 830.0)), Point::new(1300.0, 145.0));
-        assert_eq!(over(rect(-700.0, -300.0, 1000.0, 600.0)), Point::new(0.0, 0.0));
+        assert_eq!(
+            over(rect(1113.0, 30.0, 1600.0, 830.0)),
+            Point::new(1300.0, 145.0)
+        );
+        assert_eq!(
+            over(rect(-700.0, -300.0, 1000.0, 600.0)),
+            Point::new(0.0, 0.0)
+        );
         // Low on the screen: the child stays clear of the taskbar.
-        assert_eq!(over(rect(400.0, 900.0, 1000.0, 600.0)), Point::new(590.0, 426.0));
+        assert_eq!(
+            over(rect(400.0, 900.0, 1000.0, 600.0)),
+            Point::new(590.0, 426.0)
+        );
     }
 
     /// The reported case: with Hydra in the tray or minimized, the File Info,
@@ -11574,13 +11654,22 @@ mod tests {
         assert_eq!(child_open_position(None, progress, &screen), centre);
         // Minimized on Windows: the place it was left, and no area.
         let minimized = rect(300.0, 90.0, 0.0, 0.0);
-        assert_eq!(child_open_position(Some(minimized), progress, &screen), centre);
+        assert_eq!(
+            child_open_position(Some(minimized), progress, &screen),
+            centre
+        );
         // Left on a monitor that has since been unplugged.
         let stranded = rect(5000.0, 5000.0, 1000.0, 600.0);
-        assert_eq!(child_open_position(Some(stranded), progress, &screen), centre);
+        assert_eq!(
+            child_open_position(Some(stranded), progress, &screen),
+            centre
+        );
 
         // The primary display is listed first, and is the one used.
-        let secondary_then = [rect(0.0, 0.0, 1920.0, 1080.0), rect(-2560.0, 0.0, 2560.0, 1440.0)];
+        let secondary_then = [
+            rect(0.0, 0.0, 1920.0, 1080.0),
+            rect(-2560.0, 0.0, 2560.0, 1440.0),
+        ];
         assert_eq!(child_open_position(None, progress, &secondary_then), centre);
 
         // No display known: left to the platform to centre.

@@ -43,6 +43,16 @@ pub fn min_width() -> f32 {
     let mut widths: Vec<f32> = ToolbarItem::ALL.into_iter().map(item_width).collect();
     widths.sort_by(|a, b| b.total_cmp(a));
     widths.truncate(TOOLBAR_MAX_VISIBLE);
+    row_width(&widths)
+}
+
+/// The width the row needs for the buttons the user has chosen to show.
+pub fn width_of(shown: impl IntoIterator<Item = ToolbarItem>) -> f32 {
+    let widths: Vec<f32> = shown.into_iter().map(item_width).collect();
+    row_width(&widths)
+}
+
+fn row_width(widths: &[f32]) -> f32 {
     let gaps = widths.len().saturating_sub(1) as f32 * GAP;
     widths.iter().sum::<f32>() + gaps + 2.0 * ROW_PAD_X
 }
@@ -278,6 +288,18 @@ mod tests {
         let widest: f32 = widths[..TOOLBAR_MAX_VISIBLE].iter().sum();
         assert!(min_width() > widest, "no room for the chrome around them");
         assert_eq!(crate::app::main_min_w(), min_width());
+    }
+
+    #[test]
+    fn a_row_with_fewer_buttons_asks_for_less() {
+        let all = width_of(ToolbarItem::ALL);
+        let few = width_of([ToolbarItem::Stop, ToolbarItem::StopQueue]);
+        assert!(few < all / 2.0);
+        assert!(
+            min_width() <= all,
+            "the floor never asks for more than every button"
+        );
+        assert_eq!(width_of([]), 2.0 * ROW_PAD_X);
     }
 
     #[test]
