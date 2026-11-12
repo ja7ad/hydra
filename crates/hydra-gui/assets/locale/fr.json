@@ -574,7 +574,7 @@
   "Watches the clipboard for download links by file type and known download sites; one link opens the file dialog, many open the batch list.": "Surveille le presse-papiers à la recherche de liens de téléchargement par type de fichier et sites connus ; un lien ouvre le dialogue de fichier, plusieurs ouvrent la liste groupée.",
   "Wednesday": "Mercredi",
   "When packaged as Flatpak or Snap, file access goes through portals: pick folders through the file dialog once and the portal remembers the grant.": "En format Flatpak ou Snap, l'accès aux fichiers passe par des portails : choisissez les dossiers une fois et le portail mémorise l'autorisation.",
-  "While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress.": "Pendant les téléchargements, les icônes de la zone de notification, du Dock et de la barre des tâches deviennent une flèche de téléchargement qui se remplit selon la progression globale.",
+  "While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress.": "Pendant les téléchargements, une icône distincte en forme de flèche de téléchargement apparaît dans la zone de notification à côté de celle d'Hydra, et l'icône de barre des tâches de chaque fenêtre de progression affiche l'avancement de son téléchargement.",
   "Will read:": "Sera lu :",
   "Working…": "Traitement en cours…",
   "Yes": "Oui",

@@ -1,12 +1,12 @@
 // Copyright (C) 2026 Javad Rajabzadeh
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Download activity on the tray icon, the macOS Dock icon and the taskbar
-//! button: while anything is downloading they swap the logo for a download
-//! arrow that fills with the aggregate progress.
+//! Download activity shown by icons of its own, apart from the Hydra logo:
+//! a second tray icon that exists only while something is downloading, and
+//! the icon and taskbar progress of each download's progress window.
 //!
-//! The value is reduced to a whole percent here, and to [`ICON_STEPS`] for
-//! the drawn icons, so the native surfaces are touched only when what they
+//! Values are reduced to a whole percent here, and to [`ICON_STEPS`] for the
+//! drawn arrow, so the native surfaces are touched only when what they
 //! display would change — never per arriving chunk.
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -72,15 +72,13 @@ pub fn aggregate(enabled: bool, active: impl IntoIterator<Item = (u64, Option<u6
     }
 }
 
-/// Push `next` to the surfaces that need no window handle. `prev` is what
-/// they show now; `None` when unknown, which redraws all of them. `animate`
-/// lets the tray arrow move (off in power save).
+/// Show `next` on the download tray icon, which exists only while it is not
+/// idle. `prev` is what it shows now, `None` when unknown. `animate` lets the
+/// arrow move (off in power save).
 pub fn show(prev: Option<Indicator>, next: Indicator, animate: bool) {
     let frame = next.icon_frame();
     if prev.map(Indicator::icon_frame) != Some(frame) {
         crate::tray::set_progress(frame, animate);
-        #[cfg(target_os = "macos")]
-        crate::macos_dock::set_progress(frame);
     }
 }
 

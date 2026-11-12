@@ -574,7 +574,7 @@
   "Watches the clipboard for download links by file type and known download sites; one link opens the file dialog, many open the batch list.": "Houdt het klembord in de gaten voor downloadkoppelingen op bestandstype en bekende sites; één koppeling opent het bestandsdialoogvenster, meerdere openen de batchlijst.",
   "Wednesday": "Woensdag",
   "When packaged as Flatpak or Snap, file access goes through portals: pick folders through the file dialog once and the portal remembers the grant.": "Wanneer verpakt als Flatpak of Snap verloopt bestandstoegang via portals: kies eenmalig mappen via het bestandsvenster en de portal onthoudt de toestemming.",
-  "While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress.": "Tijdens het downloaden veranderen de pictogrammen in het systeemvak, het Dock en de taakbalk in een downloadpijl die zich vult met de totale voortgang.",
+  "While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress.": "Tijdens het downloaden verschijnt in het systeemvak naast het Hydra-pictogram een apart downloadpijl-pictogram, en het taakbalkpictogram van elk voortgangsvenster toont de voortgang van zijn download.",
   "Will read:": "Wordt gelezen:",
   "Working…": "Bezig…",
   "Yes": "Ja",

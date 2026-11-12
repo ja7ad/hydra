@@ -574,7 +574,7 @@
   "Watches the clipboard for download links by file type and known download sites; one link opens the file dialog, many open the batch list.": "Παρακολουθεί το πρόχειρο για συνδέσμους λήψης βάσει τύπου αρχείου και γνωστών ιστοτόπων λήψης· ένας σύνδεσμος ανοίγει το παράθυρο διαλόγου αρχείου, πολλοί ανοίγουν τη λίστα ομαδικής λήψης.",
   "Wednesday": "Τετάρτη",
   "When packaged as Flatpak or Snap, file access goes through portals: pick folders through the file dialog once and the portal remembers the grant.": "Όταν είναι πακεταρισμένο ως Flatpak ή Snap, η πρόσβαση σε αρχεία γίνεται μέσω portals: επιλέξτε τους φακέλους μία φορά μέσω του παραθύρου διαλόγου αρχείων και το portal θυμάται την παραχώρηση.",
-  "While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress.": "Όσο εκτελούνται λήψεις, τα εικονίδια της περιοχής ειδοποιήσεων, του Dock και της γραμμής εργασιών γίνονται ένα βέλος λήψης που γεμίζει με τη συνολική πρόοδο.",
+  "While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress.": "Όσο εκτελούνται λήψεις, εμφανίζεται στην περιοχή ειδοποιήσεων ένα ξεχωριστό εικονίδιο βέλους λήψης δίπλα στο εικονίδιο του Hydra, και το εικονίδιο της γραμμής εργασιών κάθε παραθύρου προόδου δείχνει την πρόοδο της λήψης του.",
   "Will read:": "Θα διαβαστεί:",
   "Working…": "Επεξεργασία…",
   "Yes": "Ναι",

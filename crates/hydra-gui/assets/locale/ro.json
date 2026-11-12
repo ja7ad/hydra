@@ -574,7 +574,7 @@
   "Watches the clipboard for download links by file type and known download sites; one link opens the file dialog, many open the batch list.": "Monitorizează clipboard-ul pentru linkuri de descărcare, după tipul de fișier și site-urile cunoscute; un singur link deschide dialogul de fișier, mai multe deschid lista în serie.",
   "Wednesday": "Miercuri",
   "When packaged as Flatpak or Snap, file access goes through portals: pick folders through the file dialog once and the portal remembers the grant.": "Când este ambalată ca Flatpak sau Snap, accesul la fișiere trece prin portaluri: alege folderele o dată prin dialogul de fișier, iar portalul reține permisiunea.",
-  "While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress.": "Cât timp rulează descărcări, pictogramele din zona de notificare, din Dock și din bara de activități devin o săgeată de descărcare care se umple odată cu progresul total.",
+  "While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress.": "Cât timp rulează descărcări, în zona de notificare apare o pictogramă separată cu săgeată de descărcare lângă cea a Hydra, iar pictograma din bara de activități a fiecărei ferestre de progres arată progresul descărcării sale.",
   "Will read:": "Se va citi:",
   "Working…": "Se procesează…",
   "Yes": "Da",

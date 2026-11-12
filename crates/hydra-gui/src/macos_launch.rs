@@ -5,6 +5,7 @@
 
 use std::cell::RefCell;
 use std::sync::Mutex;
+use std::time::{Duration, SystemTime};
 
 use block2::RcBlock;
 use objc2::rc::Retained;
@@ -32,6 +33,46 @@ fn is_login_launch(event: Option<&NSAppleEventDescriptor>) -> bool {
     })
 }
 
+/// Longest after the user logs in that loginwindow is still starting login
+/// items. It launched Hydra 3.5 s in on the machine this was measured on.
+const LOGIN_BURST: Duration = Duration::from_secs(120);
+
+/// The launch belongs to the login that just happened.
+///
+/// Recent macOS starts an Open at Login item with a plain open-application
+/// event, no login reason in it, so the event alone read every login launch
+/// as the user opening the app.
+fn started_with_login(login: Option<SystemTime>, now: SystemTime) -> bool {
+    login.is_some_and(|login| {
+        now.duration_since(login)
+            .is_ok_and(|since| since <= LOGIN_BURST)
+    })
+}
+
+/// When the user at the console logged in, from the system's login records.
+fn console_login_time() -> Option<SystemTime> {
+    let mut login = None;
+    // SAFETY: the utmpx database is walked start to end on this one thread,
+    // and each record is read before the next call invalidates it.
+    unsafe {
+        libc::setutxent();
+        loop {
+            let entry = libc::getutxent();
+            if entry.is_null() {
+                break;
+            }
+            let entry = &*entry;
+            let line = entry.ut_line.map(|c| c as u8);
+            if entry.ut_type == libc::USER_PROCESS && line.starts_with(b"console\0") {
+                let secs = u64::try_from(entry.ut_tv.tv_sec).ok();
+                login = secs.map(|s| SystemTime::UNIX_EPOCH + Duration::from_secs(s));
+            }
+        }
+        libc::endutxent();
+    }
+    login
+}
+
 pub(crate) fn observe() -> oneshot::Receiver<bool> {
     let (sender, receiver) = oneshot::channel();
     let sender = Mutex::new(Some(sender));
@@ -40,7 +81,9 @@ pub(crate) fn observe() -> oneshot::Receiver<bool> {
     let callback = RcBlock::new(move |_| {
         let event = NSAppleEventManager::sharedAppleEventManager().currentAppleEvent();
         if let Some(sender) = sender.lock().unwrap().take() {
-            let _ = sender.send(is_login_launch(event.as_deref()));
+            let at_login = is_login_launch(event.as_deref())
+                || started_with_login(console_login_time(), SystemTime::now());
+            let _ = sender.send(at_login);
         }
     });
     // SAFETY: The notification name is an AppKit constant; no object filter or
@@ -102,6 +145,29 @@ mod tests {
     }
 
     #[test]
+    fn a_launch_just_after_the_console_login_is_a_login_launch() {
+        let login = SystemTime::UNIX_EPOCH + Duration::from_secs(1_794_462_982);
+        let after = |secs| login + Duration::from_secs(secs);
+
+        assert!(started_with_login(Some(login), after(3)));
+        assert!(started_with_login(Some(login), after(120)));
+        assert!(!started_with_login(Some(login), after(121)));
+        assert!(!started_with_login(Some(login), after(8 * 3600)));
+        // A clock set back since the login, or no login record at all.
+        assert!(!started_with_login(Some(after(60)), login));
+        assert!(!started_with_login(None, login));
+    }
+
+    #[test]
+    fn the_console_login_is_read_from_the_systems_records() {
+        // A CI runner has no console session; a desktop's is in the past.
+        if let Some(login) = console_login_time() {
+            assert!(login <= SystemTime::now());
+            assert!(login > SystemTime::UNIX_EPOCH + Duration::from_secs(1_600_000_000));
+        }
+    }
+
+    #[test]
     fn launch_observer_delivers_once_and_can_be_removed() {
         let mut launched = observe();
         // SAFETY: The name is AppKit's launch notification and the object is absent.
@@ -109,7 +175,8 @@ mod tests {
             NSNotificationCenter::defaultCenter()
                 .postNotificationName_object(NSApplicationDidFinishLaunchingNotification, None);
         }
-        assert_eq!(launched.try_recv(), Ok(false));
+        assert!(launched.try_recv().is_ok());
+        assert!(launched.try_recv().is_err());
         remove_observer();
         OBSERVER.with(|slot| assert!(slot.borrow().is_none()));
     }

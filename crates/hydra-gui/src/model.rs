@@ -1304,8 +1304,8 @@ pub struct Settings {
     pub show_speed_tab: bool,
     /// Fill each Status cell up to the download's percentage.
     pub show_progress_bar: bool,
-    /// Swap the tray, Dock and taskbar icons for a download arrow showing
-    /// the active downloads' combined progress.
+    /// While downloads run, show a second tray icon for them and draw each
+    /// progress window's own icon and taskbar progress.
     pub show_progress_icon: bool,
     pub show_completion_tab: bool,
     pub show_hide_buttons: bool,

@@ -574,7 +574,7 @@
   "Watches the clipboard for download links by file type and known download sites; one link opens the file dialog, many open the batch list.": "Overvåger udklipsholderen for downloadlinks ud fra filtype og kendte downloadwebsteder; ét link åbner fildialogen, mange åbner batchlisten.",
   "Wednesday": "Onsdag",
   "When packaged as Flatpak or Snap, file access goes through portals: pick folders through the file dialog once and the portal remembers the grant.": "Når appen pakkes som Flatpak eller Snap, foregår filadgang via portaler: vælg mapper via fildialogen én gang, så husker portalen tilladelsen.",
-  "While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress.": "Mens der downloades, bliver ikonerne i systembakken, Dock og proceslinjen til en downloadpil, der fyldes med det samlede forløb.",
+  "While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress.": "Mens der downloades, vises et separat downloadpil-ikon i systembakken ved siden af Hydra-ikonet, og hvert forløbsvindues eget proceslinjeikon viser sin downloads forløb.",
   "Will read:": "Læser:",
   "Working…": "Arbejder…",
   "Yes": "Ja",

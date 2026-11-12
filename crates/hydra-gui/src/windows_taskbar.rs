@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Javad Rajabzadeh
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Download progress on the main window's taskbar button
+//! A download's progress on its progress window's taskbar button
 //! (`ITaskbarList3::SetProgressState` / `SetProgressValue`).
 //!
 //! windows-sys carries no COM interfaces, so the vtable is spelled out here

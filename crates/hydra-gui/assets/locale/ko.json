@@ -574,7 +574,7 @@
   "Watches the clipboard for download links by file type and known download sites; one link opens the file dialog, many open the batch list.": "파일 형식 및 알려진 다운로드 사이트의 링크가 클립보드에 복사되는지 감시합니다. 단일 링크는 파일 대화상자를, 여러 개는 일괄 목록을 엽니다.",
   "Wednesday": "수요일",
   "When packaged as Flatpak or Snap, file access goes through portals: pick folders through the file dialog once and the portal remembers the grant.": "Flatpak 또는 Snap으로 패키징된 경우 포털을 통해 파일에 접근합니다. 파일 대화상자에서 폴더를 한 번 선택하면 포털이 권한을 기억합니다.",
-  "While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress.": "다운로드하는 동안 트레이, Dock, 작업 표시줄 아이콘이 전체 진행률만큼 채워지는 다운로드 화살표로 바뀝니다.",
+  "While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress.": "다운로드하는 동안 트레이의 Hydra 아이콘 옆에 별도의 다운로드 화살표 아이콘이 나타나고, 각 진행률 창의 작업 표시줄 아이콘에 해당 다운로드의 진행률이 표시됩니다.",
   "Will read:": "읽을 파일:",
   "Working…": "처리 중…",
   "Yes": "예",

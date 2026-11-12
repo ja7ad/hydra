@@ -574,7 +574,7 @@
   "Watches the clipboard for download links by file type and known download sites; one link opens the file dialog, many open the batch list.": "फ़ाइल प्रकार और ज्ञात डाउनलोड साइटों के लिए क्लिपबोर्ड में डाउनलोड लिंक की निगरानी करता है; एक लिंक फ़ाइल डायलॉग खोलता है, कई लिंक बैच सूची खोलते हैं।",
   "Wednesday": "बुधवार",
   "When packaged as Flatpak or Snap, file access goes through portals: pick folders through the file dialog once and the portal remembers the grant.": "जब Flatpak या Snap के रूप में पैकेज किया जाता है, तो फ़ाइल एक्सेस पोर्टल के माध्यम से होता है: फ़ाइल डायलॉग के माध्यम से एक बार फ़ोल्डर चुनें और पोर्टल अनुमति याद रखता है।",
-  "While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress.": "डाउनलोड चलते समय ट्रे, Dock और टास्कबार के आइकन एक डाउनलोड तीर बन जाते हैं जो कुल प्रगति के साथ भरता है।",
+  "While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress.": "डाउनलोड चलते समय ट्रे में Hydra के आइकन के पास एक अलग डाउनलोड-तीर आइकन दिखाई देता है, और हर प्रगति विंडो का अपना टास्कबार आइकन उसके डाउनलोड की प्रगति दिखाता है।",
   "Will read:": "पढ़ा जाएगा:",
   "Working…": "प्रक्रिया जारी है…",
   "Yes": "हाँ",

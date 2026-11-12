@@ -574,7 +574,7 @@
   "Watches the clipboard for download links by file type and known download sites; one link opens the file dialog, many open the batch list.": "按文件类型和已知下载站点监视剪贴板中的下载链接；单个链接打开文件对话框，多个链接打开批量列表。",
   "Wednesday": "星期三",
   "When packaged as Flatpak or Snap, file access goes through portals: pick folders through the file dialog once and the portal remembers the grant.": "以 Flatpak 或 Snap 打包时，文件访问通过门户（portal）进行：通过文件对话框选择一次文件夹，门户会记住该授权。",
-  "While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress.": "下载进行时，托盘、Dock 和任务栏图标会变成下载箭头，并随总进度填充。",
+  "While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress.": "下载进行时，托盘中 Hydra 图标旁会出现独立的下载箭头图标，每个进度窗口的任务栏图标会显示其下载进度。",
   "Will read:": "将读取:",
   "Working…": "正在处理…",
   "Yes": "是",

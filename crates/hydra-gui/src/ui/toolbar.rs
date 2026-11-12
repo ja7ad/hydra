@@ -277,9 +277,7 @@ mod tests {
         widths.sort_by(|a, b| b.total_cmp(a));
         let widest: f32 = widths[..TOOLBAR_MAX_VISIBLE].iter().sum();
         assert!(min_width() > widest, "no room for the chrome around them");
-        // And the window keeps the floor it has always had, so a locale
-        // that never overran it sees no change.
-        assert!(crate::app::main_min_w() >= 1050.0);
+        assert_eq!(crate::app::main_min_w(), min_width());
     }
 
     #[test]

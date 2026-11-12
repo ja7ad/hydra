@@ -574,7 +574,7 @@
   "Watches the clipboard for download links by file type and known download sites; one link opens the file dialog, many open the batch list.": "Відстежує буфер обміну на наявність посилань для завантаження за типом файлу та відомими сайтами завантажень; одне посилання відкриває діалог файлу, кілька — список пакетного завантаження.",
   "Wednesday": "Середа",
   "When packaged as Flatpak or Snap, file access goes through portals: pick folders through the file dialog once and the portal remembers the grant.": "У пакованні Flatpak або Snap доступ до файлів здійснюється через портали: один раз виберіть папки через діалог файлів, і портал запам'ятає надання доступу.",
-  "While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress.": "Поки тривають завантаження, значки в області сповіщень, у Dock і на панелі завдань перетворюються на стрілку завантаження, що заповнюється відповідно до загального перебігу.",
+  "While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress.": "Поки тривають завантаження, в області сповіщень поруч зі значком Hydra з'являється окремий значок зі стрілкою завантаження, а значок кожного вікна перебігу на панелі завдань показує перебіг свого завантаження.",
   "Will read:": "Буде прочитано:",
   "Working…": "Обробка…",
   "Yes": "Так",

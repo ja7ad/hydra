@@ -365,7 +365,7 @@ fn downloads(app: &App) -> El<'_> {
         ),
         hinted(
             check(s.show_progress_icon, tr("Show download progress on the tray and taskbar icons")).on_toggle(|b| o(OptField::ProgressIcon(b))),
-            tr("While downloads run, the tray, Dock and taskbar icons become a download arrow that fills with their combined progress."),
+            tr("While downloads run, a separate download-arrow icon appears in the tray beside the Hydra one, and each progress window's own taskbar icon shows its download's progress."),
         ),
         hinted(
             check(s.show_completion_tab, tr("Show \"Options on completion\" tab")).on_toggle(|b| o(OptField::CompletionTab(b))),

@@ -13,12 +13,13 @@
 
 #![cfg(target_os = "macos")]
 
-use std::cell::Cell;
 use std::ffi::CString;
 
+use iced::window::raw_window_handle::RawWindowHandle;
+use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, Sel};
 use objc2::{sel, AnyThread, Encode, MainThreadMarker};
-use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSImage};
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSImage, NSView};
 use objc2_foundation::NSData;
 
 use crate::dl_indicator::IconFrame;
@@ -29,7 +30,7 @@ extern "C-unwind" fn reopen(
     _application: &AnyObject,
     _has_visible_windows: Bool,
 ) -> Bool {
-    let _ = crate::menubus::sender().send(crate::tray::ICON_CLICKED.into());
+    let _ = crate::menubus::sender().send("show_main".into());
     Bool::NO
 }
 
@@ -93,43 +94,36 @@ pub fn sync(hide_dock: bool, windows_open: bool) {
     }
 }
 
-thread_local! {
-    static SHOWN: Cell<IconFrame> = const { Cell::new(IconFrame::Idle) };
-}
-
-/// Swap the Dock icon for the download arrow at `frame`, or back to the
-/// bundle's own icon for [`IconFrame::Idle`]. Main thread only; a no-op
-/// elsewhere. With the Dock icon hidden there is no tile to see it on.
-pub fn set_progress(frame: IconFrame) {
+/// Draw the download arrow at `frame` on `window`'s minimised Dock tile, or
+/// give the tile back to AppKit for [`IconFrame::Idle`]. The app's own Dock
+/// icon is left alone: one app has one, and it stays the logo.
+pub fn set_miniwindow_icon(window: &dyn iced::window::Window, frame: IconFrame) {
     const SIZE: u32 = 256;
-    let Some(mtm) = MainThreadMarker::new() else {
+    let Ok(handle) = window.window_handle() else {
         return;
     };
-    if SHOWN.replace(frame) == frame {
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
         return;
-    }
+    };
+    // SAFETY: the pointer is the live NSView of a window iced still owns,
+    // read on the main thread inside `window::run`.
+    let view: Option<Retained<NSView>> =
+        unsafe { Retained::retain(handle.ns_view.as_ptr().cast()) };
+    let Some(window) = view.and_then(|view| view.window()) else {
+        return;
+    };
     let image = (frame != IconFrame::Idle)
         .then(|| crate::icons::download_rgba(frame, None, SIZE, true))
         .and_then(|rgba| crate::icons::png_bytes(&rgba, SIZE, SIZE))
         .and_then(|png| NSImage::initWithData(NSImage::alloc(), &NSData::from_vec(png)));
-    // SAFETY: main thread; AppKit retains the image, and nil restores the
-    // icon the bundle ships.
-    unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(image.as_deref()) };
+    window.setMiniwindowImage(image.as_deref());
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use objc2::msg_send;
-    use objc2::rc::Retained;
     use objc2::runtime::ClassBuilder;
-
-    #[test]
-    fn dock_progress_off_the_main_thread_is_a_no_op() {
-        std::thread::spawn(|| set_progress(IconFrame::Bar(10)))
-            .join()
-            .unwrap();
-    }
 
     #[test]
     fn dock_reopen_events_reach_show_hydra_repeatedly() {
@@ -149,7 +143,7 @@ mod tests {
                     hasVisibleWindows: visible]
             };
             assert!(!default_handling.as_bool());
-            assert_eq!(events.try_recv().unwrap(), crate::tray::ICON_CLICKED);
+            assert_eq!(events.try_recv().unwrap(), "show_main");
         }
     }
 }
