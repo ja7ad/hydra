@@ -1370,7 +1370,11 @@ pub enum Message {
     ShortcutEdit(String, String),
     MouseUp,
     ColResizeStart(Column),
+    /// Double click on a header divider: fit the column to its content.
+    ColAutoFit(Column),
     SchColResizeStart(usize),
+    /// Double click on a Files-tab divider in the scheduler: fit to content.
+    SchColAutoFit(usize),
     /// Left press on a header cell: the start of either a sort (release
     /// without moving) or a drag that reorders the columns.
     HeaderPress(Column),
@@ -6348,9 +6352,32 @@ impl App {
                 }
                 Task::none()
             }
+            Message::ColAutoFit(col) => {
+                // The second press of the double click started a drag; the fit
+                // replaces it rather than being undone by it on release.
+                self.resizing = None;
+                let width = crate::ui::table::fit_width(self, col);
+                if let Some(pref) = self.column_mut(col) {
+                    pref.width = width;
+                    self.save_config();
+                }
+                Task::none()
+            }
             Message::SchColResizeStart(col) => {
                 if let Some(&width) = self.cfg.settings.scheduler_column_widths.get(col) {
                     self.sch_resizing = Some((col, self.cursor_now().x, width));
+                }
+                Task::none()
+            }
+            Message::SchColAutoFit(col) => {
+                self.sch_resizing = None;
+                let width = crate::windows::scheduler::fit_width(self, col);
+                if let (Some(width), Some(slot)) = (
+                    width,
+                    self.cfg.settings.scheduler_column_widths.get_mut(col),
+                ) {
+                    *slot = width;
+                    self.save_config();
                 }
                 Task::none()
             }
@@ -14536,6 +14563,68 @@ mod tests {
         assert_eq!(app.sort, (SortKey::Column(Column::Name), false));
         assert_eq!(app.cfg.settings.sort_key, app.sort.0);
         assert_eq!(app.cfg.settings.sort_ascending, app.sort.1);
+    }
+
+    #[test]
+    fn double_click_on_divider_fits_column_to_longest_cell() {
+        let mut app = App::default();
+        app.cfg = model::normalize_config(app.cfg);
+        let long = "a-very-long-video-title-that-never-fits-the-stock-width-in-name.mp4";
+        app.state
+            .downloads
+            .push(item(1, "/d", "a.zip", None, DlState::Queued));
+        app.state
+            .downloads
+            .push(item(2, "/d", long, None, DlState::Queued));
+        app.cursor_cell.set(Point::new(100.0, 10.0));
+        let _ = app.update(Message::ColResizeStart(Column::Name));
+        assert!(app.resizing.is_some());
+        let _ = app.update(Message::ColAutoFit(Column::Name));
+        let wide = app.column_mut(Column::Name).unwrap().width;
+        assert!(wide > Column::Name.default_width());
+        // The button is still down: the drag the second press started must
+        // not carry on and put the pre-fit width back.
+        let _ = app.update(Message::DragTick);
+        let _ = app.update(Message::MouseUp);
+        assert_eq!(app.column_mut(Column::Name).unwrap().width, wide);
+
+        // Shrinks again once the long name is gone.
+        app.state.downloads.retain(|d| d.id == 1);
+        let _ = app.update(Message::ColAutoFit(Column::Name));
+        let narrow = app.column_mut(Column::Name).unwrap().width;
+        assert!(narrow < wide);
+    }
+
+    #[test]
+    fn double_click_on_scheduler_divider_fits_column_of_selected_queue() {
+        let mut app = App::default();
+        app.cfg = model::normalize_config(app.cfg);
+        app.sch.queue = app.cfg.queues[0].name.clone();
+        let long = "a-very-long-video-title-that-never-fits-the-stock-width-in-name.mp4";
+        let mut member = item(1, "/d", long, None, DlState::Queued);
+        member.queue = Some(app.sch.queue.clone());
+        app.state.downloads.push(member);
+        // Outside the queue: must not widen the column.
+        app.state
+            .downloads
+            .push(item(2, "/d", &long.repeat(4), None, DlState::Queued));
+
+        app.cursor_cell.set(Point::new(100.0, 10.0));
+        let _ = app.update(Message::SchColResizeStart(0));
+        let _ = app.update(Message::SchColAutoFit(0));
+        let _ = app.update(Message::MouseUp);
+        assert!(app.sch_resizing.is_none());
+        let wide = app.cfg.settings.scheduler_column_widths[0];
+        assert!(wide > Settings::default().scheduler_column_widths[0]);
+        assert!(wide < model::COL_MAX_W);
+
+        app.state.downloads.retain(|d| d.id == 2);
+        let _ = app.update(Message::SchColAutoFit(0));
+        assert!(app.cfg.settings.scheduler_column_widths[0] < wide);
+
+        let before = app.cfg.settings.scheduler_column_widths;
+        let _ = app.update(Message::SchColAutoFit(4));
+        assert_eq!(app.cfg.settings.scheduler_column_widths, before);
     }
 
     #[test]
