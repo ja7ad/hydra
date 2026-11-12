@@ -569,7 +569,7 @@ pub use http::{
     probe_size_via_range, probe_via_get, Probe, Redirect,
 };
 pub use redirect::{html_redirect, html_redirect_target};
-pub use sink::{allocated_bytes, SparseSink};
+pub use sink::{allocated_bytes, Growth, SparseSink};
 pub use transfer::{
     run_transfer, run_transfer_cancellable, run_transfer_into, run_transfer_observed,
     run_transfer_paced, run_transfer_tick, run_transfer_with_reserves, Bench, OnSubstitute,
