@@ -7,11 +7,14 @@ import re
 import tomllib
 import shutil
 import subprocess
+import sys
 import tempfile
 
 
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = ROOT.parent.parent
+sys.path.insert(0, str(REPOSITORY / "scripts/plugins"))
+import plugin_release  # noqa: E402
 
 
 def main():
@@ -31,7 +34,7 @@ def main():
         key = args.platform
         system, architecture = key.split("-", 1)
     suffix = {"macos": "dylib", "linux": "so", "windows": "dll"}[system]
-    output = (args.output or REPOSITORY / "target" / f"torrent-download-{key}.hyaplugin").resolve()
+    output = (args.output or REPOSITORY / "target" / plugin_release.load(ROOT.name).file_name(key)).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     build = args.native_build.resolve()
     configure = ["cmake", "-S", str(ROOT / "native"), "-B", str(build), "-DCMAKE_BUILD_TYPE=Release",

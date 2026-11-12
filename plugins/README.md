@@ -12,8 +12,9 @@ manual installation remains available. Development overrides and packages signed
 by other publishers are never replaced automatically.
 
 Packaging stages signed release packages with
-`python3 scripts/plugins/stage-official.py --version VERSION`, or supplies
-`plugins/bundled/*.hyaplugin` directly in release CI. `HYDRA_OFFICIAL_PLUGIN_DIR`
+`python3 scripts/plugins/stage-official.py --version VERSION`. Release CI fills
+`plugins/bundled/` with the packages `docs/plugins.json` lists instead
+(`--from-catalog`), checking each against the catalog's checksum. `HYDRA_OFFICIAL_PLUGIN_DIR`
 selects an explicit bundle and fails the build if empty. Ordinary source builds
 remain usable without bundled plugins. The installer command
 `hydra plugin sync-official --require-bundled` detects an incomplete build.
@@ -26,9 +27,16 @@ Build and package a plugin (Linux, macOS, Windows):
 ```sh
 rustup target add wasm32-wasip1
 python3 plugins/build.py hydra-youtube
-hydra plugin inspect plugins/hydra-youtube/youtube-download.hyaplugin
-hydra plugin install plugins/hydra-youtube/youtube-download.hyaplugin --accept-permissions
+hydra plugin inspect plugins/hydra-youtube/youtube-download_*.hyaplugin
+hydra plugin install plugins/hydra-youtube/youtube-download_*.hyaplugin --accept-permissions
 ```
+
+A package is named `{package-name}_{version}.hyaplugin`, or
+`{package-name}_{version}_{os}_{arch}.hyaplugin` when it carries a native
+library (`torrent-download_0.1.0_linux_x86_64.hyaplugin`). The name comes from
+`[package.metadata.hydra] package-name` in the plugin's `Cargo.toml` and the
+`version` in its `hydra-plugin.toml`;
+`python3 scripts/plugins/plugin_release.py name PLUGIN_FOLDER` prints it.
 
 On Windows, use `python` if that is the installed Python command. Alternatively,
 run the Cargo build command from the plugin README, copy the Wasm file beside
@@ -52,11 +60,39 @@ Installed packages can be opened from the file manager when the packaged Hydra G
 is registered as the `.hyaplugin` handler. File opening starts permission review.
 It also works with `hydra-gui --install-plugin FILE.hyaplugin` or a bare package path.
 
+## Testing and releasing official plugins
+
+`.github/workflows/plugins.yml` owns official plugins; the application release
+workflow neither builds nor tests them.
+
+- A pull request or a push to `main` that touches a plugin's folder runs that
+  plugin's tests and builds its package. Nothing is published from a pull request.
+- A plugin is released when the `version` in its `hydra-plugin.toml` is ahead
+  of the one `docs/plugins.json` lists. Bump it together with `Cargo.toml` and
+  `Cargo.lock`; the workflow fails if the three disagree or if a package's file
+  name does not carry the manifest version.
+- A release signs the packages, uploads them to the latest GitHub release,
+  commits the new links, version and checksums to `docs/plugins.json` on
+  `main`, and then deletes that plugin's previous packages from the release.
+  Links name that release's tag, so they keep working after a newer
+  application release is published.
+  The catalog commit touches no path the workflow watches, so it does not start
+  another run.
+- Run it by hand from Actions → Plugins → Run workflow, choosing one plugin or
+  all. `force_release` republishes the current version.
+- `main` only accepts pull requests, so the catalog commit is pushed with the
+  `PLUGIN_RELEASE_TOKEN` secret (a token whose owner may bypass the ruleset).
+  Without it the workflow falls back to its own token, which is accepted only
+  if GitHub Actions is on the ruleset's bypass list.
+
+An application release downloads the packages the catalog lists, verifies their
+checksums and signatures, bundles them into the installers and attaches them to
+the new release next to `hydra-official-plugins.zip` and
+`hydra-official-plugins.pub`.
+
 ## Official release signing
 
-The release workflow builds `hydra-youtube`, signs its `.hyaplugin` package, and
-publishes `youtube-download.hyaplugin` and `hydra-official-plugins.pub` as release
-assets. `official.pub` is the official publisher's public key. The matching
+`official.pub` is the official publisher's public key. The matching
 private key lives in the repository Actions secret `HYDRA_PLUGIN_SIGNING_KEY`;
 it is exposed only to the signing step. Missing or mismatched keys fail the job.
 CI tests signing with disposable keys and never needs the official secret.
@@ -80,11 +116,14 @@ Build and sign locally with the same command used by Actions:
 
 ```sh
 python3 plugins/build.py hydra-youtube
+package=$(python3 scripts/plugins/plugin_release.py name hydra-youtube)
+mkdir -p target/signed-plugins
 HYDRA_PLUGIN_SIGNING_KEY="$(cat ~/.config/hydra/signing/official.key)" \
-  target/debug/hydra-plugin sign plugins/hydra-youtube/youtube-download.hyaplugin \
-    --output target/signed-plugins/youtube-download.hyaplugin \
+  target/debug/hydra-plugin sign "plugins/hydra-youtube/$package" \
+    --output "target/signed-plugins/$package" \
     --public-key plugins/official.pub --key-env HYDRA_PLUGIN_SIGNING_KEY
-target/debug/hydra-plugin validate target/signed-plugins/youtube-download.hyaplugin
+target/debug/hydra-plugin validate "target/signed-plugins/$package"
+python3 scripts/plugins/plugin_release.py check "target/signed-plugins/$package"
 python3 scripts/plugins/signing-e2e.py
 ```
 

@@ -110,7 +110,7 @@ python3 scripts/plugins/plugin-youtube-live-e2e.py --cookies-from-browser firefo
 The second script talks to YouTube. It fails, rather than skips, when YouTube
 refuses the network; see [the E2E notes](../../docs/testing/youtube-live-e2e.md).
 
-The final package is `youtube-download.hyaplugin`. Automatic backend installation
+The final package is `youtube-download_{version}.hyaplugin`. Automatic backend installation
 supports macOS x64/ARM64, Windows x64/ARM64 and Linux x64/ARM64. Other platforms
 can provide their own yt-dlp executable. Hydra's configured proxy is supplied to
 metadata requests and the backend through its otherwise scrubbed environment.

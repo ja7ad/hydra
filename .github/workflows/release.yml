@@ -77,7 +77,7 @@ jobs:
 
   verify-packaging:
     name: Validate packaging metadata
-    needs: [verify-version, build-official-plugins]
+    needs: [verify-version, official-plugins]
     # Distribution packaging is a stable-release concern. A pre-release ships
     # the archives, the native installers, the AppImage and libhydra, and is
     # never pushed to Copr, the PPA, the AUR or Flathub (see the gates on the
@@ -94,7 +94,7 @@ jobs:
       - name: Download signed official plugins
         uses: actions/download-artifact@v4
         with:
-          name: ${{ vars.SIGNPATH_RELEASE_SIGNING_ENABLED == 'true' && 'unsigned-official-plugins' || 'official-plugins' }}
+          name: official-plugins
           path: official-plugins
 
       - name: Install packaging validation tools
@@ -123,9 +123,10 @@ jobs:
           grep -q "^%global _version ${VERSION}$" "$RPM_TOP/SPECS/hydra.spec"
           rpmbuild -bs --nodeps --define "_topdir $RPM_TOP" "$RPM_TOP/SPECS/hydra.spec"
 
-  # Official plugins are built, signed and bundled for stable releases only; a
-  # pre-release ships the application without them (see build.rs, which treats
-  # an unset HYDRA_OFFICIAL_PLUGIN_DIR as an empty bundle).
+  # Official plugins are bundled for stable releases only; a pre-release ships
+  # the application without them (see build.rs, which treats an unset
+  # HYDRA_OFFICIAL_PLUGIN_DIR as an empty bundle). They are built, tested and
+  # signed by plugins.yml; this job covers the plugin tooling the release ships.
   verify-plugin-tools:
     name: Verify plugin tools on ${{ matrix.runner }}
     needs: [verify-version]
@@ -158,7 +159,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.os }}-${{ matrix.arch }}
-    needs: [verify-version, verify-plugin-tools, build-official-plugins]
+    needs: [verify-version, verify-plugin-tools, official-plugins]
     if: >-
       !cancelled() && needs.verify-version.result == 'success'
       && !contains(needs.*.result, 'failure')
@@ -215,7 +216,7 @@ jobs:
         if: needs.verify-version.outputs.prerelease == 'false'
         uses: actions/download-artifact@v4
         with:
-          name: ${{ vars.SIGNPATH_RELEASE_SIGNING_ENABLED == 'true' && 'unsigned-official-plugins' || 'official-plugins' }}
+          name: official-plugin-bundle
           path: plugins/bundled
       - name: Bundle the official plugins into the build
         if: needs.verify-version.outputs.prerelease == 'false'
@@ -440,7 +441,7 @@ jobs:
   # UpdateMethod::AppImage in crates/hydra-updater.
   build-appimage:
     name: AppImage ${{ matrix.arch }}
-    needs: [verify-version, build-official-plugins]
+    needs: [verify-version, official-plugins]
     if: >-
       !cancelled() && needs.verify-version.result == 'success'
       && !contains(needs.*.result, 'failure')
@@ -491,7 +492,7 @@ jobs:
         if: needs.verify-version.outputs.prerelease == 'false'
         uses: actions/download-artifact@v4
         with:
-          name: ${{ vars.SIGNPATH_RELEASE_SIGNING_ENABLED == 'true' && 'unsigned-official-plugins' || 'official-plugins' }}
+          name: official-plugin-bundle
           path: plugins/bundled
       - name: Bundle the official plugins into the build
         if: needs.verify-version.outputs.prerelease == 'false'
@@ -673,7 +674,7 @@ jobs:
   # the release version.
   build-flatpak:
     name: Flatpak ${{ matrix.arch }}
-    needs: [verify-version, verify-packaging, build-official-plugins]
+    needs: [verify-version, verify-packaging, official-plugins]
     if: needs.verify-version.outputs.prerelease == 'false'
     strategy:
       fail-fast: false
@@ -692,7 +693,7 @@ jobs:
       - name: Download signed official plugins
         uses: actions/download-artifact@v4
         with:
-          name: ${{ vars.SIGNPATH_RELEASE_SIGNING_ENABLED == 'true' && 'unsigned-official-plugins' || 'official-plugins' }}
+          name: official-plugin-bundle
           path: plugins/bundled
 
       - name: Install Flatpak build tools
@@ -1094,80 +1095,43 @@ jobs:
             dist/*.zip
           if-no-files-found: error
 
-  verify-official-plugins:
-    name: Verify official plugin packages
-    needs: [verify-version, verify-plugin-tools]
-    if: needs.verify-version.outputs.prerelease == 'false'
-    uses: ./.github/workflows/official-plugins.yml
-
-  build-official-plugins:
-    name: Build and sign official plugins
-    needs: [verify-version, verify-plugin-tools, verify-official-plugins]
+  # The application release does not build plugins. It ships the packages
+  # plugins.yml last published, pinned by the hashes docs/plugins.json records
+  # at the tagged commit, and attaches them again so each release carries the
+  # plugins its installers bundle.
+  official-plugins:
+    name: Collect released official plugins
+    needs: [verify-version]
     if: needs.verify-version.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip1
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - uses: Swatinem/rust-cache@v2
-      - name: Download verified official plugin packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: official-plugin-build-*
-          path: unsigned-plugins
-          merge-multiple: true
-      - name: Build signing tool
-        run: cargo build --locked -p hya-plugin-cli
-      - name: Sign and verify official packages
-        env:
-          HYDRA_PLUGIN_SIGNING_KEY: ${{ secrets.HYDRA_PLUGIN_SIGNING_KEY }}
+      - name: Download the packages the catalog lists and verify their checksums
+        run: |
+          python3 -m unittest discover -s scripts/plugins -p 'test_stage_official.py'
+          python3 scripts/plugins/stage-official.py \
+            --version "${{ needs.verify-version.outputs.version }}" --from-catalog official
+      - name: Verify publisher signatures
         run: |
           set -euo pipefail
-          mkdir -p dist
-          test -f unsigned-plugins/unsigned-youtube-download.hyaplugin
-          test "$(find unsigned-plugins -name 'unsigned-torrent-download-*.hyaplugin' | wc -l)" -eq 6
-          for package in unsigned-plugins/unsigned-*.hyaplugin; do
-            name=$(basename "$package")
-            output="dist/${name#unsigned-}"
-            target/debug/hydra-plugin sign "$package" --output "$output" \
-              --public-key plugins/official.pub --key-env HYDRA_PLUGIN_SIGNING_KEY
-            target/debug/hydra-plugin validate "$output"
+          cargo build --locked -p hya-plugin-cli
+          for package in official/assets/*.hyaplugin; do
+            target/debug/hydra-plugin validate "$package"
           done
-          printf '%s\n' "${{ needs.verify-version.outputs.version }}" > dist/bundle-version.txt
-          cp plugins/official.pub dist/hydra-official-plugins.pub
-          python3 - <<'PYZIP'
-          import pathlib, zipfile
-          with zipfile.ZipFile("dist/hydra-official-plugins.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-              package = pathlib.Path("dist/youtube-download.hyaplugin")
-              archive.write(package, package.name)
-              for system in ["linux", "macos", "windows"]:
-                  for architecture in ["x86_64", "aarch64"]:
-                      platform = f"{system}-{architecture}"
-                      package = pathlib.Path(f"dist/torrent-download-{platform}.hyaplugin")
-                      target = pathlib.Path("dist/native") / platform / package.name
-                      target.parent.mkdir(parents=True, exist_ok=True)
-                      target.write_bytes(package.read_bytes())
-                      archive.write(target, f"native/{platform}/{package.name}")
-          PYZIP
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ vars.SIGNPATH_RELEASE_SIGNING_ENABLED == 'true' && 'unsigned-official-plugins' || 'official-plugins' }}
-          path: |
-            dist/youtube-download.hyaplugin
-            dist/native/**/*.hyaplugin
-            dist/hydra-official-plugins.zip
-            dist/hydra-official-plugins.pub
-            dist/bundle-version.txt
+          name: official-plugin-bundle
+          path: official/bundle
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
-        if: vars.SIGNPATH_RELEASE_SIGNING_ENABLED == 'true'
         with:
-          name: unsigned-official-native-plugins
-          path: dist/torrent-download-*.hyaplugin
+          name: official-plugins
+          path: official/assets
           if-no-files-found: error
 
   sign-windows:
@@ -1185,37 +1149,6 @@ jobs:
       test_signing: false
     secrets:
       SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-      HYDRA_PLUGIN_SIGNING_KEY: ${{ secrets.HYDRA_PLUGIN_SIGNING_KEY }}
-
-  signed-official-plugins:
-    needs: [verify-version, sign-windows, build-official-plugins]
-    if: >-
-      !cancelled() && needs.verify-version.outputs.prerelease == 'false'
-      && needs.sign-windows.result == 'success'
-      && needs.build-official-plugins.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: unsigned-official-plugins
-          path: signed-plugins
-      - uses: actions/download-artifact@v4
-        with:
-          name: unsigned-official-native-plugins
-          path: native-packages
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: hydra-windows-*
-          path: signed-windows
-          merge-multiple: true
-      - name: Replace Windows plugins and rebuild the official bundle
-        run: python3 scripts/signing/windows-release.py refresh-bundle --architecture x86_64
-      - uses: actions/upload-artifact@v4
-        with:
-          name: official-plugins
-          path: signed-plugins/*
-          if-no-files-found: error
 
   release:
     name: Publish GitHub Release
@@ -1224,11 +1157,10 @@ jobs:
       [
         verify-version,
         verify-plugin-tools,
-        verify-official-plugins,
+        official-plugins,
         verify-packaging,
         build,
         sign-windows,
-        signed-official-plugins,
         build-appimage,
         verify-appimage,
         build-flatpak,
@@ -1238,7 +1170,6 @@ jobs:
         build-ffi-apple,
         build-extensions,
         build-safari-extension,
-        build-official-plugins,
       ]
     # The packaging jobs above are skipped for a pre-release, and the default
     # "every need succeeded" rule would take this job down with them. Require
@@ -1261,13 +1192,14 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Exclude intermediate files from release assets
-        run: |
-          rm -f dist/unsigned-*.hyaplugin dist/hydra-torrent-native.dll dist/hydra-torrent-native.pdb
-          if [ -d dist/native ]; then
-            mkdir -p plugins/bundled
-            mv dist/native plugins/bundled/native
-          fi
+      # The Launchpad source package below is built from this tree and embeds
+      # the bundle, as every other packaged build does.
+      - name: Stage the official plugin bundle for source packages
+        if: needs.verify-version.outputs.prerelease == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          name: official-plugin-bundle
+          path: plugins/bundled
 
       - name: Download signed installation scripts
         if: vars.SIGNPATH_RELEASE_SIGNING_ENABLED == 'true'
@@ -1417,8 +1349,6 @@ jobs:
               | xargs -0 perl -pi -e 's/"files":\{[^}]*\}/"files":{}/'
 
             # Copy Debian packaging files to debian/ directory
-            mkdir -p plugins/bundled
-            cp dist/youtube-download.hyaplugin plugins/bundled/
             cp -r packaging/debian debian
             mv cargo-vendor.toml debian/cargo-vendor.toml
 
