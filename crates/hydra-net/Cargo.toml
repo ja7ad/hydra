@@ -47,7 +47,7 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "fs", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "fs", "sync", "test-util"] }
 criterion = { workspace = true }
 # Writes the fixture archives the `zipdir` tests read back: a real archiver's
 # output, ZIP64 included, rather than bytes laid out by the code under test.
