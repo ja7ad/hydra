@@ -1896,10 +1896,10 @@ pub(crate) async fn fetch_range<C: Connector>(
     pace: Pace,
     pool: Option<crate::pool::SharedPool<C::Stream>>,
 ) -> io::Result<()> {
-    // The far end is re-read from `bound` as the body streams, never captured. A
-    // repair that gives this connection's tail away lowers it, and the loop stops
-    // there instead of racing the taker for the same bytes. See `Watermark`.
-    let hi = bound.get();
+    // Work can be given away before this task is first polled.
+    if bound.get() <= lo {
+        return Ok(());
+    }
 
     // Reuse an idle connection to this endpoint when one is available. This is the
     // difference between n ranges costing n handshakes and costing one; see
@@ -1924,8 +1924,6 @@ pub(crate) async fn fetch_range<C: Connector>(
     } else {
         Disposition::Close
     };
-    let req = build_request_head_disp("GET", &t, Some((lo, hi.saturating_sub(1))), disp);
-
     // Read headers, then stream the body straight to its file offset.
     let mut buf = vec![0u8; READ_BUF];
     let mut head = Vec::new();
@@ -1952,7 +1950,17 @@ pub(crate) async fn fetch_range<C: Connector>(
     // which costs a redial and is invisible; anything else is an error, and the
     // caller reclaims the range at once rather than waiting for silence to expire.
     let mut redialed = false;
+    let mut hi;
     loop {
+        // Connecting (including a stale-pool redial) may have yielded while the
+        // scheduler gave away our tail. Request only the prefix still owned.
+        // Keep this on-wire bound separate from later live write bounds: the
+        // pool must know whether any of this response remains unread.
+        hi = bound.get();
+        if hi <= lo {
+            return Ok(());
+        }
+        let req = build_request_head_disp("GET", &t, Some((lo, hi - 1)), disp);
         // Anything that goes wrong before a header block has been parsed is
         // retryable on a pooled socket, whatever shape it took: a refused write,
         // a reset, a clean EOF, or bytes that are not a response at all because
@@ -2113,24 +2121,29 @@ pub(crate) async fn fetch_range<C: Connector>(
     // and the socket must not be offered for reuse.
     let mut over_read = false;
     if !first_body.is_empty() {
-        let take = first_body.len().min((hi - off) as usize);
-        over_read = first_body.len() > take;
+        over_read = first_body.len() > (hi - off) as usize;
         // These bytes arrived alongside the headers and are as real as any other:
         // they are charged against the cap too, or a small object could be
         // delivered entirely unshaped in the header read.
-        pace.wait(take as u64).await;
-        sink.write_at(off, &first_body[..take])?;
-        let at_off = off;
-        off += take as u64;
-        let now = Instant::now();
-        let _ = tx.send(Arrival {
-            conn,
-            off: at_off,
-            bytes: take as u64,
-            at: now.duration_since(t0).as_secs_f64(),
-            dt: now.duration_since(last).as_secs_f64().max(1e-6),
-        });
-        last = now;
+        pace.wait(first_body.len() as u64).await;
+        // Header reads and pacing can both yield while the ownership shrinks.
+        let take = first_body
+            .len()
+            .min(bound.get().saturating_sub(off) as usize);
+        if take > 0 {
+            sink.write_at(off, &first_body[..take])?;
+            let at_off = off;
+            off += take as u64;
+            let now = Instant::now();
+            let _ = tx.send(Arrival {
+                conn,
+                off: at_off,
+                bytes: take as u64,
+                at: now.duration_since(t0).as_secs_f64(),
+                dt: now.duration_since(last).as_secs_f64().max(1e-6),
+            });
+            last = now;
+        }
     }
 
     // Re-read the bound each pass: `hi` is only its value at request time, and it
@@ -2146,9 +2159,13 @@ pub(crate) async fn fetch_range<C: Connector>(
     // instead of its own response headers — 64 KiB of body, no header block, and
     // a "header too large" failure on a perfectly healthy endpoint. Repairs
     // cluster in the endgame, so this fired hardest exactly where users saw it.
-    let mut cur_hi = hi;
     let mut deferred: Option<io::Error> = None;
-    while off < cur_hi {
+    loop {
+        // Do not park another read when a shrink already completed our prefix.
+        let cur_hi = bound.get();
+        if off >= cur_hi {
+            break;
+        }
         if let Some(e) = deferred.take() {
             return Err(e);
         }
@@ -2159,20 +2176,17 @@ pub(crate) async fn fetch_range<C: Connector>(
         }
         let (n, err) = drain_ready(&mut s, &mut buf[..want], n);
         deferred = err;
-        // A repair may have moved the far end while this read was parked. Re-read
-        // before crediting, and clamp: bytes past the new bound belong to whichever
-        // connection was given them, so writing them here would double-count
-        // coverage and reintroduce the duplicate-span cost this exists to remove.
-        cur_hi = bound.get();
-        let n = n.min(cur_hi.saturating_sub(off) as usize);
-        if n == 0 {
-            break;
-        }
         // Pay for the bytes just taken off the wire, before doing anything with
         // them. Charging after the write would let a burst land first and shape
         // only the next read, which is the difference between a cap and an
-        // average.
+        // average. Discarded bytes consumed bandwidth too.
         pace.wait(n as u64).await;
+        // Both the read and pacing may yield. Re-read ownership after the last
+        // await, immediately before the synchronous sink write and arrival.
+        let n = n.min(bound.get().saturating_sub(off) as usize);
+        if n == 0 {
+            break;
+        }
         sink.write_at(off, &buf[..n])?;
         let at_off = off;
         off += n as u64;
@@ -2269,8 +2283,6 @@ pub(crate) async fn stream_chunked<S>(
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    // Same discipline as the plain-body path: the far end can move under us.
-    let mut hi = bound.get();
     enum St {
         Size,
         Data(u64),
@@ -2343,7 +2355,9 @@ where
                     let take = (*remaining as usize).min(buf.len());
                     // Never write past the requested range: a server may answer a
                     // range request with more than was asked for.
-                    let room = (hi.saturating_sub(off)) as usize;
+                    // The preceding read/pacing await may have allowed a repair
+                    // to lower ownership. Sample at the write, not before reading.
+                    let room = (bound.get().saturating_sub(off)) as usize;
                     let write = take.min(room);
                     if write > 0 {
                         sink.write_at(off, &buf.data()[..write])?;
@@ -2399,7 +2413,7 @@ where
         // `St::Data` arm above then stops writing at the new boundary, and the
         // early-exit below ends the stream rather than draining a body whose tail
         // now belongs to another connection.
-        hi = bound.get();
+        let hi = bound.get();
         if off >= hi {
             return Ok(());
         }
@@ -3640,6 +3654,319 @@ mod tests {
         {
             Box::pin(async move { Ok(self.0.lock().unwrap().take().expect("one connection")) })
         }
+    }
+
+    fn poll_watermark_fetch<F: std::future::Future>(
+        future: std::pin::Pin<&mut F>,
+    ) -> std::task::Poll<F::Output> {
+        future.poll(&mut std::task::Context::from_waker(std::task::Waker::noop()))
+    }
+
+    fn watermark_response(body: &[u8]) -> Vec<u8> {
+        let mut response = b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-15/16\r\nContent-Length: 16\r\n\r\n".to_vec();
+        response.extend_from_slice(body);
+        response
+    }
+
+    fn assert_watermark_credit(sink: &SparseSink, rx: &mut mpsc::UnboundedReceiver<Arrival>) {
+        assert_eq!(
+            sink.written.load(std::sync::atomic::Ordering::Relaxed),
+            4,
+            "only the still-owned prefix may reach the sink"
+        );
+        let mut credited = 0;
+        while let Ok(arrival) = rx.try_recv() {
+            assert!(arrival.bytes > 0);
+            assert!(
+                arrival.off + arrival.bytes <= 4,
+                "arrival crosses live watermark"
+            );
+            credited += arrival.bytes;
+        }
+        assert_eq!(credited, 4);
+    }
+
+    struct WatermarkRequestStream {
+        inner: Script,
+        request: Arc<std::sync::Mutex<Vec<u8>>>,
+    }
+
+    impl tokio::io::AsyncRead for WatermarkRequestStream {
+        fn poll_read(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+            buf: &mut tokio::io::ReadBuf<'_>,
+        ) -> std::task::Poll<io::Result<()>> {
+            tokio::io::AsyncRead::poll_read(std::pin::Pin::new(&mut self.inner), cx, buf)
+        }
+    }
+
+    impl tokio::io::AsyncWrite for WatermarkRequestStream {
+        fn poll_write(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+            bytes: &[u8],
+        ) -> std::task::Poll<io::Result<usize>> {
+            self.request.lock().unwrap().extend_from_slice(bytes);
+            std::task::Poll::Ready(Ok(bytes.len()))
+        }
+        fn poll_flush(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<io::Result<()>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+        fn poll_shutdown(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<io::Result<()>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+    }
+
+    struct WatermarkParkedConnect {
+        ready: Arc<std::sync::atomic::AtomicBool>,
+        stream: std::sync::Mutex<Option<WatermarkRequestStream>>,
+    }
+
+    impl Connector for WatermarkParkedConnect {
+        type Stream = WatermarkRequestStream;
+        fn connect<'a>(
+            &'a self,
+            _: &'a Target,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = io::Result<Self::Stream>> + Send + 'a>,
+        > {
+            Box::pin(std::future::poll_fn(move |_| {
+                if self.ready.load(std::sync::atomic::Ordering::Relaxed) {
+                    std::task::Poll::Ready(Ok(self.stream.lock().unwrap().take().unwrap()))
+                } else {
+                    // Tests poll the future explicitly after opening this gate.
+                    std::task::Poll::Pending
+                }
+            }))
+        }
+    }
+
+    #[tokio::test]
+    async fn live_watermark_shrink_during_connect_updates_wire_range_or_sends_no_get() {
+        for stale_pool in [false, true] {
+            for end in [4, 0] {
+                let request = Arc::new(std::sync::Mutex::new(Vec::new()));
+                let stale_request = Arc::new(std::sync::Mutex::new(Vec::new()));
+                let ready = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let target = Target::direct("gated", 80, "/object");
+                let pool = Arc::new(crate::pool::ConnPool::new());
+                if stale_pool {
+                    pool.put(
+                        &target,
+                        WatermarkRequestStream {
+                            // The pooled peer accepted a request, then closed before
+                            // any response header: fallback must redial exactly once.
+                            inner: script(vec![Ok(Some(Vec::new()))]),
+                            request: stale_request.clone(),
+                        },
+                    );
+                }
+                let net = Arc::new(WatermarkParkedConnect {
+                ready: ready.clone(),
+                stream: std::sync::Mutex::new(Some(WatermarkRequestStream {
+                    inner: script(vec![Ok(Some(b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-3/16\r\nContent-Length: 4\r\n\r\nabcd".to_vec()))]),
+                    request: request.clone(),
+                })),
+            });
+                let bound = crate::Watermark::fixed(16);
+                let sink = Arc::new(SparseSink::discarding());
+                let (tx, mut rx) = mpsc::unbounded_channel();
+                let fetch = fetch_range(
+                    net,
+                    0,
+                    target.clone(),
+                    0,
+                    bound.clone(),
+                    sink.clone(),
+                    tx,
+                    Instant::now(),
+                    Pace::unlimited(),
+                    Some(pool.clone()),
+                );
+                tokio::pin!(fetch);
+                assert!(poll_watermark_fetch(fetch.as_mut()).is_pending());
+                assert!(request.lock().unwrap().is_empty());
+                let old_wire = String::from_utf8(stale_request.lock().unwrap().clone()).unwrap();
+                if stale_pool {
+                    assert!(old_wire.contains("Range: bytes=0-15\r\n"));
+                } else {
+                    assert!(old_wire.is_empty());
+                }
+                bound.shrink_to(end);
+                ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                let result = poll_watermark_fetch(fetch.as_mut());
+                let wire = String::from_utf8(request.lock().unwrap().clone()).unwrap();
+                if end == 0 {
+                    assert!(
+                        wire.is_empty(),
+                        "an empty live range must not send a GET: {wire}"
+                    );
+                    assert_eq!(sink.written.load(std::sync::atomic::Ordering::Relaxed), 0);
+                    assert!(rx.try_recv().is_err());
+                    assert!(pool.take(&target).is_none());
+                } else {
+                    assert!(
+                        wire.contains("Range: bytes=0-3\r\n"),
+                        "GET retained a stolen suffix: {wire}"
+                    );
+                    assert_watermark_credit(&sink, &mut rx);
+                    assert!(
+                        pool.take(&target).is_some(),
+                        "an exactly framed response to the reduced wire range remains reusable"
+                    );
+                }
+                assert!(
+                    matches!(result, std::task::Poll::Ready(Ok(()))),
+                    "fetch must finish without another response read: {result:?}"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn live_watermark_clamps_body_coalesced_with_parked_headers() {
+        let net = Arc::new(Scripted(std::sync::Mutex::new(Some(script(vec![
+            Ok(None),
+            Ok(Some(watermark_response(b"abcdefghijklmnop"))),
+        ])))));
+        let target = Target::direct("gated", 80, "/object");
+        let pool = Arc::new(crate::pool::ConnPool::new());
+        let bound = crate::Watermark::fixed(16);
+        let sink = Arc::new(SparseSink::discarding());
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let fetch = fetch_range(
+            net,
+            0,
+            target.clone(),
+            0,
+            bound.clone(),
+            sink.clone(),
+            tx,
+            Instant::now(),
+            Pace::unlimited(),
+            Some(pool.clone()),
+        );
+        tokio::pin!(fetch);
+        assert!(poll_watermark_fetch(fetch.as_mut()).is_pending());
+        assert_eq!(sink.written.load(std::sync::atomic::Ordering::Relaxed), 0);
+        bound.shrink_to(4);
+        assert!(fetch.await.is_ok());
+        assert!(
+            pool.take(&target).is_none(),
+            "unread response tail cannot be pooled"
+        );
+        assert_watermark_credit(&sink, &mut rx);
+    }
+
+    #[tokio::test]
+    async fn live_watermark_complete_prefix_does_not_attempt_another_read() {
+        let net = Arc::new(Scripted(std::sync::Mutex::new(Some(script(vec![
+            Ok(None),
+            Ok(Some(watermark_response(b"abcd"))),
+            Err(io::Error::other(
+                "read attempted beyond the completed live prefix",
+            )),
+        ])))));
+        let bound = crate::Watermark::fixed(16);
+        let sink = Arc::new(SparseSink::discarding());
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let fetch = fetch_range(
+            net,
+            0,
+            Target::direct("gated", 80, "/object"),
+            0,
+            bound.clone(),
+            sink.clone(),
+            tx,
+            Instant::now(),
+            Pace::unlimited(),
+            None,
+        );
+        tokio::pin!(fetch);
+        assert!(poll_watermark_fetch(fetch.as_mut()).is_pending());
+        bound.shrink_to(4);
+        let result = fetch.await;
+        assert!(
+            result.is_ok(),
+            "the owned prefix was complete before a further read: {result:?}"
+        );
+        assert_watermark_credit(&sink, &mut rx);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn live_watermark_rechecks_plain_body_after_pacing() {
+        let net = Arc::new(Scripted(std::sync::Mutex::new(Some(script(vec![
+            Ok(Some(watermark_response(b""))),
+            Ok(Some(b"abcdefghijklmnop".to_vec())),
+        ])))));
+        let target = Target::direct("gated", 80, "/object");
+        let pool = Arc::new(crate::pool::ConnPool::new());
+        let limiter = Arc::new(crate::polite::RateLimiter::new(1));
+        // A long debt guarantees an async boundary even on a loaded runner.
+        // Release the cap explicitly after shrinking instead of sleeping it out.
+        let _ = limiter.reserve(3600);
+        let bound = crate::Watermark::fixed(16);
+        let sink = Arc::new(SparseSink::discarding());
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let fetch = fetch_range(
+            net,
+            0,
+            target.clone(),
+            0,
+            bound.clone(),
+            sink.clone(),
+            tx,
+            Instant::now(),
+            Pace::shared(limiter.clone()),
+            Some(pool.clone()),
+        );
+        tokio::pin!(fetch);
+        assert!(poll_watermark_fetch(fetch.as_mut()).is_pending());
+        assert_eq!(sink.written.load(std::sync::atomic::Ordering::Relaxed), 0);
+        bound.shrink_to(4);
+        limiter.set_rate(0);
+        tokio::time::advance(std::time::Duration::from_secs(1)).await;
+        assert!(fetch.await.is_ok());
+        assert!(pool.take(&target).is_none());
+        assert_watermark_credit(&sink, &mut rx);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn live_watermark_rechecks_chunked_body_after_pacing() {
+        let stream = script(vec![Ok(Some(
+            b"10\r\nabcdefghijklmnop\r\n0\r\n\r\n".to_vec(),
+        ))]);
+        let limiter = Arc::new(crate::polite::RateLimiter::new(1));
+        let _ = limiter.reserve(3600);
+        let bound = crate::Watermark::fixed(16);
+        let sink = Arc::new(SparseSink::discarding());
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let fetch = stream_chunked(
+            stream,
+            0,
+            0,
+            bound.clone(),
+            b"",
+            sink.clone(),
+            tx,
+            Instant::now(),
+            Pace::shared(limiter.clone()),
+        );
+        tokio::pin!(fetch);
+        assert!(poll_watermark_fetch(fetch.as_mut()).is_pending());
+        assert_eq!(sink.written.load(std::sync::atomic::Ordering::Relaxed), 0);
+        bound.shrink_to(4);
+        limiter.set_rate(0);
+        tokio::time::advance(std::time::Duration::from_secs(1)).await;
+        assert!(fetch.await.is_ok());
+        assert_watermark_credit(&sink, &mut rx);
     }
 
     /// A reset that arrives right behind readable bytes is seen inside the
