@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Lisää eräajolataus leikepöydältä",
   "Add batch download from text file": "Lisää eräajolataus tekstitiedostosta",
   "Add index": "Lisää hakemisto",
+  "Add links from clipboard": "Lisää linkit leikepöydältä",
   "Add new download": "Lisää uusi lataus",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Linkin lisääminen näyttää ensin nimen, kategorian ja kansion, kun siirto käynnistyy jo taustalla; pois päältä = lataukset alkavat välittömästi.",
   "Address": "Osoite",

@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "क्लिपबोर्ड से बैच डाउनलोड जोड़ें",
   "Add batch download from text file": "टेक्स्ट फ़ाइल से बैच डाउनलोड जोड़ें",
   "Add index": "इंडेक्स जोड़ें",
+  "Add links from clipboard": "क्लिपबोर्ड से लिंक जोड़ें",
   "Add new download": "नया डाउनलोड जोड़ें",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "लिंक जोड़ने पर पहले नाम/श्रेणी/फ़ोल्डर दिखाया जाता है जबकि स्थानांतरण पहले से ही पृष्ठभूमि में चल रहा होता है; बंद = डाउनलोड तुरंत शुरू होते हैं।",
   "Address": "पता",

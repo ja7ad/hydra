@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Додати пакетне завантаження з буфера обміну",
   "Add batch download from text file": "Додати пакетне завантаження з текстового файлу",
   "Add index": "Додати індекс",
+  "Add links from clipboard": "Додати посилання з буфера обміну",
   "Add new download": "Додати нове завантаження",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Додавання посилання спершу показує назву/категорію/папку, поки передавання вже триває у фоні; вимкнено = завантаження починаються одразу.",
   "Address": "Адреса",

@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Пакетное добавление из буфера обмена",
   "Add batch download from text file": "Пакетное добавление из текстового файла",
   "Add index": "Добавить индекс",
+  "Add links from clipboard": "Добавить ссылки из буфера",
   "Add new download": "Добавить новую закачку",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "При добавлении ссылки сначала отображаются имя/категория/папка, пока передача уже идет в фоне; если выключено — загрузка начнется сразу.",
   "Address": "Адрес",

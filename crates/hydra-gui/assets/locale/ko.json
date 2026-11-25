@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "클립보드에서 일괄 다운로드 추가",
   "Add batch download from text file": "텍스트 파일에서 일괄 다운로드 추가",
   "Add index": "인덱스 추가",
+  "Add links from clipboard": "클립보드에서 링크 추가",
   "Add new download": "새 다운로드 추가",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "링크를 추가하면 전송이 백그라운드에서 실행되는 동안 이름/카테고리/폴더가 먼저 표시됩니다. 끄면 다운로드가 즉시 시작됩니다.",
   "Address": "주소",

@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Añadir descarga masiva desde el portapapeles",
   "Add batch download from text file": "Añadir descarga masiva desde un fichero de texto",
   "Add index": "Añadir índice",
+  "Add links from clipboard": "Añadir enlaces del portapapeles",
   "Add new download": "Añadir una nueva descarga",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Al añadir un enlace, se muestra primero nombre/categoría/carpeta mientras la transferencia ya se ejecuta en segundo plano; desactivado = las descargas se inician inmediatamente.",
   "Address": "Dirección",

@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "เพิ่มการดาวน์โหลดแบบชุดจากคลิปบอร์ด",
   "Add batch download from text file": "เพิ่มการดาวน์โหลดแบบชุดจากไฟล์ข้อความ",
   "Add index": "เพิ่มดัชนี",
+  "Add links from clipboard": "เพิ่มลิงก์จากคลิปบอร์ด",
   "Add new download": "เพิ่มการดาวน์โหลดใหม่",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "เมื่อเพิ่มลิงก์ ระบบจะแสดงชื่อ/หมวดหมู่/โฟลเดอร์ก่อน ขณะที่การถ่ายโอนเริ่มทำงานอยู่เบื้องหลังแล้ว หากปิดตัวเลือกนี้ การดาวน์โหลดจะเริ่มทันที",
   "Address": "ที่อยู่",
