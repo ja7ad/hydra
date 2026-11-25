@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Panodan toplu indirme ekle",
   "Add batch download from text file": "Metin dosyasından toplu indirme ekle",
   "Add index": "Dizin ekle",
+  "Add links from clipboard": "Panodan bağlantı ekle",
   "Add new download": "Yeni indirme ekle",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Bir bağlantı eklendiğinde aktarım arka planda çalışırken önce ad/kategori/klasör gösterilir; kapalı = indirmeler hemen başlar.",
   "Address": "Adres",

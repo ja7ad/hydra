@@ -1972,13 +1972,16 @@ fn test_app_dir() -> PathBuf {
 /// User configuration: everything the Options/Scheduler dialogs edit.
 /// Stored as `config.toml`; a missing or unparsable file yields defaults.
 /// (action id, default combo, English label) — the shortcut table.
-pub const SHORTCUT_ACTIONS: [(&str, &str, &str); 12] = [
+pub const SHORTCUT_ACTIONS: [(&str, &str, &str); 13] = [
     ("add_url", "cmd+n", "Add new download"),
     (
         "clipboard_add",
         "cmd+shift+v",
         "Add URL from clipboard and start",
     ),
+    // Main window only: open the Add URL box (one link) or the batch list
+    // (many) on what the clipboard holds — the usual paste-to-add gesture.
+    ("paste_links", "cmd+v", "Add links from clipboard"),
     ("options", "cmd+,", "Options"),
     ("scheduler", "cmd+e", "Scheduler"),
     ("resume_last", "cmd+r", "Resume last unfinished download"),

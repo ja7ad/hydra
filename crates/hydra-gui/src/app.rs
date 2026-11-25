@@ -1367,6 +1367,8 @@ pub enum Message {
     /// The Speed Limit split button's arrow: open the profile list.
     SpeedMenuOpen,
     ClipboardAddStart(Option<String>),
+    /// The main window's paste shortcut: the clipboard text it read.
+    PasteLinks(Option<String>),
     ShortcutEdit(String, String),
     MouseUp,
     ColResizeStart(Column),
@@ -4365,11 +4367,7 @@ impl App {
                 self.capture_raise = true;
                 // "Download all links": the batch window, like a
                 // multi-line clipboard capture.
-                self.batch = BatchState::default();
-                self.batch.category = model::DEFAULT_CATEGORY.into();
-                let open = self.open_window(WinKind::Batch);
-                let text = urls.join("\n");
-                Task::batch([open, self.update(Message::BatchLoaded(Some(text)))])
+                self.open_batch_with(urls.join("\n"))
             }
             crate::extbus::ExtEvent::InstallPluginUrl(source) => {
                 self.update(Message::InstallPluginSource(source))
@@ -5875,11 +5873,7 @@ impl App {
                     _ => {
                         // Many links: the "Download All Links" box.
                         crate::log::info(&format!("clipboard capture: {} links", urls.len()));
-                        self.batch = BatchState::default();
-                        self.batch.category = model::DEFAULT_CATEGORY.into();
-                        let open = self.open_window(WinKind::Batch);
-                        let text = urls.join("\n");
-                        Task::batch([open, self.update(Message::BatchLoaded(Some(text)))])
+                        self.open_batch_with(urls.join("\n"))
                     }
                 }
             }
@@ -6203,6 +6197,12 @@ impl App {
                     Some("clipboard_add") => {
                         iced::clipboard::read().map(Message::ClipboardAddStart)
                     }
+                    // Pasting is the main window's: in a dialog the same
+                    // keys belong to its fields, and with no field focused
+                    // they should do nothing rather than open another one.
+                    Some("paste_links") if self.windows.get(&win) == Some(&WinKind::Main) => {
+                        iced::clipboard::read().map(Message::PasteLinks)
+                    }
                     Some("options") => self.update(Message::Menu(MenuAction::Options)),
                     Some("scheduler") => self.update(Message::Menu(MenuAction::Scheduler)),
                     Some("resume_last") => {
@@ -6424,6 +6424,35 @@ impl App {
                 }
                 let id = self.add_item(url.to_string(), None, None);
                 self.start_download(id, true)
+            }
+            Message::PasteLinks(text) => {
+                let Some(text) = text else {
+                    return Task::none();
+                };
+                // The clipboard monitor's next tick must not capture what the
+                // user just pasted a second time.
+                self.last_clipboard = text.trim().to_string();
+                // Unlike the monitor, a paste is a request: any link goes,
+                // not only the file types listed for automatic capture.
+                let mut links: Vec<&str> = Vec::new();
+                for link in text.lines().filter_map(url_in_line) {
+                    if !links.contains(&link) {
+                        links.push(link);
+                    }
+                }
+                match links.as_slice() {
+                    [] => Task::none(),
+                    [link] => {
+                        let link = link.to_string();
+                        self.add_url = AddUrlState::default();
+                        let open = self.open_window(WinKind::AddUrl);
+                        Task::batch([open, self.update(Message::AddrChanged(link))])
+                    }
+                    _ => {
+                        let list = links.join("\n");
+                        self.open_batch_with(list)
+                    }
+                }
             }
             Message::ShortcutEdit(action, combo) => {
                 let prev = self.cfg.shortcuts.get(&action).cloned().unwrap_or_default();
@@ -8392,6 +8421,14 @@ impl App {
         };
         let open = self.open_window(WinKind::AddUrl);
         Task::batch([open, self.update(Message::AddrChanged(dl.url))])
+    }
+
+    /// The "Download All Links" box, freshly opened on `links` (one per line).
+    fn open_batch_with(&mut self, links: String) -> Task<Message> {
+        self.batch = BatchState::default();
+        self.batch.category = model::DEFAULT_CATEGORY.into();
+        let open = self.open_window(WinKind::Batch);
+        Task::batch([open, self.update(Message::BatchLoaded(Some(links)))])
     }
 
     fn on_menu(&mut self, action: MenuAction) -> Task<Message> {
@@ -14251,6 +14288,41 @@ mod tests {
         };
         let _ = app.update(Message::RawKey(Key::Character("a".into()), command, win));
         assert_eq!(app.selected, vec![id]);
+    }
+
+    /// A paste on the main window opens the Add URL box for one link and the
+    /// batch list for several, takes links the auto-capture types would
+    /// skip, and is not captured again by the clipboard monitor.
+    #[test]
+    fn pasted_links_open_the_add_dialog_or_the_batch_list() {
+        let mut app = App::default();
+        let _ = app.update(Message::PasteLinks(Some("no link in here".into())));
+        assert!(app.win_of(WinKind::AddUrl).is_none());
+        assert!(app.win_of(WinKind::Batch).is_none());
+
+        let _ = app.update(Message::PasteLinks(Some(
+            "  see https://example.com/page?id=7 for details\n".into(),
+        )));
+        assert!(app.win_of(WinKind::AddUrl).is_some());
+        assert_eq!(app.add_url.address, "https://example.com/page?id=7");
+        assert!(app.win_of(WinKind::Batch).is_none());
+
+        let list =
+            "https://a.example/one.zip\nhttps://a.example/two.zip\nhttps://a.example/one.zip";
+        app.cfg.settings.monitor_clipboard = true;
+        let _ = app.update(Message::PasteLinks(Some(list.into())));
+        let batch = app.win_of(WinKind::Batch).expect("batch list opened");
+        let links: Vec<&str> = app.batch.checks.iter().map(|(u, _)| u.as_str()).collect();
+        assert_eq!(
+            links,
+            ["https://a.example/one.zip", "https://a.example/two.zip"]
+        );
+        app.windows.remove(&batch);
+        let _ = app.update(Message::ClipboardSeen(Some(list.into())));
+        assert!(
+            app.win_of(WinKind::Batch).is_none(),
+            "the monitor re-captured the pasted text"
+        );
     }
 
     fn exported_settings(cfg: ConfigFile) -> ConfigFile {

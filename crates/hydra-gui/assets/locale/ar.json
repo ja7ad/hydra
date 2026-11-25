@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "إضافة تنزيل مجمّع من الحافظة",
   "Add batch download from text file": "إضافة تنزيل مجمّع من ملف نصي",
   "Add index": "إضافة فهرس",
+  "Add links from clipboard": "إضافة روابط من الحافظة",
   "Add new download": "إضافة تنزيل جديد",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "إضافة رابط تعرض أولاً الاسم/الفئة/المجلد بينما يعمل النقل في الخلفية؛ إيقاف = تبدأ التنزيلات فورًا.",
   "Address": "العنوان",

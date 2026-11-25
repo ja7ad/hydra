@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Batch-Download aus der Zwischenablage hinzufügen",
   "Add batch download from text file": "Batch-Download aus Textdatei hinzufügen",
   "Add index": "Index hinzufügen",
+  "Add links from clipboard": "Links aus der Zwischenablage hinzufügen",
   "Add new download": "Neuen Download hinzufügen",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Beim Hinzufügen eines Links werden zunächst Name/Kategorie/Ordner angezeigt, während die Übertragung bereits im Hintergrund läuft; aus = Downloads starten sofort.",
   "Address": "Adresse",

@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "从剪贴板添加批量下载",
   "Add batch download from text file": "从文本文件添加批量下载",
   "Add index": "添加索引",
+  "Add links from clipboard": "从剪贴板添加链接",
   "Add new download": "添加新下载",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "添加链接后先显示名称/分类/文件夹，同时传输已在后台运行；关闭 = 下载立即开始。",
   "Address": "地址",

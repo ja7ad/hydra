@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Tilføj batchdownload fra udklipsholder",
   "Add batch download from text file": "Tilføj batchdownload fra tekstfil",
   "Add index": "Tilføj indeks",
+  "Add links from clipboard": "Tilføj links fra udklipsholder",
   "Add new download": "Tilføj nyt download",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Når du tilføjer et link, vises navn/kategori/mappe først, mens overførslen allerede kører i baggrunden; fra = downloads starter med det samme.",
   "Address": "Adresse",

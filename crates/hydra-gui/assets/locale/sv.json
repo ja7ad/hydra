@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Lägg till gruppnedladdning från urklipp",
   "Add batch download from text file": "Lägg till gruppnedladdning från textfil",
   "Add index": "Lägg till index",
+  "Add links from clipboard": "Lägg till länkar från urklipp",
   "Add new download": "Lägg till ny nedladdning",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Att lägga till en länk visar först namn/kategori/mapp medan överföringen redan pågår i bakgrunden. Av = nedladdningar startar omedelbart.",
   "Address": "Adress",

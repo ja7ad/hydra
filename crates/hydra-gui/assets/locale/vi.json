@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Thêm tải hàng loạt từ clipboard",
   "Add batch download from text file": "Thêm tải hàng loạt từ tệp văn bản",
   "Add index": "Thêm chỉ mục",
+  "Add links from clipboard": "Thêm liên kết từ clipboard",
   "Add new download": "Thêm lượt tải mới",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Khi thêm liên kết, tên/danh mục/thư mục sẽ được hiển thị trước trong khi quá trình tải vẫn chạy nền; tắt = tải xuống bắt đầu ngay lập tức.",
   "Address": "Địa chỉ",

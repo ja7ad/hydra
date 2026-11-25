@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Batchdownload toevoegen vanaf klembord",
   "Add batch download from text file": "Batchdownload toevoegen vanuit tekstbestand",
   "Add index": "Index toevoegen",
+  "Add links from clipboard": "Links vanaf klembord toevoegen",
   "Add new download": "Nieuwe download toevoegen",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Bij toevoegen van een koppeling worden eerst naam/categorie/map getoond terwijl de overdracht op de achtergrond start; uit = downloads starten direct.",
   "Address": "Adres",

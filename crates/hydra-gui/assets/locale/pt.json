@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Adicionar transferência em lote da área de transferência",
   "Add batch download from text file": "Adicionar transferência em lote a partir de um ficheiro de texto",
   "Add index": "Adicionar índice",
+  "Add links from clipboard": "Adicionar ligações da área de transferência",
   "Add new download": "Adicionar nova transferência",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Adicionar uma ligação mostra primeiro o nome/categoria/pasta enquanto a transferência já decorre em segundo plano; desativado = as transferências iniciam-se de imediato.",
   "Address": "Endereço",

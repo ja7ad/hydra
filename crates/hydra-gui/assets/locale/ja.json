@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "クリップボードから一括ダウンロードを追加",
   "Add batch download from text file": "テキストファイルから一括ダウンロードを追加",
   "Add index": "インデックスを追加",
+  "Add links from clipboard": "クリップボードからリンクを追加",
   "Add new download": "新規ダウンロードを追加",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "リンクを追加すると、バックグラウンドで転送を実行しながら名前/カテゴリ/フォルダが最初に表示されます。オフにするとすぐにダウンロードが開始されます。",
   "Address": "アドレス",

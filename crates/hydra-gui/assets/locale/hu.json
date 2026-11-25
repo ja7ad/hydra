@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Csoportos letöltés hozzáadása a vágólapról",
   "Add batch download from text file": "Csoportos letöltés hozzáadása szövegfájlból",
   "Add index": "Index hozzáadása",
+  "Add links from clipboard": "Hivatkozások hozzáadása a vágólapról",
   "Add new download": "Új letöltés hozzáadása",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "Link hozzáadásakor először megjelenik a név/kategória/mappa, miközben az átvitel már a háttérben fut; kikapcsolva a letöltések azonnal elindulnak.",
   "Address": "Cím",

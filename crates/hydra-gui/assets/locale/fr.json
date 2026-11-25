@@ -25,6 +25,7 @@
   "Add batch download from clipboard": "Ajouter un téléchargement groupé depuis le presse-papiers",
   "Add batch download from text file": "Ajouter un téléchargement groupé depuis un fichier texte",
   "Add index": "Ajouter un index",
+  "Add links from clipboard": "Ajouter les liens du presse-papiers",
   "Add new download": "Ajouter un nouveau téléchargement",
   "Adding a link first shows name/category/folder while the transfer already runs in the background; off = downloads start immediately.": "L'ajout d'un lien affiche d'abord le nom/la catégorie/le dossier pendant que le transfert s'exécute en arrière-plan ; désactivé = les téléchargements démarrent immédiatement.",
   "Address": "Adresse",
